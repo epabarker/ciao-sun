@@ -1,0 +1,16 @@
+data/
+cache/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+clear_spots.geojson
+horizon_angle.tif
+horizon_profile.csv
+horizon_profile.png
+map.html
+map_heatmap.png
+results*/

@@ -1,0 +1,428 @@
+{
+ "load_mosaics_s (from npz cache)": 1.05,
+ "candidates": 70681,
+ "area_km2": 7.07,
+ "samples_per_ray": 459,
+ "ondemand_default_60min_5min": {
+  "steps": 13,
+  "rays": 918853,
+  "seconds": 5.14,
+  "us_per_ray": 5.59
+ },
+ "ondemand_wake_2h_2min": {
+  "steps": 61,
+  "rays": 4311541,
+  "seconds": 23.81,
+  "us_per_ray": 5.52
+ },
+ "precompute_flatness_n4000": 5.68,
+ "precompute_flatness_n20000": 5.6,
+ "precompute_full_0.5deg": {
+  "azimuths": 321,
+  "rays": 22688601,
+  "seconds": 129.4,
+  "us_per_ray": 5.7
+ },
+ "profile_angle_range": [
+  -1.6012002229690552,
+  88.49403381347656
+ ],
+ "profile_nan_frac": 0.0,
+ "fidelity": {
+  "2026-12-21 az0.5 qNone": {
+   "verdict_disagree_pct": 0.398,
+   "window_mean_abs_diff_min": 0.49,
+   "window_diff_gt5min_pct": 1.11
+  },
+  "2026-12-21 az0.5 q0.1": {
+   "verdict_disagree_pct": 0.423,
+   "window_mean_abs_diff_min": 0.52,
+   "window_diff_gt5min_pct": 1.11
+  },
+  "2026-12-21 az0.5 q0.25": {
+   "verdict_disagree_pct": 0.474,
+   "window_mean_abs_diff_min": 0.58,
+   "window_diff_gt5min_pct": 1.35
+  },
+  "2026-12-21 az0.5 q0.5": {
+   "verdict_disagree_pct": 0.564,
+   "window_mean_abs_diff_min": 0.72,
+   "window_diff_gt5min_pct": 1.77
+  },
+  "2026-12-21 az1.0 qNone": {
+   "verdict_disagree_pct": 0.672,
+   "window_mean_abs_diff_min": 0.88,
+   "window_diff_gt5min_pct": 2.21
+  },
+  "2026-12-21 az1.0 q0.1": {
+   "verdict_disagree_pct": 0.687,
+   "window_mean_abs_diff_min": 0.9,
+   "window_diff_gt5min_pct": 2.26
+  },
+  "2026-12-21 az1.0 q0.25": {
+   "verdict_disagree_pct": 0.725,
+   "window_mean_abs_diff_min": 0.95,
+   "window_diff_gt5min_pct": 2.36
+  },
+  "2026-12-21 az1.0 q0.5": {
+   "verdict_disagree_pct": 0.783,
+   "window_mean_abs_diff_min": 1.02,
+   "window_diff_gt5min_pct": 2.6
+  },
+  "2026-12-21 az2.0 qNone": {
+   "verdict_disagree_pct": 1.144,
+   "window_mean_abs_diff_min": 1.67,
+   "window_diff_gt5min_pct": 7.07
+  },
+  "2026-12-21 az2.0 q0.1": {
+   "verdict_disagree_pct": 1.151,
+   "window_mean_abs_diff_min": 1.67,
+   "window_diff_gt5min_pct": 7.07
+  },
+  "2026-12-21 az2.0 q0.25": {
+   "verdict_disagree_pct": 1.172,
+   "window_mean_abs_diff_min": 1.69,
+   "window_diff_gt5min_pct": 7.07
+  },
+  "2026-12-21 az2.0 q0.5": {
+   "verdict_disagree_pct": 1.215,
+   "window_mean_abs_diff_min": 1.69,
+   "window_diff_gt5min_pct": 7.04
+  },
+  "2026-12-21 sun_az_range": [
+   128.4,
+   167.1
+  ],
+  "2026-12-21 ever_clear_pct": 44.6,
+  "2026-03-20 az0.5 qNone": {
+   "verdict_disagree_pct": 0.288,
+   "window_mean_abs_diff_min": 0.42,
+   "window_diff_gt5min_pct": 0.87
+  },
+  "2026-03-20 az0.5 q0.1": {
+   "verdict_disagree_pct": 0.314,
+   "window_mean_abs_diff_min": 0.46,
+   "window_diff_gt5min_pct": 0.88
+  },
+  "2026-03-20 az0.5 q0.25": {
+   "verdict_disagree_pct": 0.361,
+   "window_mean_abs_diff_min": 0.52,
+   "window_diff_gt5min_pct": 0.99
+  },
+  "2026-03-20 az0.5 q0.5": {
+   "verdict_disagree_pct": 0.439,
+   "window_mean_abs_diff_min": 0.61,
+   "window_diff_gt5min_pct": 0.97
+  },
+  "2026-03-20 az1.0 qNone": {
+   "verdict_disagree_pct": 0.522,
+   "window_mean_abs_diff_min": 0.82,
+   "window_diff_gt5min_pct": 1.95
+  },
+  "2026-03-20 az1.0 q0.1": {
+   "verdict_disagree_pct": 0.539,
+   "window_mean_abs_diff_min": 0.83,
+   "window_diff_gt5min_pct": 1.91
+  },
+  "2026-03-20 az1.0 q0.25": {
+   "verdict_disagree_pct": 0.569,
+   "window_mean_abs_diff_min": 0.88,
+   "window_diff_gt5min_pct": 1.95
+  },
+  "2026-03-20 az1.0 q0.5": {
+   "verdict_disagree_pct": 0.638,
+   "window_mean_abs_diff_min": 0.95,
+   "window_diff_gt5min_pct": 1.97
+  },
+  "2026-03-20 az2.0 qNone": {
+   "verdict_disagree_pct": 0.882,
+   "window_mean_abs_diff_min": 1.42,
+   "window_diff_gt5min_pct": 5.33
+  },
+  "2026-03-20 az2.0 q0.1": {
+   "verdict_disagree_pct": 0.893,
+   "window_mean_abs_diff_min": 1.44,
+   "window_diff_gt5min_pct": 5.33
+  },
+  "2026-03-20 az2.0 q0.25": {
+   "verdict_disagree_pct": 0.914,
+   "window_mean_abs_diff_min": 1.47,
+   "window_diff_gt5min_pct": 5.36
+  },
+  "2026-03-20 az2.0 q0.5": {
+   "verdict_disagree_pct": 0.962,
+   "window_mean_abs_diff_min": 1.52,
+   "window_diff_gt5min_pct": 5.35
+  },
+  "2026-03-20 sun_az_range": [
+   89.3,
+   127.1
+  ],
+  "2026-03-20 ever_clear_pct": 54.7,
+  "2026-06-21 az0.5 qNone": {
+   "verdict_disagree_pct": 0.348,
+   "window_mean_abs_diff_min": 0.48,
+   "window_diff_gt5min_pct": 1.27
+  },
+  "2026-06-21 az0.5 q0.1": {
+   "verdict_disagree_pct": 0.375,
+   "window_mean_abs_diff_min": 0.51,
+   "window_diff_gt5min_pct": 1.29
+  },
+  "2026-06-21 az0.5 q0.25": {
+   "verdict_disagree_pct": 0.419,
+   "window_mean_abs_diff_min": 0.57,
+   "window_diff_gt5min_pct": 1.43
+  },
+  "2026-06-21 az0.5 q0.5": {
+   "verdict_disagree_pct": 0.517,
+   "window_mean_abs_diff_min": 0.7,
+   "window_diff_gt5min_pct": 1.5
+  },
+  "2026-06-21 az1.0 qNone": {
+   "verdict_disagree_pct": 0.586,
+   "window_mean_abs_diff_min": 0.86,
+   "window_diff_gt5min_pct": 2.58
+  },
+  "2026-06-21 az1.0 q0.1": {
+   "verdict_disagree_pct": 0.602,
+   "window_mean_abs_diff_min": 0.87,
+   "window_diff_gt5min_pct": 2.55
+  },
+  "2026-06-21 az1.0 q0.25": {
+   "verdict_disagree_pct": 0.637,
+   "window_mean_abs_diff_min": 0.93,
+   "window_diff_gt5min_pct": 2.62
+  },
+  "2026-06-21 az1.0 q0.5": {
+   "verdict_disagree_pct": 0.706,
+   "window_mean_abs_diff_min": 1.0,
+   "window_diff_gt5min_pct": 2.49
+  },
+  "2026-06-21 az2.0 qNone": {
+   "verdict_disagree_pct": 0.999,
+   "window_mean_abs_diff_min": 1.61,
+   "window_diff_gt5min_pct": 6.56
+  },
+  "2026-06-21 az2.0 q0.1": {
+   "verdict_disagree_pct": 1.008,
+   "window_mean_abs_diff_min": 1.6,
+   "window_diff_gt5min_pct": 6.55
+  },
+  "2026-06-21 az2.0 q0.25": {
+   "verdict_disagree_pct": 1.026,
+   "window_mean_abs_diff_min": 1.62,
+   "window_diff_gt5min_pct": 6.57
+  },
+  "2026-06-21 az2.0 q0.5": {
+   "verdict_disagree_pct": 1.077,
+   "window_mean_abs_diff_min": 1.7,
+   "window_diff_gt5min_pct": 6.53
+  },
+  "2026-06-21 sun_az_range": [
+   49.1,
+   82.6
+  ],
+  "2026-06-21 ever_clear_pct": 52.4
+ },
+ "storage (band 40-200)": {
+  "s10 az0.5 q0.1": {
+   "dtype": "uint16",
+   "n_az": 321,
+   "raw_MB": 45.38,
+   "zlib_MB": 10.25,
+   "zlib_delta_MB": 9.04,
+   "xz_delta_MB": 7.24,
+   "xz_delta_MB_per_km2": 1.024,
+   "raw_MB_per_km2_per_deg": 0.04,
+   "xz_ratio": 6.3
+  },
+  "s10 az0.5 q0.25": {
+   "dtype": "uint16",
+   "n_az": 321,
+   "raw_MB": 45.38,
+   "zlib_MB": 8.01,
+   "zlib_delta_MB": 7.13,
+   "xz_delta_MB": 5.63,
+   "xz_delta_MB_per_km2": 0.797,
+   "raw_MB_per_km2_per_deg": 0.04,
+   "xz_ratio": 8.1
+  },
+  "s10 az0.5 q0.5": {
+   "dtype": "uint8",
+   "n_az": 321,
+   "raw_MB": 22.69,
+   "zlib_MB": 5.41,
+   "zlib_delta_MB": 4.76,
+   "xz_delta_MB": 4.08,
+   "xz_delta_MB_per_km2": 0.577,
+   "raw_MB_per_km2_per_deg": 0.02,
+   "xz_ratio": 5.6
+  },
+  "s10 az1.0 q0.1": {
+   "dtype": "uint16",
+   "n_az": 161,
+   "raw_MB": 22.76,
+   "zlib_MB": 6.96,
+   "zlib_delta_MB": 6.22,
+   "xz_delta_MB": 5.05,
+   "xz_delta_MB_per_km2": 0.714,
+   "raw_MB_per_km2_per_deg": 0.02,
+   "xz_ratio": 4.5
+  },
+  "s10 az1.0 q0.25": {
+   "dtype": "uint16",
+   "n_az": 161,
+   "raw_MB": 22.76,
+   "zlib_MB": 5.6,
+   "zlib_delta_MB": 5.02,
+   "xz_delta_MB": 4.01,
+   "xz_delta_MB_per_km2": 0.568,
+   "raw_MB_per_km2_per_deg": 0.02,
+   "xz_ratio": 5.7
+  },
+  "s10 az1.0 q0.5": {
+   "dtype": "uint8",
+   "n_az": 161,
+   "raw_MB": 11.38,
+   "zlib_MB": 3.84,
+   "zlib_delta_MB": 3.38,
+   "xz_delta_MB": 2.94,
+   "xz_delta_MB_per_km2": 0.416,
+   "raw_MB_per_km2_per_deg": 0.01,
+   "xz_ratio": 3.9
+  },
+  "s10 az2.0 q0.1": {
+   "dtype": "uint16",
+   "n_az": 81,
+   "raw_MB": 11.45,
+   "zlib_MB": 4.36,
+   "zlib_delta_MB": 4.01,
+   "xz_delta_MB": 3.31,
+   "xz_delta_MB_per_km2": 0.468,
+   "raw_MB_per_km2_per_deg": 0.01,
+   "xz_ratio": 3.5
+  },
+  "s10 az2.0 q0.25": {
+   "dtype": "uint16",
+   "n_az": 81,
+   "raw_MB": 11.45,
+   "zlib_MB": 3.6,
+   "zlib_delta_MB": 3.32,
+   "xz_delta_MB": 2.7,
+   "xz_delta_MB_per_km2": 0.381,
+   "raw_MB_per_km2_per_deg": 0.01,
+   "xz_ratio": 4.2
+  },
+  "s10 az2.0 q0.5": {
+   "dtype": "uint8",
+   "n_az": 81,
+   "raw_MB": 5.73,
+   "zlib_MB": 2.54,
+   "zlib_delta_MB": 2.25,
+   "xz_delta_MB": 1.99,
+   "xz_delta_MB_per_km2": 0.281,
+   "raw_MB_per_km2_per_deg": 0.005,
+   "xz_ratio": 2.9
+  },
+  "s20 az0.5 q0.1": {
+   "dtype": "uint16",
+   "n_az": 321,
+   "raw_MB": 11.34,
+   "zlib_MB": 2.58,
+   "zlib_delta_MB": 2.27,
+   "xz_delta_MB": 1.83,
+   "xz_delta_MB_per_km2": 0.259,
+   "raw_MB_per_km2_per_deg": 0.01,
+   "xz_ratio": 6.2
+  },
+  "s20 az0.5 q0.25": {
+   "dtype": "uint16",
+   "n_az": 321,
+   "raw_MB": 11.34,
+   "zlib_MB": 2.02,
+   "zlib_delta_MB": 1.79,
+   "xz_delta_MB": 1.43,
+   "xz_delta_MB_per_km2": 0.202,
+   "raw_MB_per_km2_per_deg": 0.01,
+   "xz_ratio": 7.9
+  },
+  "s20 az0.5 q0.5": {
+   "dtype": "uint8",
+   "n_az": 321,
+   "raw_MB": 5.67,
+   "zlib_MB": 1.36,
+   "zlib_delta_MB": 1.2,
+   "xz_delta_MB": 1.03,
+   "xz_delta_MB_per_km2": 0.145,
+   "raw_MB_per_km2_per_deg": 0.005,
+   "xz_ratio": 5.5
+  },
+  "s20 az1.0 q0.1": {
+   "dtype": "uint16",
+   "n_az": 161,
+   "raw_MB": 5.69,
+   "zlib_MB": 1.75,
+   "zlib_delta_MB": 1.56,
+   "xz_delta_MB": 1.28,
+   "xz_delta_MB_per_km2": 0.181,
+   "raw_MB_per_km2_per_deg": 0.005,
+   "xz_ratio": 4.4
+  },
+  "s20 az1.0 q0.25": {
+   "dtype": "uint16",
+   "n_az": 161,
+   "raw_MB": 5.69,
+   "zlib_MB": 1.41,
+   "zlib_delta_MB": 1.26,
+   "xz_delta_MB": 1.02,
+   "xz_delta_MB_per_km2": 0.144,
+   "raw_MB_per_km2_per_deg": 0.005,
+   "xz_ratio": 5.6
+  },
+  "s20 az1.0 q0.5": {
+   "dtype": "uint8",
+   "n_az": 161,
+   "raw_MB": 2.84,
+   "zlib_MB": 0.96,
+   "zlib_delta_MB": 0.85,
+   "xz_delta_MB": 0.74,
+   "xz_delta_MB_per_km2": 0.105,
+   "raw_MB_per_km2_per_deg": 0.0025,
+   "xz_ratio": 3.8
+  },
+  "s20 az2.0 q0.1": {
+   "dtype": "uint16",
+   "n_az": 81,
+   "raw_MB": 2.86,
+   "zlib_MB": 1.09,
+   "zlib_delta_MB": 1.01,
+   "xz_delta_MB": 0.84,
+   "xz_delta_MB_per_km2": 0.119,
+   "raw_MB_per_km2_per_deg": 0.0025,
+   "xz_ratio": 3.4
+  },
+  "s20 az2.0 q0.25": {
+   "dtype": "uint16",
+   "n_az": 81,
+   "raw_MB": 2.86,
+   "zlib_MB": 0.9,
+   "zlib_delta_MB": 0.83,
+   "xz_delta_MB": 0.69,
+   "xz_delta_MB_per_km2": 0.097,
+   "raw_MB_per_km2_per_deg": 0.0025,
+   "xz_ratio": 4.2
+  },
+  "s20 az2.0 q0.5": {
+   "dtype": "uint8",
+   "n_az": 81,
+   "raw_MB": 1.43,
+   "zlib_MB": 0.64,
+   "zlib_delta_MB": 0.57,
+   "xz_delta_MB": 0.5,
+   "xz_delta_MB_per_km2": 0.071,
+   "raw_MB_per_km2_per_deg": 0.0012,
+   "xz_ratio": 2.9
+  }
+ }
+}

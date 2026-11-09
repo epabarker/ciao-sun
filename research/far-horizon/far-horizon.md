@@ -19,12 +19,13 @@ Labels:
    - What Terrain 50 lacks is buildings and trees ("surface clutter"). That adds about 0.05–0.15° between 3 and 10 km, and almost nothing beyond 10 km. **[measured]**
    - Moving that clutter band onto the DSM (1 m DSM to 10 km) is a small refinement, not a requirement.
 3. **Why Terrain 50.** It covers all of GB in a single 162 MB zip, under the OGL. It uses the same grid as the EA tiles (EPSG:27700) with heights in metres above Ordnance Datum Newlyn (ODN), and needs no key. It does not cover Northern Ireland.
-4. **Bristol impact.** Leave-by times are wrong, but the ranking barely changes.
+4. **Bristol impact.** Leave-by times are wrong. The spots shown change a lot, but the sun at those spots barely does.
    - **Which mornings.** The effect only appears on mornings when the Morning window starts at Nominal sunrise. For a 07:00 Wake time that is 156 days a year: 10 Nov–27 Feb and 25 Sep–9 Nov.
    - **First-sun times.** The 3 km model puts first sun (and so leave-by) at the top 5 spots **3.0 min early on average, and up to 6 min**. Sun minutes are overstated by the same amount. If the sun only counts once it is above 0° (`el > 0`, as the prototype does), the error is the 3.0 min above. If it counts once it clears the Horizon profile, even when that is below 0°, the error is **4.9 min, up to 11 min**.
-   - **Ranking.** The 3 km #1 spot gets on average 1.2 weighted Sun minutes less than the true best, and at most 3. That is about 1.7% of its weighted Sun minutes.
+   - **Ranking.** Which spots are shown changes a lot: the 3 km #1 differs from the true #1 on 134 of those 156 days, and on average only 1.5 of the top 5 match. But the sun at the 3 km #1 is nearly as good: on average 1.2 weighted Sun minutes less than the true best, and at most 3. That is about 1.7% of its weighted Sun minutes. This is mostly reshuffling among near-ties. The walk-time tie-break here is only a proxy, so treat the overlap figures as indicative.
    - **The ticket's Candidate on 10 Nov.** First sun moves from **07:22 to 07:26**. The ridge that blocks it is Lansdown, above Bath: 14.7 km away, 234 m, +0.59°.
 5. **Precision limit.** 0.1° is a modelling target, not a real-world accuracy. Day-to-day refraction near the horizon scatters by about 0.2° (1 SD), which is about ±1.5 min of first sun in Bristol.
+6. **A separate bug found on the way.** `src/` and the prototype pass pvlib's true azimuth to a ray caster that expects grid azimuth. That is a 0.47° error at Bristol and about 4° in west Scotland. At Bristol it moves first sun at top spots by up to 10 min (0.3 min on average). **[measured]** See Caveats.
 
 ## 1. How far must the ray reach? (Bristol)
 
@@ -51,7 +52,7 @@ Labels:
 **What sets the far horizon.** The far field alone gives a horizon of **+0.2° to +0.55°** (median over Candidates) on every azimuth. It is set by terrain 10–20 km away (`results/far_by_sector.csv`):
 
 - **105–125°, the November sun:** Lansdown and the hills above Bath, at about +0.4° to +0.6°.
-- **Elsewhere:** Cotswold-edge and Mendip-fringe ground at 15–20 km.
+- **Elsewhere:** higher ground 15–20 km away. Toward 45–95° that is probably the Cotswold edge; I only checked the place name for Lansdown.
 
 Its minimum over all 15,990 Candidates and azimuths is +0.06°. So under the prototype's `el > 0` rule, no Candidate near home has a clear 0° horizon. The first 2–4 minutes after the sun reaches 0° are always behind hills.
 
@@ -74,7 +75,7 @@ The far field is always above 0° here, so the cut-off is the same. The glossary
 | **OS Terrain 50** (recommended) | 50 m grid, DTM ("removed all protruding features (such as buildings and trees)") **[metadata]** | OGL v3 **[verified]** | EPSG:27700, ODN (EPSG:5701) **[metadata]** | OS Downloads API, no key **[verified]** | 161.7 MB zip for all of GB **[verified]**. That unpacks to 2,858 10 km tiles, 625 MB as ASCII; I store it as a 728 MB int16 grid |
 | **EA LIDAR Composite DTM/DSM, 2 m** | 2 m, DTM and last-return DSM | OGL v3 (see [lidar-access](https://github.com/epabarker/daylight-viewing/blob/research/lidar-access/research/lidar-access.md)) | EPSG:27700 | `/tiles/collections/survey/{product}/2022/2/{TILE}` **[verified]** | 15–22 MB per 5 km tile, per product **[verified]** |
 | **EA LIDAR Composite, 1 m** | 1 m | OGL v3 | EPSG:27700 | Same, `/1/` | About 50 MB per tile per product. A 50 km radius is about 300 tiles ≈ 15 GB per product: too big for far field |
-| **Copernicus GLO-30** | 30 m DSM (includes buildings and vegetation) | Free Copernicus DEM licence, attribution required **[metadata]** | EPSG:4326, EGM2008 heights; would need reprojecting and a datum shift | Public S3 bucket `copernicus-dem-30m`, 1° COG tiles **[verified: HTTP 200]** | Not downloaded |
+| **Copernicus GLO-30** | 30 m DSM (includes buildings and vegetation) | Free Copernicus DEM licence, attribution required **[metadata]** | Geographic lat/lon grid (not BNG), so it would need reprojecting and a height-datum shift; exact datum not checked **[secondary]** | Public S3 bucket `copernicus-dem-30m`, 1° COG tiles **[verified: HTTP 200]** | Not downloaded |
 | **OSNI Open Data 50 m DTM** (Northern Ireland) | 50 m DTM | OGL / LPS OGD licence (listings differ) **[secondary]** | Probably Irish Grid, not checked | ArcGIS service only; no bulk file found **[secondary]** | Not downloaded |
 
 **Terrain 50 against EA LIDAR.** **[measured]** I compared Terrain 50 with the six local 1 m DTM tiles, block-averaged to 50 m (60,000 cells):
@@ -128,10 +129,10 @@ Each profile variant is compared against the truth profile from §1. Results are
 
 How to read this:
 
-- **The #1 spot changes, but its sun barely does.** The #1 spot changes on most sunrise-start days, but only between near-ties. The 3 km pick's true weighted Sun minutes average 98.3% of the best.
+- **The #1 spot changes, but its sun barely does.** The #1 spot changes on most sunrise-start days, mostly between near-ties under rounded weighted Sun minutes plus the walk tie-break. The 3 km pick's true weighted Sun minutes average 98.3% of the best. Walk time here is a proxy (1.3 × straight line, no OSM, de-dupe without names), so the overlap figures are indicative.
 - **The real cost is leave-by.** The person is sent out about 3–5 min too early, and each top spot's Sun minutes are overstated by the same amount.
 - **The other 209 days are unaffected.** When the sun is already up at Wake time, the top-5 error averages 0.05 min.
-- **Most Candidates don't move at all.** Only about 5% of Candidates change first-sun time on any morning; the rest are blocked by nearby buildings or trees. The ones that move are exactly the open, east-facing spots that rank highest.
+- **Most Candidates don't move at all.** On a given sunrise-start morning, only about 5% of Candidates change first-sun time; the rest are blocked by nearby buildings or trees. The ones that move are exactly the open, east-facing spots that rank highest.
 - **Plausibility check.** The sun climbs at about 0.117°/min on 10 Nov and 0.103°/min on 21 Dec. So a +0.45° far-field lift should delay first sun by about 4 min, which matches what was measured.
 
 **The ticket's Candidate** (`results/ticket_candidate.csv`):
@@ -147,8 +148,9 @@ How to read this:
 
 **The fixture's 0.5° quantisation** is a separate error, of the same size as the target.
 
-- It changes first sun for about 40% of Candidates, by ±1–2 min.
-- It hardly changes the top-5 error (3.08 vs 3.01 min), because it is unbiased.
+- It changes first sun for about 40% of Candidates. **[measured]**
+- On open views the angle error averages +0.005°, with SD 0.14° and a maximum of 0.25°. **[measured]** At 0.117°/min that is about ±1.2 min, typically. **[estimate]**
+- It hardly changes the top-5 error (3.08 vs 3.01 min), because it is essentially unbiased.
 - For a 0.1° target, store profiles at 0.1°. A uint8 at 0.1° spans 25.5°, for example −5° to +20.5° with everything above clipped, which is all low sun needs.
 - The prototype also uses 2-minute sun steps, which add up to 1 min of first-sun granularity.
 
@@ -195,8 +197,13 @@ For each pair, "required reach" is the shortest R whose horizon is within 0.1° 
   - pvlib applies refraction only above −0.833°. So at the Nominal sunrise minute, the apparent elevation jumps to about −0.21°. That is why the glossary rule can show sun at the sunrise minute.
 - **Grid vs true azimuth.** **[measured]**
   - `sunspot.horizon.horizon_angle` takes grid azimuth, and `search.py` passes pvlib's true azimuth straight in. The answer-screen fixture does the same.
-  - At Bristol, grid azimuth = true + 0.47° (verified with pyproj). In west Scotland the convergence reaches about 4°.
-  - This analysis corrects for it. `src/` does not. It is a small error at Bristol, but needs fixing before Stage 2.
+  - At Bristol, grid azimuth = true + 0.47° (verified with pyproj). In the west of Scotland it is about 3.8° (Lewis) to 4.6° (at −7.5°).
+  - This analysis corrects for it; `src/` does not.
+  - **Effect at Bristol, measured** (`truth_no_convergence_fix` in `results/sun_season_summary.csv`, run on the full-reach profile). On sunrise-start days it:
+    - changes first sun for 76% of Candidates;
+    - shifts first sun at the top 5 by 0.3 min on average, and up to 10 min;
+    - costs the #1 spot 0.8 weighted Sun minutes on average, and up to 10.
+  - That is a smaller mean error than the far field, but a comparable worst case. It needs fixing before Stage 1 is trusted, not just before Stage 2.
 - **What the clutter test covered.** Clutter was only tested where both EA DSM and DTM were fetched: the local tiles plus E 365–375 km.
   - The EA tile endpoint returned **HTTP 403 from "Microsoft-Azure-Application-Gateway/v2" after about 23 back-to-back requests**. It cleared within about 10 min. This contradicts "no throttling seen" in the earlier lidar-access research.
   - The missing tiles: the DTM for the ST75xx tiles and ST80xx, and the DSM for ST7575 and ST80xx. The analysis used Terrain 50 there.

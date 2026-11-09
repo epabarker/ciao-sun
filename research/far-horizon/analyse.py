@@ -121,6 +121,11 @@ VARIANTS = {
     "dsm10_t50_50km": np.fmax(near, far_upto(far10, 50e3)),  # recommended split
     TRUTH: np.fmax(near, far_upto(dsmall, 200e3)),
 }
+# src/ and the fixture pass true (pvlib) azimuth to a grid-azimuth ray caster. Emulate that on the
+# truth profile: the value used for true azimuth a is the one actually cast at true azimuth a + conv.
+_T = VARIANTS[TRUTH]
+VARIANTS["truth_no_convergence_fix"] = np.array([np.interp(AZ + float(P["conv"]), AZ, r) for r in _T],
+                                                 dtype=np.float32)
 WAKE = 7 * 60
 walk_min = 1.3 * dist_home / 83.0
 

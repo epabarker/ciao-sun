@@ -1,0 +1,417 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Never ship.
+  Question: "What does the phone answer screen look like?" (epabarker/daylight-viewing#10)
+  Plan: three structurally different layouts of one sunspot answer, switchable via ?variant=A|B|C
+  and the floating bar at the bottom (or ← / →). Data is real Bristol output (fixture.js,
+  built by build_fixture.py); every input is recomputed live in the browser.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sunspot answer prototype</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="fixture.js"></script>
+<style>
+  :root { --sun:#f5a300; --sun-soft:#ffe4a3; --pf:#e0601b; --ink:#1d1d1f; --mute:#6b6b70; --line:#e4e4e8; --bg:#fafaf7; --ok:#1f8a4c; --warn:#b3261e; --sky:#3d7bd9; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; font:15px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  button, select, input { font:inherit; }
+  .mute { color:var(--mute); }
+  .small { font-size:12px; }
+  .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:999px; background:#eee; font-size:12px; white-space:nowrap; }
+  .pill.ok { background:#dff3e6; color:var(--ok); } .pill.no { background:#fbe3e1; color:var(--warn); }
+  .pill.pf { background:#fde6d6; color:var(--pf); }
+  .notice { padding:10px 12px; border-radius:10px; background:#eef3fc; color:#1d3d75; font-size:13px; margin:8px 0; }
+  .notice.lamp { background:#fff4d6; color:#6b4a00; }
+  .notice.warn { background:#fbe3e1; color:var(--warn); }
+  .foot { font-size:11px; color:var(--mute); padding:12px 16px 80px; }
+  .foot p { margin:4px 0; }
+  .safety { font-size:12px; padding:8px 10px; border-left:3px solid var(--sun); background:#fffaf0; margin:8px 0; }
+  #app { min-height:100%; }
+  /* switcher — PROTOTYPE chrome, not part of the design */
+  #proto-bar { position:fixed; left:50%; bottom:max(10px, env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:9999;
+    display:flex; align-items:center; gap:6px; background:#111; color:#fff; border-radius:999px; padding:4px; box-shadow:0 4px 18px rgba(0,0,0,.35); font-size:13px; }
+  #proto-bar button { background:#333; color:#fff; border:0; border-radius:999px; width:32px; height:32px; cursor:pointer; }
+  #proto-bar .lbl { padding:0 8px; white-space:nowrap; }
+  #proto-bar .dbg { background:#555; width:auto; padding:0 10px; font-size:11px; }
+  #proto-state { position:fixed; left:8px; right:8px; bottom:60px; z-index:9998; background:rgba(17,17,17,.92); color:#cfe; font:11px/1.35 ui-monospace, Menlo, monospace;
+    padding:8px 10px; border-radius:8px; white-space:pre-wrap; display:none; max-height:40vh; overflow:auto; }
+  /* modal map */
+  #mapModal { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:5000; display:none; }
+  #mapModal .box { position:absolute; inset:8% 12px; background:#fff; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  #mapModal .hd { padding:10px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); }
+  #mapModal .mm { flex:1; }
+  .leaflet-container { font:inherit; }
+  .num-icon { background:var(--sun); color:#000; border:2px solid #fff; border-radius:50%; width:26px; height:26px; line-height:22px; text-align:center; font-weight:700; font-size:13px; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+  .home-icon { background:#111; color:#fff; border:2px solid #fff; border-radius:6px; width:24px; height:24px; line-height:20px; text-align:center; font-size:12px; }
+
+  /* ===== Variant A: list-first ===== */
+  .A-top { position:sticky; top:0; z-index:10; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 16px 8px; }
+  .A-chips { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; }
+  .A-chip { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 10px; font-size:13px; white-space:nowrap; cursor:pointer; }
+  .A-chip.on { border-color:var(--ink); }
+  .A-edit { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:8px; display:grid; gap:8px; }
+  .A-edit label { display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:14px; }
+  .A-body { padding:12px 16px; }
+  .A-hero { background:#fff; border-radius:16px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); border-top:5px solid var(--sun); }
+  .A-hero .leave { font-size:34px; font-weight:750; letter-spacing:-.5px; }
+  .A-hero .where { font-size:18px; font-weight:600; margin:2px 0 6px; }
+  .A-card { background:#fff; border-radius:12px; padding:12px; margin-top:10px; box-shadow:0 1px 2px rgba(0,0,0,.06); display:grid; grid-template-columns:auto 1fr auto; gap:4px 12px; align-items:start; }
+  .A-card .rk { font-weight:700; color:var(--mute); font-size:13px; padding-top:2px; }
+  .A-card .t { font-weight:600; }
+  .A-card .lv { font-weight:700; font-size:18px; text-align:right; }
+  .A-row { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .A-link { color:var(--sky); background:none; border:0; padding:0; cursor:pointer; font-size:13px; }
+  .A-ctx { margin-top:14px; }
+
+  /* ===== Variant B: map-first ===== */
+  .B-wrap { position:fixed; inset:0; }
+  #B-map { position:absolute; inset:0; }
+  .B-pill { position:absolute; top:max(10px, env(safe-area-inset-top)); left:10px; right:10px; z-index:1000; background:#fff; border-radius:14px; box-shadow:0 2px 10px rgba(0,0,0,.2);
+    padding:8px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:pointer; }
+  .B-pill b { font-size:14px; }
+  .B-sheet { position:absolute; left:0; right:0; bottom:0; z-index:1000; background:#fff; border-radius:18px 18px 0 0; box-shadow:0 -2px 14px rgba(0,0,0,.18);
+    max-height:78%; display:flex; flex-direction:column; transition:max-height .2s; }
+  .B-sheet.collapsed { max-height:190px; }
+  .B-grab { padding:8px 0 2px; text-align:center; cursor:pointer; }
+  .B-grab span { display:inline-block; width:40px; height:5px; border-radius:3px; background:#ccc; }
+  .B-list { overflow:auto; padding:0 14px 70px; }
+  .B-item { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); cursor:pointer; }
+  .B-item .n { flex:0 0 26px; height:26px; border-radius:50%; background:var(--sun); text-align:center; line-height:26px; font-weight:700; font-size:13px; }
+  .B-item.sel { background:#fffaf0; }
+  .B-settings { position:absolute; inset:0; z-index:2000; background:rgba(0,0,0,.35); display:none; }
+  .B-settings .panel { position:absolute; left:0; right:0; top:0; background:#fff; border-radius:0 0 18px 18px; padding:14px 16px 16px; display:grid; gap:10px; }
+  .B-settings label { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .B-legend { position:absolute; right:10px; z-index:999; background:rgba(255,255,255,.9); border-radius:8px; padding:4px 8px; font-size:11px; }
+
+  /* ===== Variant C: timeline-first ===== */
+  .C-top { padding:14px 16px 6px; }
+  .C-sentence { font-size:20px; line-height:1.6; font-weight:500; }
+  .C-sentence select, .C-sentence input { font-size:18px; border:0; border-bottom:2px dashed var(--sun); background:transparent; padding:0 2px; color:var(--ink); font-weight:650; }
+  .C-tl { padding:6px 16px; }
+  .C-axis { position:relative; height:22px; margin-left:0; font-size:11px; color:var(--mute); }
+  .C-axis span { position:absolute; transform:translateX(-50%); }
+  .C-taper { position:relative; height:14px; border-radius:4px; overflow:hidden; background:#f1f1f1; }
+  .C-row { padding:8px 0 10px; border-bottom:1px solid var(--line); }
+  .C-row .hd { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .C-bar { position:relative; height:22px; margin-top:6px; background:#f4f4f4; border-radius:4px; overflow:hidden; }
+  .C-bar .walk { position:absolute; top:0; bottom:0; background:repeating-linear-gradient(45deg,#9bb7e8 0 4px,#c9d8f3 4px 8px); }
+  .C-bar .sun { position:absolute; top:0; bottom:0; background:var(--sun); }
+  .C-bar .pfz { position:absolute; bottom:0; height:5px; background:var(--pf); }
+  .C-bar .leave { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); }
+  .C-bar .now { position:absolute; top:0; bottom:0; width:2px; background:var(--warn); }
+  .C-bar .pre { position:absolute; top:0; bottom:0; background:repeating-linear-gradient(90deg,#ddd 0 2px,transparent 2px 6px); }
+  .C-key { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--mute); padding:6px 16px; }
+  .C-key i { display:inline-block; width:14px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  .C-more { padding:8px 16px; }
+  .C-more details { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  .C-more label { display:flex; justify-content:space-between; gap:10px; align-items:center; margin:6px 0; }
+  .C-mini { height:170px; margin-top:8px; border-radius:8px; overflow:hidden; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="mapModal"><div class="box"><div class="hd"><b id="mmTitle"></b><button onclick="closeMap()">Close</button></div><div class="mm" id="mmMap"></div></div></div>
+<div id="proto-state"></div>
+<div id="proto-bar"><button id="pv">←</button><span class="lbl" id="plbl"></span><button id="pn">→</button><button class="dbg" id="pdbg">state</button></div>
+
+<script>
+/* ================= ENGINE (shared, not a design choice) ================= */
+const F = window.FIXTURE, P = F.params, C = F.candidates, N = C.lat.length;
+const PROF = Uint8Array.from(atob(C.prof_b64), c => c.charCodeAt(0));
+const R_EARTH = 6371000;
+const ORIGINS = [
+  { id:'gps', label:'Current location', note:'GPS stub: prototype uses Home' },
+  { id:'home', label:'Home (BS6)', note:'' },
+  { id:'work', label:'Work (saved)', note:'Not computed in prototype: walk times shown are from Home' },
+];
+const CLOUD = { clear:{ label:'Clear', icon:'☀️', target:10 }, partly:{ label:'Partly cloudy', icon:'⛅', target:20 }, overcast:{ label:'Overcast', icon:'☁️', target:30 } };
+const DATES = Object.keys(F.tracks);
+
+const S = { // query state
+  origin:'home', date:DATES[0], wake:'07:00', cloud:'clear', maxWalk:15, cutoff:0.75, dedupe:200,
+};
+function hm(m){ m=Math.round(m); const h=Math.floor(m/60), mm=((m%60)+60)%60; return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0'); }
+function parseHm(s){ const [h,m]=s.split(':').map(Number); return h*60+m; }
+function wk(m){ return m<1 ? '<1 min walk' : Math.round(m)+' min walk'; }
+function dur(m){ m=Math.round(m); return m>=60 ? Math.floor(m/60)+' h '+(m%60? (m%60)+' min':'') : m+' min'; }
+function fmtDate(ds){ const d=new Date(ds+'T12:00:00'); return d.toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short'}); }
+function horizon(c, az){ // deg, interpolated; 90 if outside profile / NaN
+  const j = (az - P.az0)/P.az_step; if (j<0 || j>P.n_az-1) return 90;
+  const j0=Math.floor(j), j1=Math.min(j0+1,P.n_az-1), f=j-j0;
+  const b0=PROF[c*P.n_az+j0], b1=PROF[c*P.n_az+j1]; if (b0===255||b1===255) return 90;
+  return (b0*(1-f)+b1*f)/2 - 10;
+}
+const KIND={footway:'Path',path:'Path',service:'Lane',steps:'Steps',pedestrian:'Walkway',track:'Track',cycleway:'Cycle path'};
+function name(c){ if (C.park[c]) return C.park[c]; const s=C.street[c]; if (!s.startsWith('unnamed') && s!=='path') return s;
+  const kind = KIND[s.replace('unnamed ','')] || 'Path'; let best=-1, bd=150;
+  for (let j=0;j<N;j++){ if (C.street[j].startsWith('unnamed')||C.street[j]==='path') continue; const d=distM(c,j); if (d<bd){bd=d;best=j;} }
+  return best<0 ? kind : `${kind} off ${C.park[best]||C.street[best]}`; }
+function distM(a,b){ const la=C.lat[a]*Math.PI/180, lb=C.lat[b]*Math.PI/180; const dl=(C.lon[b]-C.lon[a])*Math.PI/180;
+  const x=dl*Math.cos((la+lb)/2), y=lb-la; return Math.sqrt(x*x+y*y)*R_EARTH; }
+
+function compute(){
+  const tr = F.tracks[S.date], t0 = parseHm(tr.t0.slice(11,16)), step=P.step_min;
+  const wake = parseHm(S.wake), sunrise = parseHm(tr.sunrise);
+  const start = Math.max(wake, sunrise), end = wake + 180;
+  const out = { wake, sunrise, start, end, target:CLOUD[S.cloud].target, cloud:S.cloud, mode:'normal' };
+  out.lamp = (sunrise - wake) > 60;
+  if (start >= end){ out.mode='dark'; out.nextLight = sunrise; return out; }
+  // window steps
+  const idx=[], w=[], az=[], el=[];
+  for (let m=Math.ceil((start-t0)/step)*step+t0; m<end; m+=step){
+    const i=(m-t0)/step; if (i<0||i>=tr.az.length) continue;
+    const rel=m-wake; idx.push(m); az.push(tr.az[i]); el.push(tr.el[i]);
+    w.push(rel<=60 ? 1 : Math.max(0, 1-(rel-60)/120));
+  }
+  let aMin=Infinity,aMax=-Infinity; for (let k=0;k<az.length;k++) if (el[k]>-1){ aMin=Math.min(aMin,az[k]); aMax=Math.max(aMax,az[k]); }
+  out.azRange=[Math.max(P.az0,Math.floor(aMin-10)), Math.min(P.az0+P.n_az-1, Math.ceil(aMax+10))];
+  out.elMax = Math.max(...el);
+  const res = new Array(N);
+  let nOpen=0, nReach=0, nSun=0;
+  for (let c=0;c<N;c++){
+    const walkMin = C.walk_m[c]/P.walk_speed_m_per_min;
+    // openness: sky-view fraction over the day's sun path azimuths + margin
+    let sv=0, n=0; for (let a=out.azRange[0]; a<=out.azRange[1]; a++){ const h=Math.max(0,horizon(c,a)); const co=Math.cos(h*Math.PI/180); sv+=co*co; n++; }
+    const svf = sv/n;
+    let sunMin=0, wSun=0, firstHour=0, pfMin=0; const iv=[]; let cur=null;
+    for (let k=0;k<idx.length;k++){
+      const vis = el[k]>0 && el[k] > horizon(c, az[k]);
+      if (vis){ sunMin+=step; wSun+=w[k]*step; if (idx[k]-wake<60) firstHour+=step; if (S.cloud==='clear' && el[k]<=30) pfMin+=step;
+        if (cur && cur[1]===idx[k]) cur[1]=idx[k]+step; else { cur=[idx[k], idx[k]+step]; iv.push(cur); } }
+    }
+    res[c] = { c, walkMin, svf, sunMin, wSun, firstHour, pfMin, iv };
+    if (walkMin<=S.maxWalk){ nReach++; if (svf>=S.cutoff){ nOpen++; if (sunMin>0) nSun++; } }
+  }
+  out.all = res; out.counts = { reachable:nReach, open:nOpen, withSun:nSun, removed:nReach-nOpen };
+  const pick = (list, k) => { const chosen=[]; for (const r of list){ if (chosen.every(o=>distM(o.c,r.c)>S.dedupe && name(o.c)!==name(r.c))) chosen.push(r); if (chosen.length>=k) break; } return chosen; };
+  const open = res.filter(r=>r.walkMin<=S.maxWalk && r.svf>=S.cutoff);
+  const finish = r => { // per-spot derived fields
+    const firstSun = r.iv.length ? r.iv[0][0] : null;
+    r.leave = (out.mode==='normal' && firstSun!=null) ? Math.max(wake, firstSun - r.walkMin) : Math.max(wake, sunrise);
+    r.arrive = r.leave + r.walkMin;
+    r.outdoor = r.walkMin + r.sunMin;
+    r.met = (S.cloud==='overcast' ? r.walkMin : r.outdoor) >= out.target;
+    r.name = name(r.c); return r;
+  };
+  const sunny = open.filter(r=>r.sunMin>0);
+  if (S.cloud==='overcast' || sunny.length===0){
+    out.mode = S.cloud==='overcast' ? 'overcast' : 'nosun';
+    out.spots = pick(open.slice().sort((a,b)=>a.walkMin-b.walkMin), 5).map(finish);
+    if (out.mode==='nosun'){
+      const beyond = res.filter(r=>r.walkMin>S.maxWalk && r.svf>=S.cutoff && r.sunMin>=5).sort((a,b)=>a.walkMin-b.walkMin);
+      out.beyond = beyond.length ? finish(beyond[0]) : null;
+    }
+  } else {
+    sunny.sort((a,b)=> Math.round(b.wSun)-Math.round(a.wSun) || a.walkMin-b.walkMin || b.pfMin-a.pfMin);
+    out.spots = pick(sunny, 5).map(finish);
+  }
+  return out;
+}
+function ivText(iv){ if(!iv.length) return 'no direct sun'; const t=iv.slice(0,3).map(i=>hm(i[0])+'–'+hm(i[1])).join(', '); return t + (iv.length>3?` +${iv.length-3} more`:''); }
+function ctxNotices(o){
+  let h='';
+  const org = ORIGINS.find(x=>x.id===S.origin); if (org.note) h+=`<div class="notice warn">Prototype: ${org.note}</div>`;
+  if (o.mode==='dark') return h+`<div class="notice lamp"><b>No outdoor light in your Morning window.</b> Sunrise is ${hm(o.sunrise)}, more than 3 h after you wake. Use a bright lamp on waking. Next outdoor light: ${hm(o.nextLight)}.</div>`;
+  if (o.lamp) h+=`<div class="notice lamp"><b>Sunrise is ${hm(o.sunrise)}</b>, more than an hour after you wake. The outdoor cortisol window isn't available, so use a bright lamp first, then go out.</div>`;
+  if (o.mode==='overcast') h+=`<div class="notice">Overcast: open sky still counts. Aim for ${o.target} min outside. Nearest open spots below.</div>`;
+  if (o.mode==='nosun') h+=`<div class="notice">No spot within ${S.maxWalk} min gets direct sun this morning. Open sky still counts: aim for ${o.target} min outside.${o.beyond?` Nearest sun beyond your limit: <b>${o.beyond.name}</b>, ${Math.round(o.beyond.walkMin)} min walk, sun ${ivText(o.beyond.iv)}.`:''}</div>`;
+  return h;
+}
+const SAFETY = `<div class="safety">No sunglasses, no brimmed hat. Never look straight at the sun.</div>`;
+function footer(o){ return `<div class="foot">
+  <p>Morning window ${hm(o.start)}–${hm(o.end)} (wake ${S.wake}, sunrise ${hm(o.sunrise)}), full weight to ${hm(o.wake+60)}, then tapering to 0.</p>
+  <p>Duration target ${o.target} min for ${CLOUD[S.cloud].label.toLowerCase()} sky. The one-way walk counts as outdoor minutes.</p>
+  <p>Protocols factor: low sun (0–30°) under clear sky. Untested in humans.</p>
+  <p>Sun times assume a clear sky. Trees are modelled in full leaf (2022 survey), so winter sun may be better than shown.</p>
+  <p>${F.attribution.lidar}<br>${F.attribution.osm}<br>${F.attribution.cloud}</p></div>`; }
+function badges(r, o){
+  let b='';
+  if (o.mode==='normal') b+=`<span class="pill ${r.met?'ok':'no'}">${r.met?'✓':'✗'} ${o.target}-min target</span>`;
+  else b+=`<span class="pill ${r.met?'ok':''}">${r.met? '✓ walk alone covers '+o.target+' min' : 'stay '+Math.ceil(o.target-r.walkMin)+' min'}</span>`;
+  if (r.pfMin>0) b+=`<span class="pill pf" title="Protocols factor: untested in humans">Protocols ${r.pfMin} min · untested</span>`;
+  b+=`<span class="pill" title="Sky openness along today's sun path">open ${r.svf.toFixed(2)}</span>`;
+  return b;
+}
+function inputsHTML(prefix){ // standard controls (used by A's editor, B's sheet, C's details)
+  return `
+  <label>From <select data-k="origin">${ORIGINS.map(o=>`<option value="${o.id}" ${S.origin===o.id?'selected':''}>${o.id==='gps'?'📍 ':''}${o.label}</option>`).join('')}</select></label>
+  <label>Morning <input type="date" data-k="date" value="${S.date}" min="${DATES[0]}" max="${DATES[DATES.length-1]}"></label>
+  <label>Wake time <input type="time" data-k="wake" value="${S.wake}" min="04:00" max="10:00"></label>
+  <label>Sky <select data-k="cloud">${Object.entries(CLOUD).map(([k,v])=>`<option value="${k}" ${S.cloud===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}</select></label>
+  <label>Max walk <span><input type="range" data-k="maxWalk" min="5" max="22" step="1" value="${S.maxWalk}"> ${S.maxWalk} min</span></label>
+  <label>Openness cut-off <span><input type="range" data-k="cutoff" min="0.4" max="0.98" step="0.01" value="${S.cutoff}"> ${S.cutoff.toFixed(2)}</span></label>`;
+}
+function bindInputs(root){
+  root.querySelectorAll('[data-k]').forEach(el=>{
+    const k=el.dataset.k, ev = el.type==='range' ? 'change' : 'change';
+    el.addEventListener(ev, ()=>{ let v=el.value; if (k==='maxWalk') v=+v; if (k==='cutoff') v=+v; if (k==='date' && !F.tracks[v]) return; S[k]=v; render(); });
+    if (el.type==='range') el.addEventListener('input', ()=>{ el.parentElement.lastChild.textContent=' '+(k==='cutoff'?(+el.value).toFixed(2):el.value+' min'); });
+  });
+}
+/* map helpers */
+function numIcon(n){ return L.divIcon({className:'', html:`<div class="num-icon">${n}</div>`, iconSize:[26,26], iconAnchor:[13,13]}); }
+function homeIcon(){ return L.divIcon({className:'', html:`<div class="home-icon">⌂</div>`, iconSize:[24,24], iconAnchor:[12,12]}); }
+function baseMap(el, opts={}){ const m=L.map(el,{zoomControl:false, attributionControl:true, ...opts});
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(m); return m; }
+let mm=null;
+function openMap(r, n){
+  document.getElementById('mapModal').style.display='block'; document.getElementById('mmTitle').textContent=`${n}. ${r.name}`;
+  if (mm) mm.remove(); mm=baseMap('mmMap');
+  const p=[C.lat[r.c],C.lon[r.c]], h=[F.home.lat,F.home.lon];
+  L.marker(h,{icon:homeIcon()}).addTo(mm); L.marker(p,{icon:numIcon(n)}).addTo(mm);
+  mm.fitBounds(L.latLngBounds([p,h]).pad(0.3));
+}
+function closeMap(){ document.getElementById('mapModal').style.display='none'; }
+
+/* ================= VARIANT A: list-first ================= */
+let A_open=false;
+function VariantA(o){
+  const c=CLOUD[S.cloud];
+  const chips = `<div class="A-chips">
+    <button class="A-chip" data-tog>${S.origin==='gps'?'📍':'⌂'} ${ORIGINS.find(x=>x.id===S.origin).label}</button>
+    <button class="A-chip" data-tog>${fmtDate(S.date)}</button>
+    <button class="A-chip" data-tog>⏰ ${S.wake}</button>
+    <button class="A-chip" data-tog>${c.icon} ${c.label}</button>
+    <button class="A-chip" data-tog>🚶 ≤${S.maxWalk} min</button></div>`;
+  let body='';
+  if (o.mode==='dark'){ body = ctxNotices(o); }
+  else {
+    const [h,...rest]=o.spots;
+    body = ctxNotices(o);
+    if (h) body += `<div class="A-hero">
+      <div class="mute small">${o.mode==='normal'?'Best spot':'Nearest open sky'}</div>
+      <div class="leave">Leave ${hm(h.leave)}</div>
+      <div class="where">${h.name} · ${wk(h.walkMin)}</div>
+      <div>${o.mode==='normal'?`☀️ Sun in view ${ivText(h.iv)} (${dur(h.sunMin)}, ${h.firstHour} in your first hour)`:`Arrive ${hm(h.arrive)}`}</div>
+      <div class="A-row">${badges(h,o)}</div>
+      <div class="A-row"><button class="A-link" data-map="0">Show on map ›</button></div></div>`;
+    rest.forEach((r,i)=>{ body+=`<div class="A-card"><div class="rk">${i+2}</div>
+      <div><div class="t">${r.name}</div><div class="small mute">${wk(r.walkMin)} · ${o.mode==='normal'?'sun '+ivText(r.iv):'arrive '+hm(r.arrive)}</div>
+      <div class="A-row">${badges(r,o)}</div><button class="A-link" data-map="${i+1}">Map ›</button></div>
+      <div class="lv"><div class="small mute">leave</div>${hm(r.leave)}</div></div>`; });
+    body += `<div class="A-ctx">${SAFETY}<div class="small mute">Openness cut-off ${S.cutoff.toFixed(2)} hides ${o.counts.removed.toLocaleString()} of ${o.counts.reachable.toLocaleString()} reachable points as enclosed.</div></div>`;
+  }
+  return `<div class="A-top">${chips}${A_open?`<div class="A-edit">${inputsHTML()}</div>`:''}</div><div class="A-body">${body}</div>${footer(o)}`;
+}
+function afterA(o){
+  document.querySelectorAll('[data-tog]').forEach(b=>b.onclick=()=>{ A_open=!A_open; render(); });
+  document.querySelectorAll('[data-map]').forEach(b=>b.onclick=()=>openMap(o.spots[+b.dataset.map], +b.dataset.map+1));
+  if (A_open) bindInputs(document.querySelector('.A-edit'));
+}
+
+/* ================= VARIANT B: map-first ================= */
+let B_collapsed=true, B_sel=0, B_settings=false, B_map=null, B_view=null;
+function VariantB(o){
+  const c=CLOUD[S.cloud];
+  let list='';
+  if (o.mode!=='dark') o.spots.forEach((r,i)=>{ list+=`<div class="B-item ${i===B_sel?'sel':''}" data-i="${i}"><div class="n">${i+1}</div>
+    <div style="flex:1"><div style="display:flex;justify-content:space-between"><b>${r.name}</b><b>${hm(r.leave)}</b></div>
+    <div class="small mute">${wk(r.walkMin)} · ${o.mode==='normal'?'sun '+ivText(r.iv):'arrive '+hm(r.arrive)}</div>
+    <div class="A-row">${badges(r,o)}</div></div></div>`; });
+  const sel = o.spots && o.spots[B_sel];
+  const headline = o.mode==='dark' ? 'Lamp only this morning' : sel ? `Leave ${hm(sel.leave)} for ${sel.name}` : 'No open spots in range';
+  return `<div class="B-wrap"><div id="B-map"></div>
+    <div class="B-pill" id="B-pill"><div><b>${ORIGINS.find(x=>x.id===S.origin).label}</b> · ${fmtDate(S.date)} · ⏰ ${S.wake} · ${c.icon}</div><span class="mute">Edit ▾</span></div>
+    <div class="B-legend" style="top:62px">● open & sunny &nbsp;<span style="color:#999">●</span> enclosed (below ${S.cutoff.toFixed(2)})<br>sun bearing ${o.azRange? Math.round(o.azRange[0]+10)+'–'+Math.round(o.azRange[1]-10)+'°':''}</div>
+    <div class="B-sheet ${B_collapsed?'collapsed':''}"><div class="B-grab" id="B-grab"><span></span></div>
+      <div class="B-list"><div style="font-size:18px;font-weight:700;margin:2px 0 4px">${headline}</div>${ctxNotices(o)}${list}
+      ${SAFETY}<div class="small mute">${o.counts?o.counts.removed.toLocaleString()+' of '+o.counts.reachable.toLocaleString()+' reachable points hidden as enclosed.':''}</div>${footer(o)}</div></div>
+    <div class="B-settings" id="B-settings" style="display:${B_settings?'block':'none'}"><div class="panel">${inputsHTML()}<button id="B-done">Done</button></div></div></div>`;
+}
+function afterB(o){
+  const prev = B_view;
+  B_map = baseMap('B-map'); const h=[F.home.lat,F.home.lon];
+  L.marker(h,{icon:homeIcon()}).addTo(B_map);
+  if (o.all){ // every reachable point, coloured by the cut-off: the openness tuning view
+    const r=L.canvas({padding:.3});
+    for (const x of o.all){ if (x.walkMin>S.maxWalk) continue;
+      const open=x.svf>=S.cutoff, col = !open ? '#9a9a9a' : x.sunMin>0 ? `hsl(40,100%,${75-Math.min(1,x.wSun/120)*35}%)` : '#7fa7e6';
+      L.circleMarker([C.lat[x.c],C.lon[x.c]],{renderer:r, radius:2, stroke:false, fillColor:col, fillOpacity:open?.8:.35}).addTo(B_map); }
+    // sun bearing arrow from home
+    const mid=(o.azRange[0]+o.azRange[1])/2*Math.PI/180, d=0.012;
+    L.polyline([h,[h[0]+d*Math.cos(mid), h[1]+d*Math.sin(mid)/Math.cos(h[0]*Math.PI/180)]],{color:'#f5a300',weight:3,dashArray:'6 6'}).addTo(B_map);
+  }
+  const pts=[h];
+  (o.spots||[]).forEach((r,i)=>{ const p=[C.lat[r.c],C.lon[r.c]]; pts.push(p); L.marker(p,{icon:numIcon(i+1)}).on('click',()=>{B_sel=i;B_collapsed=false;render();}).addTo(B_map); });
+  if (prev) B_map.setView(prev.c, prev.z); else if (pts.length<2) B_map.setView(h, 15); else B_map.fitBounds(L.latLngBounds(pts).pad(0.25), {paddingBottomRight:[0,180]});
+  B_map.on('moveend',()=>{ B_view={c:B_map.getCenter(), z:B_map.getZoom()}; });
+  document.getElementById('B-grab').onclick=()=>{B_collapsed=!B_collapsed; render();};
+  document.getElementById('B-pill').onclick=()=>{B_settings=true; render();};
+  const done=document.getElementById('B-done'); if (done) done.onclick=()=>{B_settings=false; render();};
+  document.getElementById('B-settings').onclick=e=>{ if(e.target.id==='B-settings'){B_settings=false;render();} };
+  bindInputs(document.getElementById('B-settings'));
+  document.querySelectorAll('.B-item').forEach(el=>el.onclick=()=>{ B_sel=+el.dataset.i; const r=o.spots[B_sel]; B_map.setView([C.lat[r.c],C.lon[r.c]],17); render(); });
+}
+
+/* ================= VARIANT C: timeline-first ================= */
+let C_openRow=-1;
+function VariantC(o){
+  const cl=CLOUD[S.cloud];
+  const sentence = `<div class="C-sentence">I wake at <input type="time" data-k="wake" value="${S.wake}" style="width:5.2em"> on
+    <input type="date" data-k="date" value="${S.date}" min="${DATES[0]}" max="${DATES[DATES.length-1]}" style="width:8.6em">, the sky looks
+    <select data-k="cloud">${Object.entries(CLOUD).map(([k,v])=>`<option value="${k}" ${S.cloud===k?'selected':''}>${v.label.toLowerCase()}</option>`).join('')}</select>,
+    and I'll walk up to <select data-k="maxWalk">${[5,10,15,20].map(v=>`<option ${S.maxWalk===v?'selected':''}>${v}</option>`).join('')}</select> min from
+    <select data-k="origin">${ORIGINS.map(x=>`<option value="${x.id}" ${S.origin===x.id?'selected':''}>${x.id==='gps'?'here':x.label.split(' (')[0].toLowerCase()}</option>`).join('')}</select>.</div>`;
+  if (o.mode==='dark') return `<div class="C-top">${sentence}${ctxNotices(o)}${SAFETY}</div>${footer(o)}`;
+  const t0=o.wake-15, t1=o.end, span=t1-t0, X=m=>((m-t0)/span*100).toFixed(2)+'%', W=(a,b)=>((Math.min(b,t1)-Math.max(a,t0))/span*100).toFixed(2)+'%';
+  let ticks=''; for (let m=Math.ceil(t0/30)*30; m<=t1; m+=30) ticks+=`<span style="left:${X(m)}">${hm(m)}</span>`;
+  // taper strip: weight over the window
+  let taper=''; for (let m=o.start; m<o.end; m+=5){ const rel=m-o.wake, w=rel<=60?1:Math.max(0,1-(rel-60)/120); taper+=`<div style="position:absolute;top:0;bottom:0;left:${X(m)};width:${W(m,m+5)};background:rgba(245,163,0,${(0.15+0.75*w).toFixed(2)})"></div>`; }
+  if (o.sunrise>t0) taper+=`<div class="pre" style="left:0;width:${W(t0,o.sunrise)}"></div>`;
+  let rows='';
+  o.spots.forEach((r,i)=>{
+    let bar = `<div class="walk" style="left:${X(r.leave)};width:${W(r.leave,r.arrive)}"></div>`;
+    if (o.mode==='normal') for (const [a,b] of r.iv){ bar+=`<div class="sun" style="left:${X(a)};width:${W(a,b)}"></div>`; }
+    else { const stay=Math.max(0,o.target-r.walkMin); bar+=`<div class="sun" style="background:#bcd0f0;left:${X(r.arrive)};width:${W(r.arrive,r.arrive+stay)}"></div>`; }
+    if (r.pfMin>0){ const tr=F.tracks[S.date], tz=parseHm(tr.t0.slice(11,16)); for (const [a,b] of r.iv){ for(let m=a;m<b;m+=2){ const e=tr.el[(m-tz)/2]; if(e<=30) bar+=`<div class="pfz" style="left:${X(m)};width:${W(m,m+2)}"></div>`; } } }
+    bar += `<div class="leave" style="left:${X(r.leave)}"></div>`;
+    rows += `<div class="C-row" data-row="${i}"><div class="hd"><div><b>${i+1}. ${r.name}</b> <span class="small mute">${wk(r.walkMin)}</span></div><div><span class="small mute">leave</span> <b>${hm(r.leave)}</b></div></div>
+      <div class="C-bar">${bar}</div>
+      <div class="A-row" style="margin-top:6px">${badges(r,o)} ${o.mode==='normal'?`<span class="small mute">${dur(r.sunMin)} sun</span>`:''}</div>
+      ${C_openRow===i?`<div class="C-mini" id="C-mini"></div>`:''}</div>`;
+  });
+  return `<div class="C-top">${sentence}${ctxNotices(o)}</div>
+    <div class="C-tl"><div class="C-axis">${ticks}</div><div class="C-taper">${taper}</div>
+      <div class="small mute" style="margin-top:2px">Morning window ${hm(o.start)}–${hm(o.end)}: darker = counts more. Target ${o.target} min.</div>
+      ${rows}</div>
+    <div class="C-key"><span><i style="background:repeating-linear-gradient(45deg,#9bb7e8 0 4px,#c9d8f3 4px 8px)"></i>walk</span><span><i style="background:var(--sun)"></i>sun in view</span><span><i style="background:var(--pf)"></i>low sun (Protocols, untested)</span><span><i style="background:var(--ink);width:2px"></i>leave</span></div>
+    <div class="C-more">${SAFETY}<details ${C_det?'open':''} id="C-det"><summary>Tuning</summary>
+      <label>Openness cut-off <span><input type="range" data-k="cutoff" min="0.4" max="0.98" step="0.01" value="${S.cutoff}"> ${S.cutoff.toFixed(2)}</span></label>
+      <div class="small mute">Hides ${o.counts.removed.toLocaleString()} of ${o.counts.reachable.toLocaleString()} reachable points as enclosed.</div></details></div>${footer(o)}`;
+}
+let C_det=false;
+function afterC(o){
+  bindInputs(document.getElementById('app'));
+  const det=document.getElementById('C-det'); if (det) det.ontoggle=()=>{C_det=det.open;};
+  document.querySelectorAll('.C-row').forEach(el=>el.onclick=e=>{ if(e.target.closest('input,select')) return; const i=+el.dataset.row; C_openRow = C_openRow===i?-1:i; render(); });
+  const mini=document.getElementById('C-mini');
+  if (mini){ const r=o.spots[C_openRow], m=baseMap(mini,{dragging:true}); const p=[C.lat[r.c],C.lon[r.c]], h=[F.home.lat,F.home.lon];
+    L.marker(h,{icon:homeIcon()}).addTo(m); L.marker(p,{icon:numIcon(C_openRow+1)}).addTo(m); m.fitBounds(L.latLngBounds([p,h]).pad(0.3)); }
+}
+
+/* ================= SWITCHER (PROTOTYPE chrome) ================= */
+const VARIANTS = [ ['A','List-first',VariantA,afterA], ['B','Map-first',VariantB,afterB], ['C','Timeline-first',VariantC,afterC] ];
+function cur(){ const v=new URLSearchParams(location.search).get('variant')||'A'; return Math.max(0, VARIANTS.findIndex(x=>x[0]===v)); }
+function go(d){ const i=(cur()+d+VARIANTS.length)%VARIANTS.length; const u=new URL(location); u.searchParams.set('variant',VARIANTS[i][0]); history.replaceState(null,'',u); B_view=null; render(); }
+document.getElementById('pv').onclick=()=>go(-1); document.getElementById('pn').onclick=()=>go(1);
+document.getElementById('pdbg').onclick=()=>{ const s=document.getElementById('proto-state'); s.style.display = s.style.display==='block'?'none':'block'; };
+addEventListener('keydown',e=>{ if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return; if(e.key==='ArrowLeft') go(-1); if(e.key==='ArrowRight') go(1); });
+function render(){
+  const [k,label,V,after]=VARIANTS[cur()];
+  document.getElementById('plbl').textContent=`${k} (${label})`;
+  if (B_map){ B_map.remove(); B_map=null; }
+  const t=performance.now(); const o=compute(); const ms=performance.now()-t;
+  document.getElementById('app').innerHTML = V(o); after(o);
+  document.getElementById('proto-state').textContent = JSON.stringify({variant:k, ...S, mode:o.mode, window:[hm(o.start),hm(o.end)], sunrise:hm(o.sunrise), lamp:o.lamp,
+    sunAzRange:o.azRange, counts:o.counts, computeMs:Math.round(ms),
+    spots:(o.spots||[]).map(r=>({name:r.name, walk:Math.round(r.walkMin), leave:hm(r.leave), sun:r.sunMin, wSun:Math.round(r.wSun), firstHour:r.firstHour, pf:r.pfMin, svf:+r.svf.toFixed(3), met:r.met, iv:ivText(r.iv)})),
+    beyond:o.beyond?{name:o.beyond.name, walk:Math.round(o.beyond.walkMin)}:undefined }, null, 1);
+}
+render();
+</script>
+</body>
+</html>

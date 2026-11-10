@@ -9,7 +9,7 @@ The light exposure after waking that the tool exists to help someone get; what c
 _Avoid_: sunlight hit, sun exposure
 
 **Nominal sunrise**:
-The first minute the sun's apparent centre clears -0.833° over a flat horizon at a location; not when the sun actually appears at an obstructed site.
+The first minute the sun's geometric centre reaches -0.833° at a location, which is when its upper limb would appear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually appears at a Candidate, which can be later behind obstructions or slightly earlier from a high spot above a falling horizon.
 _Avoid_: local sunrise, actual sunrise
 
 **Candidate**:
@@ -21,7 +21,7 @@ The obstruction angle seen from a Candidate at each azimuth; fixed for a locatio
 _Avoid_: skyline, horizon mask
 
 **Clear window**:
-An unbroken run of time during which the sun is above a Candidate's Horizon profile.
+An unbroken run of time during which the sun is above a Candidate's Horizon profile, in the sense used for Sun minutes.
 _Avoid_: pass fraction, clear time
 
 **Wake time**:
@@ -33,7 +33,7 @@ The period in which Morning light counts: from the later of Wake time and Nomina
 _Avoid_: sunrise hour, sunrise window
 
 **Sun minutes**:
-The total minutes within the Morning window that the sun is above a Candidate's Horizon profile, whether or not they are contiguous.
+The total minutes within the Morning window that the sun is above a Candidate's Horizon profile, whether or not they are contiguous. "Above" means the centre of the sun's disc, as seen through the atmosphere, is higher than the Horizon profile at the sun's azimuth, whether that profile is above or below 0°.
 _Avoid_: clear time, pass fraction
 
 **Sky openness**:

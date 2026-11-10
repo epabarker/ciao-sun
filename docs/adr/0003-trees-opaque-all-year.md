@@ -19,7 +19,7 @@ The reason is that the last-return DSM the tool used before is mostly leaf-off n
 
 - **Horizon profiles stay independent of date,** and the tile format keeps one uint8 profile set.
 - **Winter answers are a lower bound.** Sun through bare branches doesn't count, so a spot may get sun earlier than shown. The about/method sheet says so; spots carry no warning, because no spot is shown sunnier than it is because of trees.
-- **No separate under-crown Candidate filter is needed.** The 0.75 openness cut-off already removes Candidates standing under a crown.
+- **No separate under-crown Candidate filter is needed.** The 0.75 openness cut-off removes nearly all Candidates standing under a crown: on crown-envelope profiles, 1 of 80 top-5 slots across the measured dates was still one, against 14 of 80 on the old profiles.
 - **New build input.** `lidar_composite_first_return_dsm` becomes a `sunspot fetch` input and gets an entry in the manifest.
 - **Clutter under 2 m beside a Candidate is ignored** (hedges, walls, cars). The copy tells people to stand clear of it.
 - **Going seasonal later is a format bump,** because a second profile set changes the tile format.

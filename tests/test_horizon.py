@@ -1,4 +1,9 @@
-"""Horizon ray-casting correctness: HANDOFF.md #6, test groups 1-3."""
+"""Horizon ray-casting correctness: HANDOFF.md #6, test groups 1-3.
+
+These synthetic grids define true north to coincide with grid north, so every
+cast passes convergence_deg=0.0. tests/test_true_north.py covers the
+conversion on a real BNG location.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +28,7 @@ def test_flat_plane_horizon_matches_analytic_formula(flat_grid_factory):
     expected = np.degrees(np.arctan2(-EYE_HEIGHT - curvature_drop(ray_d), ray_d)).max()
 
     for az in [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0, 17.3]:
-        result = horizon_angle(grid, px, py, pz, az, ray_d)[0]
+        result = horizon_angle(grid, px, py, pz, az, ray_d, convergence_deg=0.0)[0]
         assert result < 0.0, f"azimuth {az}: expected slightly negative, got {result}"
         assert abs(result - expected) < 0.01, f"azimuth {az}: {result} vs analytic {expected}"
 
@@ -48,10 +53,10 @@ def test_single_wall_10m_at_100m_azimuth_90(flat_grid_factory):
     expected = np.degrees(np.arctan2(10.0 - EYE_HEIGHT - drop_100, 100.0))
     assert expected == pytest.approx(4.80, abs=0.05)  # per HANDOFF.md worked example
 
-    result_east = horizon_angle(grid, px, py, pz, 90.0, ray_d)[0]
+    result_east = horizon_angle(grid, px, py, pz, 90.0, ray_d, convergence_deg=0.0)[0]
     assert abs(result_east - expected) < 0.02
 
-    result_west = horizon_angle(grid, px, py, pz, 270.0, ray_d)[0]
+    result_west = horizon_angle(grid, px, py, pz, 270.0, ray_d, convergence_deg=0.0)[0]
     flat_expected = np.degrees(np.arctan2(-EYE_HEIGHT - curvature_drop(ray_d), ray_d)).max()
     assert abs(result_west - flat_expected) < 0.01
     assert result_west < result_east - 1.0
@@ -71,6 +76,10 @@ def test_curvature_strictly_reduces_distant_obstruction_angle(flat_grid_factory)
     ray_d = ray_samples(2500.0)
     assert 2000.0 in ray_d
 
-    angle_curved = horizon_angle(grid, px, py, pz, 0.0, ray_d, curvature=True)[0]
-    angle_flat = horizon_angle(grid, px, py, pz, 0.0, ray_d, curvature=False)[0]
+    angle_curved = horizon_angle(
+        grid, px, py, pz, 0.0, ray_d, convergence_deg=0.0, curvature=True
+    )[0]
+    angle_flat = horizon_angle(
+        grid, px, py, pz, 0.0, ray_d, convergence_deg=0.0, curvature=False
+    )[0]
     assert angle_curved < angle_flat

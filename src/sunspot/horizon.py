@@ -1,7 +1,15 @@
 """Vectorised horizon (obstruction-angle) ray casting.
 
-For an observer at (px, py, pz) and an azimuth theta (degrees clockwise from
-grid north), the obstruction angle at ray distance d is:
+Azimuths in and out of this module are *true* azimuths (degrees clockwise from
+true north), the same convention as pvlib's sun azimuth, so a Horizon profile
+can be compared with the sun directly. Rays, though, are stepped through the
+EPSG:27700 grid, whose north differs from true north by the meridian
+convergence (about -0.47 deg in Bristol, several degrees in west Scotland). The one
+place that converts between the two is `grid_azimuth`; nothing else should
+correct for it.
+
+For an observer at (px, py, pz) and a grid azimuth theta, the obstruction angle
+at ray distance d is:
 
     x_s = px + d * sin(theta)
     y_s = py + d * cos(theta)
@@ -16,8 +24,12 @@ from __future__ import annotations
 import warnings
 
 import numpy as np
+from pyproj import Proj, Transformer
 
 from sunspot.raster import RasterGrid, sample
+
+_BNG = Proj("EPSG:27700")
+_BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
 EARTH_RADIUS_M = 6371000.0
 STANDARD_REFRACTION_COEFF = 1.13
@@ -55,23 +67,51 @@ def curvature_drop(d: np.ndarray, curvature: bool = True) -> np.ndarray:
     return d**2 / (2.0 * R_EFF)
 
 
+def meridian_convergence(x: float, y: float) -> float:
+    """Meridian convergence (deg) of EPSG:27700 at easting/northing (x, y).
+
+    The angle from true north to grid north, as pyproj reports it: negative west
+    of BNG's 2 deg W central meridian, positive east of it. It varies by only a
+    few hundredths of a degree across an area of interest a few km wide, so
+    callers compute it once per area of interest, not per Candidate.
+
+    The factors are evaluated at the point's WGS84 lon/lat, not its OSGB36
+    lon/lat, because the sun's true north (pvlib) is WGS84 north. In Bristol
+    the two differ by ~0.001 deg; the WGS84 value matches the grid bearing of
+    a WGS84 meridian to ~0.0002 deg.
+    """
+    lon, lat = _BNG_TO_WGS84.transform(x, y)
+    return float(_BNG.get_factors(lon, lat).meridian_convergence)
+
+
+def grid_azimuth(true_azimuth_deg: float, convergence_deg: float) -> float:
+    """The EPSG:27700 grid azimuth (deg) of a true azimuth, given the local convergence."""
+    return (true_azimuth_deg - convergence_deg) % 360.0
+
+
 def horizon_angle(
     dsm: RasterGrid,
     px: np.ndarray,
     py: np.ndarray,
     pz: np.ndarray,
-    azimuth_deg: float,
+    true_azimuth_deg: float,
     ray_d: np.ndarray,
+    *,
+    convergence_deg: float,
     curvature: bool = True,
 ) -> np.ndarray:
-    """Max obstruction angle (deg) along one azimuth, for many observer points at once.
+    """Max obstruction angle (deg) along one true azimuth, for many observer points at once.
 
     px, py: observer easting/northing (m, EPSG:27700). pz: observer eye elevation
-    (m AOD). azimuth_deg: a single azimuth shared by every observer point.
+    (m AOD). true_azimuth_deg: a single azimuth, clockwise from true north,
+    shared by every observer point. convergence_deg: the meridian convergence
+    for these observers, from `meridian_convergence`; required so that no
+    caller can cast a true azimuth along the grid by mistake. Pass 0.0 only for
+    a synthetic grid on which true and grid north are defined to coincide.
     Returns one angle per observer point; NaN where the whole ray falls off the
     DSM grid (treated as a fail by callers, since nothing is confirmed clear).
     """
-    theta = np.radians(azimuth_deg)
+    theta = np.radians(grid_azimuth(true_azimuth_deg, convergence_deg))
     xs = px[:, None] + ray_d[None, :] * np.sin(theta)
     ys = py[:, None] + ray_d[None, :] * np.cos(theta)
     zs = sample(dsm, xs.ravel(), ys.ravel()).reshape(xs.shape)

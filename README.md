@@ -116,9 +116,9 @@ sunspot profile-only 51.4720,-2.6040 --date 2026-12-21
 
 `compare` intersects the passing sets across dates and reports the
 year-round spots. `profile-only` is a debug command that dumps the full
-horizon profile (obstruction angle vs azimuth, 1 degree steps, 0-360) for one
-point as `horizon_profile.csv`, plus `horizon_profile.png` with the sun track
-overlaid. This is the main manual sanity check: compare the plot against
+horizon profile (obstruction angle vs true azimuth, 1 degree steps, 0-360,
+clockwise from true north) for one point as `horizon_profile.csv`, plus
+`horizon_profile.png` with the sun track overlaid. This is the main manual sanity check: compare the plot against
 [heywhatsthat.com](https://www.heywhatsthat.com/) for the same coordinate,
 which computes the same thing from independent terrain data.
 

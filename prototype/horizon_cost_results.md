@@ -1,5 +1,7 @@
 # PROTOTYPE results: on-demand vs precomputed Horizon profiles
 
+> **Superseded in part** by `horizon_cost_rescale.md`: far field, 60–160° band, 0.1° storage.
+
 Throwaway cost benchmark for the wayfinder ticket *On-demand run vs precomputed
 Horizon profiles: what do they cost?* (epabarker/daylight-viewing#6).
 Branch `prototype/horizon-cost`, never merged. Neither the logic branch nor the

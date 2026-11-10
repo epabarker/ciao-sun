@@ -40,18 +40,32 @@ of the fidelity test share it.
    - **The height correction matters.** At 250 m without it, 4.2% of far-set pairs
      are more than 0.1° off. At 500 m, 3.4% are off even with it.
 2. **The azimuth step, not quantisation, now limits leave-by accuracy.** These are
-   first-sun errors against exact per-minute scoring, across all Candidates, with
-   linear interpolation, on 21 Dec and 10 Nov:
+   first-sun errors against exact per-minute scoring, with linear interpolation. The
+   rows are the 21 Dec / 10 Nov figures for two populations:
+   - **All Candidates.**
+   - **Far-set at first sun.** The Candidates where, at the exact first-sun minute, the
+     far field sets the profile. That is about 2% of the sample, 94–113 of 5,000, and
+     exactly the spots the far field was added for.
 
-   | Az step | Mean abs first-sun error | First sun > 2 min late |
+   | Az step | All Candidates: mean abs / > 2 min late | Far-set at first sun: mean abs / > 2 min late |
    |---|---|---|
-   | 1° | **2.0–2.4 min** | 11–14% |
-   | 0.5° | 1.3–1.4 min | 4–6% |
-   | 0.25° | **0.9 min** | 3% |
+   | 1° | 2.4 / 2.0 min; 14% / 11% | **2.3 / 1.4 min**; 12% / 8% |
+   | 0.5° | 1.4 / 1.3 min; 6% / 4% | 0.8 / 0.9 min; 3% / 4% |
+   | 0.25° | **0.9 min**; 3% | **0.4–0.5 min**; 1–2% |
 
-   The far field fixed a 3–5 min leave-by error. At 1° the profile gives back about
-   half of that through interpolation, mostly by closing narrow gaps, so first sun
-   comes **late**.
+   - **Open spots** (Sky openness ≥ 0.75, about 2,300 of 5,000) behave like all
+     Candidates.
+   - **Summer.** On 21 Jun the far-set spots are almost exact at any step (≤ 0.1 min).
+     The winter mornings are the ones that suffer.
+   - **The comparison with the far field.** The far field fixed a 3–5 min leave-by
+     error on top open spots in winter. At 1° the precomputed profile gives back
+     **1.4–2.3 min** of that on the far-set spots. At 0.25° it gives back under
+     0.5 min.
+   - **The direction.** Errors are mostly **late**, because interpolation closes narrow
+     gaps.
+   - **On-demand has no interpolation error.** It casts rays at the sun's own azimuth
+     at every step. That accuracy gap is part of what the architecture choice weighs
+     against cost.
 3. **0.1° storage costs little if the code is piecewise.**
    - **The code.** Use 0.1° steps on −2° to 10°, then 0.5° steps up to 63.5°. That is
      228 codes, so it fits in **uint8**. Against linear 0.1°, its verdicts agree
@@ -61,11 +75,22 @@ of the fidelity test share it.
    - **Gain over the old code.** Against the old 0.5° uint8 code, first-sun error
      improves by 0.05–0.3 min.
 4. **On-demand cost is unchanged by the far field, using the same coarse-grid
-   trick.** A wake-anchored 3 h track at 1 min steps is still **~72 s per query** on
-   one core for a 1.5 km radius. It also needs the DSM working set resident, about
-   650 MB.
-5. **Sky openness costs nothing extra on either path.** It is read off the same
-   Horizon profile, or on demand off the same sun-track rays.
+   trick.**
+   - **Per query.** A wake-anchored 3 h track at 1 min steps costs about
+     **72 core-seconds** for a 1.5 km radius. That is extrapolated, not timed
+     end to end: 70,681 Candidates × 181 steps × 5.6 µs, plus a negligible
+     far-field lattice. With a per-Candidate far field it would be about 195
+     core-seconds.
+   - **Memory.** It also needs the DSM working set resident, about 650 MB, plus the
+     Terrain 50 crop.
+5. **Sky openness widens the band by about 20%.**
+   - **The rule.** The answer-screen prototype computes it over the window's sun-path
+     azimuths **±10°**. That makes Bristol's band about **50–170° (121 azimuths at
+     1°)** rather than 60–160°.
+   - **Precompute.** Scale every time and size figure here by about 1.2. No extra rays
+     beyond that.
+   - **On demand.** It needs about 21 extra rays per Candidate at 1°, so about 12%
+     more than the 181-step track.
 
 ## Unit costs (one core)
 
@@ -97,7 +122,8 @@ of the fidelity test share it.
 
 - **The rule of thumb.** The near field costs **~2.1 core-hours per azimuth sample**
   across England at 10 m spacing: 0.057 core-s per km² per azimuth.
-- **Wider bands.** These figures assume Bristol's 07:00-wake band. A later winter Wake
+- **Wider bands.** These figures assume Bristol's 07:00-wake band, before the
+  openness margin (×1.2, see headline 5). A later winter Wake
   time pushes the band toward ~200°, and northern England shifts it again. Scale by
   the number of azimuth samples.
 - **Not measured.** Scaling is assumed linear with cores, and multi-core runs were not
@@ -142,9 +168,8 @@ ray plus a per-Candidate far-field ray at every sun step.
 - **Conservative interpolation doesn't help.** Taking the max of the two neighbouring
   samples avoids early errors but doubles or triples the late ones (21 Dec at 1°: 35%
   late by more than 2 min). Linear is better.
-- **These are all-Candidate figures.** Spots blocked nearby, which see the sun through
-  narrow gaps, dominate them. The top-ranked open spots are probably better than this.
-  That was not measured separately.
+- **These are all-Candidate figures.** Headline 2 gives the far-set and open-spot
+  subsets. The full output is in the JSON, under `az step sweep`.
 
 ## Still not measured
 

@@ -380,10 +380,22 @@ for date in ("2026-12-21", "2026-11-10", "2026-03-20", "2026-06-21"):
     tr = sunrise_hour_track(LAT, LON, date, step_minutes=1.0, window_minutes=180.0)
     inband = (tr.azimuth >= AZ[0]) & (tr.azimuth <= AZ[-1])
     az_tr, el_tr = tr.azimuth[inband], tr.apparent_elevation[inband]
-    exact = (np.maximum(block(near_fn, fx_, fy_, fz_, az_tr), block(far_fn, fx_, fy_, fz_, az_tr))
-             < el_tr[None, :])
+    ex_n = block(near_fn, fx_, fy_, fz_, az_tr)
+    ex_f = block(far_fn, fx_, fy_, fz_, az_tr)
+    exact = np.maximum(ex_n, ex_f) < el_tr[None, :]
     ex_len, _, _ = longest_clear_run(exact)
     ex_first = np.where(exact.any(1), exact.argmax(1), -1)
+    # subsets that rank: (a) far field sets the profile at the exact first-sun step;
+    # (b) Sky openness >= 0.75 over the window's sun path +/- 10 deg (answer-screen rule)
+    rows = np.arange(len(ex_first))
+    fi = np.maximum(ex_first, 0)
+    far_set_first = (ex_first >= 0) & (ex_f[rows, fi] >= ex_n[rows, fi])
+    vis = el_tr > -1
+    a_lo, a_hi = max(AZ_Q[0], az_tr[vis].min() - 10), min(AZ_Q[-1], az_tr[vis].max() + 10)
+    sel = (AZ_Q >= a_lo) & (AZ_Q <= a_hi) & np.isclose(AZ_Q % 1, 0)
+    svf = (np.cos(np.radians(np.maximum(prof_q[:, sel], 0))) ** 2).mean(1)
+    subsets = {"far_set_at_first_sun": far_set_first, "open_svf_ge_0.75": svf >= 0.75}
+    sweep[f"{date} subset sizes"] = {k: int(v.sum()) for k, v in subsets.items()}
     for step in (0.25, 0.5, 1.0):
         k = int(round(step / 0.25))
         az_s = AZ_Q[::k]
@@ -407,6 +419,15 @@ for date in ("2026-12-21", "2026-11-10", "2026-03-20", "2026-06-21"):
                 first_sun_late_gt2min_pct=round(100 * float((sd > 2).mean()), 2),
                 ever_clear_mismatch_pct=round(100 * float((exact.any(1) != approx.any(1)).mean()), 2),
             )
+            if mode == "linear":
+                for nm, m in subsets.items():
+                    sdm = (ap_first - ex_first)[both & m]
+                    sweep[f"{date} az{step} {mode}"][nm] = dict(
+                        n=int(len(sdm)),
+                        first_sun_mean_abs_min=round(float(np.abs(sdm).mean()), 2),
+                        first_sun_late_gt2min_pct=round(100 * float((sdm > 2).mean()), 2),
+                        first_sun_early_gt2min_pct=round(100 * float((sdm < -2).mean()), 2),
+                    )
 log("az step sweep (piecewise_u8)", sweep)
 
 inner = np.hypot(gx - hx, gy - hy) <= 500.0

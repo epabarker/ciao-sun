@@ -29,7 +29,7 @@ A standing position assessed for whether the sun is visible from it.
 _Avoid_: point, cell
 
 **Horizon profile**:
-The obstruction angle seen from a Candidate at each azimuth; fixed for a location, independent of date.
+The obstruction angle seen from a Candidate at each azimuth; fixed for a location, independent of date. Trees count as in full leaf on every date, so in winter the sun may show through bare branches below it.
 _Avoid_: skyline, horizon mask
 
 **Clear window**:

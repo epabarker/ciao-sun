@@ -12,7 +12,7 @@ from pyproj import Transformer
 
 from sunspot.config import SunspotConfig
 from sunspot.export import to_geojson, to_horizon_geotiff, to_map
-from sunspot.horizon import horizon_angle, ray_samples
+from sunspot.horizon import horizon_angle, meridian_convergence, ray_samples
 from sunspot.raster import (
     RasterGrid,
     TilesNotFoundError,
@@ -320,10 +320,12 @@ def profile_only(
     curvature: bool = typer.Option(True, "--curvature/--no-curvature"),
     output_dir: Path = typer.Option(Path("."), "--output-dir"),
 ) -> None:
-    """Dump the full horizon profile (angle vs azimuth) for one point, plus a plot.
+    """Dump the full Horizon profile (angle vs true azimuth) for one point, plus a plot.
 
-    Manual sanity check: compare the plot against heywhatsthat.com for the same
-    coordinate, which computes the same thing from independent terrain data.
+    Azimuths are clockwise from true north, as for the sun track overlaid on the
+    plot. Manual sanity check: compare the plot against heywhatsthat.com for the
+    same coordinate, which computes the same thing (also from true north) from
+    independent terrain data.
     """
     lat, lon = _parse_centre(point)
     cfg = SunspotConfig.load(config, home_lat=lat, home_lon=lon, date=date, max_ray=max_ray)
@@ -346,22 +348,29 @@ def profile_only(
     pz = float(ground) + eye_height
 
     ray_d = ray_samples(max_ray)
-    azimuths = np.arange(0.0, 360.0, 1.0)
+    convergence = meridian_convergence(px, py)
+    azimuths = np.arange(0.0, 360.0, 1.0)  # true azimuths
     px_arr, py_arr, pz_arr = np.array([px]), np.array([py]), np.array([pz])
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="All-NaN (slice|axis) encountered")
         angles = np.array(
-            [horizon_angle(dsm, px_arr, py_arr, pz_arr, az, ray_d, curvature)[0] for az in azimuths]
+            [
+                horizon_angle(
+                    dsm, px_arr, py_arr, pz_arr, az, ray_d,
+                    convergence_deg=convergence, curvature=curvature,
+                )[0]
+                for az in azimuths
+            ]
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = output_dir / "horizon_profile.csv"
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["azimuth_deg", "horizon_angle_deg"])
+        w.writerow(["true_azimuth_deg", "horizon_angle_deg"])
         for az, ang in zip(azimuths, angles, strict=True):
             w.writerow([az, ang])
-    typer.echo(f"Wrote {csv_path}")
+    typer.echo(f"Wrote {csv_path} (meridian convergence here: {convergence:+.4f} deg)")
 
     import matplotlib
 
@@ -378,7 +387,7 @@ def profile_only(
         color="tab:orange",
     )
     ax.axhline(0, color="black", linewidth=0.5)
-    ax.set_xlabel("Azimuth (deg, from grid north)")
+    ax.set_xlabel("True azimuth (deg, from true north)")
     ax.set_ylabel("Angle (deg)")
     ax.set_title(f"Horizon profile at {lat:.5f},{lon:.5f} -- {date}")
     ax.legend()

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from sunspot.horizon import horizon_angle, ray_samples
+from sunspot.horizon import horizon_angle, meridian_convergence, ray_samples
 from sunspot.raster import RasterGrid, sample
 from sunspot.solar import SunTrack
 
@@ -56,8 +56,10 @@ def score_candidates(
     """Score every candidate position against every step of the sun track.
 
     A candidate "passes" a time step when the horizon angle along the sun's
-    azimuth is below its apparent elevation. Scoring is chunked over candidates
-    with the ray casting fully vectorised across each chunk.
+    azimuth is below its apparent elevation. The sun track's azimuths are true
+    azimuths; the meridian convergence at home converts them for the whole
+    area of interest. Scoring is chunked over candidates with the ray casting
+    fully vectorised across each chunk.
     """
     gx, gy, dist = candidate_grid(home_x, home_y, radius, spacing)
 
@@ -74,6 +76,7 @@ def score_candidates(
     gz = ground + eye_height
 
     ray_d = ray_samples(max_ray)
+    convergence = meridian_convergence(home_x, home_y)
     n_steps = len(sun_track.azimuth)
     n_clear = np.zeros(len(gx), dtype=np.int32)
     worst_angle = np.full(len(gx), -90.0, dtype=np.float32)
@@ -89,7 +92,9 @@ def score_candidates(
             for step, (az, el) in enumerate(
                 zip(sun_track.azimuth, sun_track.apparent_elevation, strict=True)
             ):
-                ang = horizon_angle(dsm, px, py, pz, az, ray_d, curvature=curvature)
+                ang = horizon_angle(
+                    dsm, px, py, pz, az, ray_d, convergence_deg=convergence, curvature=curvature
+                )
                 step_clear = ang < el
                 tally += step_clear
                 clear_mask[sl, step] = step_clear

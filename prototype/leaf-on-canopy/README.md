@@ -11,8 +11,12 @@ The ticket assumed the EA 2022 composite DSM is mostly leaf-on, so it would show
 - **The composite keeps the newest survey per cell.** This was checked on ST5575, where the composite matches the 21 Sep 2021 per-survey tile on 92–100% of cells, and overwrites the 23 Jan 2019 survey where they overlap.
 - **Within the study box (home ± 4.8 km), 13% of cells are leaf-on** (flown 21 Sep 2021, a strip about 2–4 km west over the Avon gorge and Leigh Woods). The rest were flown on 17 Jan 2019 (the south half, home included) or 19 Apr 2018 (the north half, at bud-burst). Flight dates are in each tile's `*_Metadata.gpkg`, layer `lidar_used_in_merging_process`.
 - **A leaf-off last return passes through bare crowns.** The same trees were flown on 23 Jan 2019 and 21 Sep 2021 (3.2 km² overlap). Only 23% of leaf-on crown cells are still taller than 2 m in January, and their median height is 0.18 m in January against 12.3 m in September. 87% of them lose more than half their height.
+- **The same holds on the surveys that cover home.** The last-return DSM keeps only 32% (17 Jan 2019 NLP, 40 km²) and 36% (19 Apr 2018 NLP, 38 km²) of the cells the first return shows as vegetation, against 79% where the survey was leaf-on (21 Sep 2021). See `results/retention_under_crown.json`.
 
-So the tool's DSM already shows deciduous trees roughly as bare, which is about right in winter. **The error is in the leaf-on season, and it runs the other way: the as-is answers are too optimistic from about May to October.**
+So the tool's DSM mostly shows deciduous trees as **absent**: not as bare, and not as in leaf. Two consequences:
+
+- **Leaf-on season (about May to October):** the as-is answers are too optimistic, and by a lot. This is the main finding.
+- **Winter:** the as-is answer is the **optimistic end of a bracket**, not the truth. Low sun through bare branches is partly blocked and dappled, and the DSM shows no branches at all.
 
 ## Surfaces compared
 
@@ -31,11 +35,20 @@ Vegetation means DSM − DTM over 2 m, outside OSM building footprints buffered 
 
 "Shift" is how many minutes the as-is answer is off, in the expected direction: first sun in the morning, Last sun in the evening. It is measured over reachable open spots with sun under both surfaces.
 
-**Winter correction actually needed (`bare_on`, Nov–Mar):**
+**Winter, part 1: the leaf-on strip (`bare_on`, Nov–Mar). Negligible.**
 - Morning: **0 min**, on every date.
 - Evening: mean 0.1–0.3 min; 1–2% of spots shift by 5 min or more.
 - No openness changes; top-5 leave-by within 0–2 min.
 - At 20 min max walk the leaf-on strip comes into reach: on 21 Dec evening the mean is 2.8 min, 7% of spots shift by 5 min or more, about 100 spots cross 0.75 openness, and top-5 leave-by moves within 1 min.
+
+**Winter, part 2: bare branches. Bracketed, not measured.** The as-is answer treats bare crowns as fully open. The `leafy` surface on winter dates treats them as fully opaque. The truth lies between, depending on how much direct sun a bare deciduous crown lets through. This prototype doesn't measure that, and it is the open input for the canopy decision.
+
+| date | window | as-is ↔ opaque-branches: mean / p90 shift | spots ≥5 min off | top-5 leave-by off (min) |
+|---|---|---|---|---|
+| 21 Dec | morning | 9 / 32 | 33% | 0, 5, 2, 0, – |
+| 21 Dec | evening | 13 / 47 | 31% | 1, –, –, 27, 56 |
+| 5 Feb | evening | 18 / 68 | 35% | 0, –, 14, 11, 3 |
+| 20 Mar | morning | 14 / 55 | 29% | 102, 12, 32, 99, – |
 
 **Summer error (`leafy`, leaf-on season), the as-is answer being optimistic:**
 
@@ -54,6 +67,10 @@ About a quarter of the spots the tool calls open are tree-enclosed in leaf, and 
 
 `bare_all` (an upper bound for anything tree-shaped) shifts open spots by a mean of 4–14 min. It leaves the top-5 leave-by unchanged, because top spots are already open. About 600–900 points would cross 0.75 openness. This is the evergreen and hedge component, not a seasonal one.
 
+## Candidates under a crown
+
+12.5% of reachable Candidates within 15 min (1,104 of 8,847; 11% within 20 min) stand where the first return shows a crown over 2 m. The open-ground filter (last-return DSM − DTM ≤ 1 m) passes them because the last return sees through bare branches. In leaf, the tool would send people to stand under a tree. Much of the blue "sun lost" scatter on the 21 Jun map is this. **Filtering Candidates on the first return**, not only casting profiles against it, is a second lever for the canopy decision.
+
 ## Vegetation masks (the ticket's second bullet)
 
 | mask | how | verdict |
@@ -67,7 +84,9 @@ Known artefact: tidal water (the Avon) shows as first-return "vegetation". A wat
 
 ## What this means for [Leaf-on canopy: correct it, caveat it, or ignore it?](https://github.com/epabarker/daylight-viewing/issues/24)
 
-- "Correct" now means **adding** canopy for the leaf-on season (or picking per season), not making trees transparent in winter. Winter needs a correction only where the survey was leaf-on, which in Bristol is a strip at the west edge of a 20 min walk.
+- "Correct" now means **adding** canopy for the leaf-on season (or picking per season), not making trees transparent in winter. Removing leaf-on canopy in winter matters only where the survey was leaf-on, which in Bristol is a strip at the west edge of a 20 min walk.
+- **Open input:** how opaque bare deciduous crowns are to low direct sun. The winter answer sits between as-is (fully open) and opaque branches. The gap is up to tens of minutes at some top-5 spots.
+- **Second lever:** drop Candidates under a first-return crown, at least for the leaf-on season.
 - Survey season is free per cell from the tile metadata, so a build can tell which cells need which treatment.
 - A seasonal correction implies a second profile set (or a per-cell seasonal delta) in the tiles, and the first-return product as a new build input for [Data refresh: what triggers a new data build, and how is it cut and shipped?](https://github.com/epabarker/daylight-viewing/issues/19).
 - Stage 2+ caveat: the leaf-on/leaf-off mix is a Bristol fact. Other areas will have other survey seasons.

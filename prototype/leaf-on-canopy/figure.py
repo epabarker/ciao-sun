@@ -33,8 +33,8 @@ fig, ax = plt.subplots(2, 2, figsize=(14, 14))
 a = ax[0, 0]
 cm = matplotlib.colors.ListedColormap(["#9db7d5", "#c9d98a", "#2f7d32"])
 a.imshow(season[::step, ::step], extent=ext, cmap=cm, vmin=0, vmax=2, interpolation="nearest")
-a.set_title("Which season the composite DSM was flown in, per cell\n"
-            "blue = Jan 2019 (leaf-off) · light green = 19 Apr 2018 (bud-burst) · dark green = Sep 2021 (leaf-on)")
+a.set_title("Survey season per cell (newest survey wins)\nblue: 17 Jan 2019 leaf-off · pale green: 19 Apr 2018 bud-burst\n"
+            "dark green: 21 Sep 2021 leaf-on · dots: Candidates ≤15 min", fontsize=10)
 reach = A.WALK <= 15
 a.scatter(A.X[reach][::5], A.Y[reach][::5], s=0.3, c="k", alpha=0.3)
 a.plot(hx, hy, "r*", ms=14)
@@ -46,12 +46,12 @@ img[vfz] = 1
 img[veg] = 2
 b.imshow(img[::step, ::step], extent=ext, cmap=matplotlib.colors.ListedColormap(["white", "#f0a640", "#2f7d32"]),
          interpolation="nearest")
-b.set_title("Vegetation over 2 m, outside OSM buildings\n"
-            "green = in the last-return DSM the tool uses · orange = only in the first return (bare crowns)")
+b.set_title("Vegetation over 2 m, outside OSM buildings\ngreen: in the last-return DSM the tool uses\n"
+            "orange: only in the first return (bare crowns the tool can't see)", fontsize=10)
 b.plot(hx, hy, "r*", ms=14)
 
-for k, (ds, win, title) in enumerate([("2027-06-21", "evening", "21 Jun evening: Last sun with summer canopy (proxy) vs as-is"),
-                                      ("2026-12-21", "evening", "21 Dec evening: Last sun if Sep-2021 trees were bare vs as-is")]):
+for k, (ds, win, title) in enumerate([("2027-06-21", "evening", "21 Jun evening: Last sun, summer canopy vs as-is"),
+                                      ("2026-12-21", "evening", "21 Dec evening: Last sun, Sep-2021 trees bare vs as-is")]):
     c = ax[1, k]
     sc = A.score(ds, win)
     s = "leafy" if k == 0 else "bare_on"
@@ -65,7 +65,7 @@ for k, (ds, win, title) in enumerate([("2027-06-21", "evening", "21 Jun evening:
     p = c.scatter(A.X[sel][o], A.Y[sel][o], c=np.clip(sh[sel][o], 0, 60), s=2, cmap="magma_r", vmin=0, vmax=60)
     c.scatter(A.X[sel & gone], A.Y[sel & gone], s=2, c="#1f6fd1")
     c.plot(hx, hy, "c*", ms=14)
-    c.set_title(title + "\n(minutes, capped at 60; blue = sun lost/gained entirely; Candidates within 20 min)")
+    c.set_title(title + "\nminutes, capped at 60 · blue: sun lost or gained entirely\nCandidates ≤20 min", fontsize=10)
     fig.colorbar(p, ax=c, shrink=0.7)
 for a in ax.ravel():
     a.set_xlim(hx - 2600, hx + 2600)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from importlib.metadata import entry_points
 
 import typer
@@ -11,11 +12,19 @@ from ciao_sun.cli import app
 
 runner = CliRunner()
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(output: str) -> str:
+    """Help text without styling. Rich colours its output on GitHub Actions,
+    which splits option names such as `--coverage` with escape codes."""
+    return " ".join(_ANSI.sub("", output).split())
+
 
 def test_fetch_help_explains_every_input_and_the_coverage_argument():
     result = runner.invoke(app, ["fetch", "--help"], terminal_width=200)
     assert result.exit_code == 0, result.output
-    text = " ".join(result.output.split())
+    text = _plain(result.output)
     for phrase in [
         "Environment Agency", "DSM", "DTM", "first-return", "Terrain 50", "Geofabrik",
         "--coverage", "GeoJSON", "WGS84", "3 km",

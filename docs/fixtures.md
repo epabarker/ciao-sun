@@ -242,10 +242,13 @@ JS Answer that differs like this:
    is in its `sunIntervals`; outside it, the minute is out of view after its
    `lastSun`, in view at it, and has no bearing before it. Low sun is whether
    the minute is in the `lowSunIntervals` of any shown spot with the sun in
-   view then. Anything else comes from `sunTrack` against the Candidate's
-   Horizon profile (or 0° and 30°), but only when the track's rounding to
-   4 decimal places, in both azimuth and elevation, cannot change the side.
-   Otherwise the harness fails and names the minute.
+   view then, or else from `sunTrack` against 0° and 30°, failing and naming
+   the minute if the track's rounding to 4 decimal places could change it.
+   A Candidate the Answer does not show is held out of view at its listed
+   minutes in the window. That can only keep it out of the list, the set of
+   spots with sun and `nearestSunBeyondLimit`, so if any flips reach the
+   reference's Answer, these do. Its side is not read from `sunTrack`: next
+   to a wall, the track's rounding alone can span the 0.01° tolerance.
 3. The JS scorer answers the Query again with those sides forced, and
    nowhere else. That Answer must equal the reference's exactly, with the
    tolerances above.

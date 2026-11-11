@@ -279,7 +279,7 @@ describe("a near-boundary flip", () => {
     maxWalkMin: 15,
     sky: "clear",
   };
-  const rescore = (q: Query) => (overrides: SightOverrides) => answerWith(q, tiles, undefined, overrides);
+  const rescore = (q: Query, on = tiles) => (overrides: SightOverrides) => answerWith(q, on, undefined, overrides);
 
   /**
    * The fixture a reference would write if its sun were on the other side at
@@ -291,6 +291,7 @@ describe("a near-boundary flip", () => {
     flipped: SightOverrides,
     listed: Record<string, number[]>,
     lowSunBand: number[] = [],
+    on: Tile[] = tiles,
   ): LoadedFixture {
     const track = sunTrack(q.origin.lat, q.origin.lon, q.date);
     const round = (values: Float64Array) => Array.from(values, (v) => Math.round(v * 1e4) / 1e4);
@@ -298,7 +299,7 @@ describe("a near-boundary flip", () => {
       id: "hand-made",
       query: q,
       tiles: ["ST5873"],
-      answer: answerWith(q, tiles, undefined, flipped),
+      answer: answerWith(q, on, undefined, flipped),
       sunTrack: {
         start: "2026-03-20T00:00:00+00:00",
         stepMin: 1,
@@ -306,7 +307,7 @@ describe("a near-boundary flip", () => {
         apparentElevation: round(track.apparentElevation),
       },
       nearBoundary: { toleranceDeg: 0.01, candidates: listed, lowSunBand },
-      decodedTiles: tiles,
+      decodedTiles: on,
       coverage: { type: "Polygon", coordinates: [] },
     };
   }
@@ -347,6 +348,32 @@ describe("a near-boundary flip", () => {
     });
   });
 
+  describe("that changes who makes the top 5", () => {
+    // Six Candidates tie on Low-sun minutes, 1 to 6 m away, 300 m apart: the
+    // nearest five are listed. With the 5th out of the sun at 06:30, it drops
+    // to 6th and the 6th takes its place, as on a saturated Bristol list.
+    const six = [world([1, 2, 3, 4, 5, 6].map((m, k) => ({ offsetCm: m * 100, northM: k * 300 })))];
+    const [fifth, sixth] = ["ST5873/4", "ST5873/5"];
+    const flipped = { sunInView: { [fifth]: { 390: false } } };
+
+    it("is excused when the minute is listed for the Candidate that drops out", async () => {
+      const f = fixtureWith(query, flipped, { [fifth]: [390] }, [], six);
+      const plain = answerWith(query, six);
+
+      expect(plain.spots.map((s) => s.candidateId)).toContain(fifth);
+      expect(f.answer.spots.map((s) => s.candidateId)).toEqual(["ST5873/0", "ST5873/1", "ST5873/2", "ST5873/3", sixth]);
+      expect(await unexplainedDifferences(plain, f, rescore(query, six))).toEqual([]);
+    });
+
+    it("still fails when the minute is not listed", async () => {
+      const f = fixtureWith(query, flipped, { [sixth]: [390] }, [], six);
+
+      expect(await unexplainedDifferences(answerWith(query, six), f, rescore(query, six))).toContain(
+        `spots[4].candidateId: "${fifth}", the reference has "${sixth}"`,
+      );
+    });
+  });
+
   describe("that changes the status", () => {
     // `now` leaves one minute of the window, 09:29 (minute 569). With the sun
     // out of view there at both Candidates, no reachable spot has sun.
@@ -384,8 +411,7 @@ describe("a near-boundary flip", () => {
   });
 
   describe("the reference's side of a listed minute", () => {
-    // The listed Candidate, C, is 100 m from A: de-duped, so in no list, and
-    // its side comes from the fixture's sun track against its Horizon profile.
+    // C is 100 m from A: de-duped, so in no list.
     const withC = [
       world([
         { offsetCm: 449, northM: 0 },
@@ -394,13 +420,6 @@ describe("a near-boundary flip", () => {
       ]),
     ];
     const C = "ST5873/2";
-    const at = (elevation: number): LoadedFixture => {
-      const f = fixtureWith(query, {}, { [C]: [400] });
-      f.decodedTiles = withC;
-      f.answer = answerWith(query, withC);
-      f.sunTrack.apparentElevation[400] = elevation;
-      return f;
-    };
 
     it("is read from the reference's Answer for a Candidate it lists", () => {
       const f = fixtureWith(query, { sunInView: { [A]: { 390: false } } }, { [A]: [390, 400] }, [390]);
@@ -408,14 +427,12 @@ describe("a near-boundary flip", () => {
       expect(referenceSight(f)).toEqual({ sunInView: { [A]: { 390: false, 400: true } }, lowSun: { 390: true } });
     });
 
-    it("is the fixture's sun track against the Horizon profile for any other Candidate", () => {
-      expect(at(-1.995).answer.spots.map((s) => s.candidateId)).not.toContain(C);
-      expect(referenceSight(at(-1.995)).sunInView).toEqual({ [C]: { 400: true } });
-      expect(referenceSight(at(-2.005)).sunInView).toEqual({ [C]: { 400: false } });
-    });
+    it("is out of view, inside the window, for a Candidate the Answer does not show", () => {
+      // Minute 300 is before the window: it bears on nothing a Morning Answer shows.
+      const f = fixtureWith(query, {}, { [C]: [300, 400] }, [], withC);
 
-    it("refuses to guess when the stored track's rounding could put it on either side", () => {
-      expect(() => referenceSight(at(-2.00001))).toThrow(/ST5873\/2 at minute 400/);
+      expect(f.answer.spots.map((s) => s.candidateId)).not.toContain(C);
+      expect(referenceSight(f).sunInView).toEqual({ [C]: { 400: false } });
     });
   });
 });

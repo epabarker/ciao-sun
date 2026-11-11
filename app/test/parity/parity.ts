@@ -3,10 +3,9 @@
 
 import type { Answer, Interval, Spot } from "../../src/contract";
 import type { SightOverrides } from "../../src/scorer/scoring";
-import { LOW_SUN_MAX_DEG, LOW_SUN_MIN_DEG, horizonAt } from "../../src/scorer/sunview";
+import { LOW_SUN_MAX_DEG, LOW_SUN_MIN_DEG } from "../../src/scorer/sunview";
 import { TIME_ZONE, toLocalIso } from "../../src/solar/local-day";
 import { type SunTrack, sampleTimeMs } from "../../src/solar/sun-track";
-import { PROFILE_STEP_DEG, type Tile, horizonProfileCodes } from "../../src/tile/decode";
 import type { FixtureDocument, ReferenceSunTrack } from "./fixture-set";
 
 /** JS and reference sun positions must agree within this, in degrees. */
@@ -185,9 +184,6 @@ export function effectiveFreedom(fixture: FixtureDocument): NearBoundaryFreedom 
 /** What the fixture's stored sun track may be off by: it is rounded to 4 decimal places. */
 const STORED_ROUNDING_DEG = 5e-5;
 
-/** A fixture and the decoded tiles it names, which the scorer under test is given. */
-export type FixtureWithTiles = FixtureDocument & { readonly decodedTiles: readonly Tile[] };
-
 /**
  * The reference's side of every near-boundary minute that can change the
  * Answer (`effectiveFreedom`), as overrides for the JS scorer.
@@ -196,16 +192,17 @@ export type FixtureWithTiles = FixtureDocument & { readonly decodedTiles: readon
  *   from the reference's Spot for that Candidate when its Answer has one
  *   (in its sun intervals or not); outside it (Evening only, where it bears
  *   only on Last sun), from that Spot's Last sun, and left alone when it is
- *   before Last sun. For a Candidate the Answer does not show, from the
- *   fixture's sun track against that Candidate's Horizon profile.
+ *   before Last sun. A Candidate the Answer does not show is held out of view
+ *   at its listed minutes in the window: that can only keep it out of the
+ *   list, so if the reference's Answer is reachable by flips at all, it is
+ *   reachable this way. (Its side is not read from the stored sun track: next
+ *   to a wall, the track's rounding alone can span the 0.01 degree tolerance.)
  * - **Low sun**, at a listed minute of the window: from any reference Spot
  *   with the sun in view then (in its low-sun intervals or not); otherwise
- *   from the fixture's sun track.
- *
- * The stored sun track is rounded, so a side read from it is used only when
- * the rounding cannot change it; otherwise this throws, naming the minute.
+ *   from the fixture's sun track, which throws, naming the minute, when the
+ *   track's rounding to 4 decimal places could put it on either side.
  */
-export function referenceSight(fixture: FixtureWithTiles): Required<SightOverrides> {
+export function referenceSight(fixture: FixtureDocument): Required<SightOverrides> {
   const sunInView: Record<string, Record<number, boolean>> = {};
   const lowSun: Record<number, boolean> = {};
   const { answer, nearBoundary, sunTrack, query } = fixture;
@@ -230,7 +227,10 @@ export function referenceSight(fixture: FixtureWithTiles): Required<SightOverrid
       const spot = shown.get(candidateId);
       let side: boolean | undefined;
       if (spot === undefined) {
-        side = sunSideFromTrack(fixture, candidateId, m);
+        // Out of view can only keep it out of the list, the sunny set and the
+        // nearest beyond the limit; outside the window it bears only on a Last
+        // sun no Spot shows.
+        side = inWindow ? false : undefined;
       } else if (inWindow) {
         side = inside(spot.sunIntervals, m);
       } else {
@@ -253,32 +253,8 @@ export function referenceSight(fixture: FixtureWithTiles): Required<SightOverrid
   return { sunInView, lowSun };
 }
 
-/** Whether the reference had the sun in view at minute `m` of a Candidate, from the stored sun track. */
-function sunSideFromTrack(fixture: FixtureWithTiles, candidateId: string, m: number): boolean {
-  const [gridRef, index] = candidateId.split("/");
-  const tile = fixture.decodedTiles.find((t) => t.gridRef === gridRef);
-  if (tile === undefined) {
-    throw new Error(`near-boundary Candidate ${candidateId} is not in the fixture's tiles`);
-  }
-  const codes = horizonProfileCodes(tile, Number(index));
-  const azimuth = fixture.sunTrack.azimuth[m]!;
-  const elevation = fixture.sunTrack.apparentElevation[m]!;
-  // The profile is linear between samples, so over the azimuths the stored
-  // value can stand for, it is extreme at an end or at a sample between them.
-  const sample = Math.round(azimuth / PROFILE_STEP_DEG) * PROFILE_STEP_DEG;
-  const azimuths = [azimuth - STORED_ROUNDING_DEG, azimuth, azimuth + STORED_ROUNDING_DEG];
-  if (Math.abs(sample - azimuth) <= STORED_ROUNDING_DEG) azimuths.push(sample);
-  const horizons = azimuths.map((a) => horizonAt(codes, a));
-  if (elevation - STORED_ROUNDING_DEG > Math.max(...horizons)) return true;
-  if (elevation + STORED_ROUNDING_DEG <= Math.min(...horizons)) return false;
-  throw new Error(
-    `cannot tell the reference's side at near-boundary ${candidateId} at minute ${m}: ` +
-      `the stored sun track's rounding puts the sun on either side of its Horizon profile`,
-  );
-}
-
 /** Whether the reference counted the sun as low at minute `m`, from the stored sun track. */
-function lowSideFromTrack(fixture: FixtureWithTiles, m: number): boolean {
+function lowSideFromTrack(fixture: FixtureDocument, m: number): boolean {
   const elevation = fixture.sunTrack.apparentElevation[m]!;
   for (const end of [LOW_SUN_MIN_DEG, LOW_SUN_MAX_DEG]) {
     if (Math.abs(elevation - end) <= STORED_ROUNDING_DEG) {
@@ -302,7 +278,7 @@ function lowSideFromTrack(fixture: FixtureWithTiles, m: number): boolean {
  */
 export async function unexplainedDifferences(
   actual: Answer,
-  fixture: FixtureWithTiles,
+  fixture: FixtureDocument,
   rescore: (overrides: SightOverrides) => Answer | Promise<Answer>,
 ): Promise<string[]> {
   const differences = answerDifferences(actual, fixture.answer);

@@ -31,19 +31,15 @@ const wrap = (i: number, n: number) => ((i % n) + n) % n;
 export function sunInView(codes: Uint8Array, track: SunTrack, start: number, end: number): Uint8Array {
   const inView = new Uint8Array(Math.max(end - start, 0));
   for (let m = start; m < end; m++) {
-    inView[m - start] = track.apparentElevation[m]! > horizonAt(codes, track.azimuth[m]!) ? 1 : 0;
+    const position = wrap(track.azimuth[m]!, 360) * SAMPLES_PER_DEG;
+    const below = Math.floor(position);
+    const fraction = position - below;
+    const before = DEGREES_OF_CODE[codes[wrap(below, PROFILE_SAMPLES)]!]!;
+    const after = DEGREES_OF_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!]!;
+    const horizon = before * (1 - fraction) + after * fraction;
+    inView[m - start] = track.apparentElevation[m]! > horizon ? 1 : 0;
   }
   return inView;
-}
-
-/** A Horizon profile at a true azimuth, interpolated linearly between the two neighbouring samples. */
-export function horizonAt(codes: Uint8Array, azimuthDeg: number): number {
-  const position = wrap(azimuthDeg, 360) * SAMPLES_PER_DEG;
-  const below = Math.floor(position);
-  const fraction = position - below;
-  const before = DEGREES_OF_CODE[codes[wrap(below, PROFILE_SAMPLES)]!]!;
-  const after = DEGREES_OF_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!]!;
-  return before * (1 - fraction) + after * fraction;
 }
 
 /**

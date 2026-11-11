@@ -323,7 +323,8 @@ def test_the_build_command_reports_a_refused_build_without_a_traceback(
 def test_build_help_names_what_is_written_and_what_fails_a_build():
     result = CliRunner().invoke(app, ["build", "--help"], terminal_width=200)
     assert result.exit_code == 0, result.output
-    text = " ".join(result.output.split())
+    # Rich colours its output on GitHub Actions, splitting option names with escape codes.
+    text = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
     for phrase in [
         "--coverage", "GeoJSON", "--inputs", "fetch.lock.json", "--out", "manifest.json",
         "tiles/<grid ref>.bin", "direct ray casting", "water", "SHA-256", "--workers",

@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import shapely
 from pyproj import Transformer
 
@@ -68,25 +67,31 @@ class Coverage:
         ]
 
     def polygon_bng(self) -> Any:
-        """The coverage as a shapely geometry in British National Grid metres, holes kept."""
-        coordinates = self.geometry["coordinates"]
-        polygons = [coordinates] if self.geometry["type"] == "Polygon" else coordinates
+        """The coverage as one shapely geometry in British National Grid metres.
 
-        def project(lonlat: np.ndarray) -> np.ndarray:
-            x, y = _WGS84_TO_BNG.transform(lonlat[:, 0], lonlat[:, 1])
-            return np.column_stack([x, y])
+        Holes are dropped, as in `rings_bng` and `contains`.
+        """
+        return shapely.union_all([shapely.Polygon(ring) for ring in self.rings_bng()])
 
-        try:
-            parts = [
-                shapely.Polygon(
-                    [position[:2] for position in polygon[0]],
-                    [[position[:2] for position in hole] for hole in polygon[1:]],
-                )
-                for polygon in polygons
-            ]
-        except (TypeError, ValueError, IndexError) as exc:
-            raise CoverageError(f"Malformed coverage coordinates: {exc}") from exc
-        return shapely.transform(shapely.union_all(parts), project)
+    def contains(self, lat: float, lon: float) -> bool:
+        """Whether a WGS84 position is inside the coverage: inside any outer ring.
+
+        Even-odd ray casting on plain longitude/latitude, each ring edge taken
+        as a straight line in degrees. An edge counts when exactly one of its
+        ends has a latitude greater than `lat` and it crosses that latitude at
+        a longitude greater than `lon`. Holes are ignored, as in `rings_bng`.
+        The JS scorer must use the same test (spec #27, "not covered").
+        """
+        for ring in self._outer_rings_wgs84():
+            inside = False
+            for (lon_a, lat_a), (lon_b, lat_b) in zip(ring, ring[1:] + ring[:1], strict=True):
+                if (lat_a > lat) != (lat_b > lat) and lon < lon_a + (lat - lat_a) * (
+                    lon_b - lon_a
+                ) / (lat_b - lat_a):
+                    inside = not inside
+            if inside:
+                return True
+        return False
 
     def _outer_rings_wgs84(self) -> list[list[Point]]:
         coordinates = self.geometry["coordinates"]

@@ -1,4 +1,8 @@
-"""Candidate generation, scoring, and ranking of sunrise viewpoints."""
+"""Candidate generation, scoring, and ranking of sunrise viewpoints.
+
+No command calls this since `find` and `compare` were removed. It is kept, with
+its tests, as prior art for the Stage 1 reference scorer, which replaces it.
+"""
 
 from __future__ import annotations
 
@@ -164,12 +168,3 @@ def passing_mask_duration(duration_minutes: np.ndarray, min_clear_minutes: float
     """Candidates with an unbroken clear window of at least min_clear_minutes."""
     return duration_minutes >= min_clear_minutes - 1e-9
 
-
-def rank_nearest(
-    result: SearchResult, mask: np.ndarray, limit: int | None = None
-) -> np.ndarray:
-    """Indices into `result` of passing candidates, ordered nearest-to-home first."""
-    idx = np.nonzero(mask)[0]
-    idx = idx[np.argsort(result.distance_m[idx])]
-    out: np.ndarray = idx if limit is None else idx[:limit]
-    return out

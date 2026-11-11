@@ -135,6 +135,35 @@ def sample(grid: RasterGrid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return out
 
 
+def sample_bilinear(grid: RasterGrid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Bilinear sample of `grid` at projected coordinates `x`, `y`.
+
+    Cell values are heights at cell centres, as in OS Terrain 50. A point is
+    interpolated between the four centres around it; it returns NaN when any of
+    the four is off the grid or has no data.
+    """
+    x = np.asarray(x, dtype="float64")
+    y = np.asarray(y, dtype="float64")
+    inv = ~grid.transform
+    col_f = inv.a * x + inv.b * y + inv.c - 0.5
+    row_f = inv.d * x + inv.e * y + inv.f - 0.5
+    col_i = np.floor(col_f).astype(np.int64)
+    row_i = np.floor(row_f).astype(np.int64)
+    rows, cols = grid.shape
+    ok = (row_i >= 0) & (row_i < rows - 1) & (col_i >= 0) & (col_i < cols - 1)
+    r, c = row_i[ok], col_i[ok]
+    fx, fy = col_f[ok] - c, row_f[ok] - r
+    data = grid.data
+    out = np.full(x.shape, np.nan, dtype="float64")
+    out[ok] = (
+        data[r, c] * (1 - fx) * (1 - fy)
+        + data[r, c + 1] * fx * (1 - fy)
+        + data[r + 1, c] * (1 - fx) * fy
+        + data[r + 1, c + 1] * fx * fy
+    )
+    return out
+
+
 def cache_key(paths: list[Path], bounds: tuple[float, float, float, float]) -> str:
     h = hashlib.sha256()
     for p in sorted(paths):

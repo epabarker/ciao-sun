@@ -16,8 +16,12 @@ export const CLEAR_BELOW_PCT = 25;
 export const OVERCAST_FROM_PCT = 80;
 /** The request coordinate is rounded to 1/20 = 0.05 degrees: all of the position that leaves the phone. */
 const CELLS_PER_DEG = 20;
-/** Open-Meteo serves at most 16 forecast days; a span ending later is not asked for. */
-const FORECAST_DAYS_MAX = 16;
+/**
+ * Open-Meteo's UKMO models reach "up to 8 days" (UKV 2 days, Global 7), so a
+ * span ending later than this after now is not asked for. Nearer spans the
+ * forecast does not reach are found from the data.
+ */
+const FORECAST_DAYS_MAX = 8;
 const DEFAULT_TIMEOUT_MS = 8_000;
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;

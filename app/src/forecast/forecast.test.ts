@@ -151,7 +151,7 @@ describe("falling back to manual entry", () => {
 
   it("is unavailable past the forecast horizon without a request", async () => {
     const fetch = respondWith(shared.cases[0]!.response);
-    const later = { startMs: MORNING.startMs + 17 * 86_400_000, endMs: MORNING.endMs + 17 * 86_400_000 };
+    const later = { startMs: MORNING.startMs + 8 * 86_400_000, endMs: MORNING.endMs + 8 * 86_400_000 };
     expect(await forecastSky(BRISTOL, later, { fetch, now })).toEqual({ status: "unavailable", reason: "past-horizon" });
     expect(fetch.urls).toEqual([]);
   });

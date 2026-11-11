@@ -13,11 +13,11 @@ The late-day light exposure before sunset that the tool exists to help someone g
 _Avoid_: sunset hit, golden hour
 
 **Nominal sunrise**:
-The first minute the sun's geometric centre reaches -0.833° at a location, which is when its upper limb would appear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually appears at a Candidate, which can be later behind obstructions or slightly earlier from a high spot above a falling horizon.
+The whole minute nearest the moment the sun's geometric centre rises through -0.833° at a location, as an almanac rounds it, which is when its upper limb would appear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually appears at a Candidate, which can be later behind obstructions or slightly earlier from a high spot above a falling horizon.
 _Avoid_: local sunrise, actual sunrise
 
 **Nominal sunset**:
-The last minute the sun's geometric centre is at or above -0.833° at a location, which is when its upper limb would disappear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually disappears at a Candidate, which is its Last sun.
+The whole minute nearest the moment the sun's geometric centre falls through -0.833° at a location, as an almanac rounds it, which is when its upper limb would disappear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually disappears at a Candidate, which is its Last sun.
 _Avoid_: local sunset, actual sunset
 
 **Last sun**:

@@ -1,4 +1,4 @@
-"""ciao-sun CLI: the `tiles` placeholder (until `fetch` replaces it) and `profile-only`."""
+"""ciao-sun CLI: `fetch` and `profile-only`."""
 
 from __future__ import annotations
 
@@ -10,12 +10,13 @@ import numpy as np
 import typer
 from pyproj import Transformer
 
+from ciao_sun import fetch as fetch_inputs
 from ciao_sun.config import CiaoSunConfig
+from ciao_sun.coverage import Coverage, CoverageError
 from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
 from ciao_sun.raster import TilesNotFoundError, find_tiles, load_mosaic_cached
 from ciao_sun.raster import sample as raster_sample
 from ciao_sun.solar import sunrise_hour_track
-from ciao_sun.tiles import tile_codes_for_aoi
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -35,14 +36,84 @@ def _parse_centre(centre: str) -> tuple[float, float]:
 
 
 @app.command()
-def tiles(
-    centre: str = typer.Option(..., "--centre", help="Home LAT,LON in WGS84 degrees"),
-    radius: float = typer.Option(1500.0, "--radius", help="Search radius in metres"),
+def fetch(
+    coverage: Path = typer.Option(
+        ...,
+        "--coverage",
+        help="GeoJSON file holding the coverage polygon (Polygon or MultiPolygon, WGS84 "
+        "longitude/latitude): the area the build will produce Candidates for. EA LIDAR is "
+        "fetched for this polygon plus --margin.",
+    ),
+    osm_date: str = typer.Option(
+        ...,
+        "--osm-date",
+        help="Date of the Geofabrik extract as YYMMDD, e.g. 261110. Geofabrik keeps dated "
+        "extracts for a limited time; pick one listed on download.geofabrik.de.",
+    ),
+    out: Path = typer.Option(
+        Path("data/inputs"), "--out", help="Directory for the inputs and fetch.lock.json."
+    ),
+    margin: float = typer.Option(
+        fetch_inputs.DEFAULT_MARGIN_M,
+        "--margin",
+        help="Metres of EA LIDAR to fetch beyond the coverage (the near-field ray length).",
+    ),
+    ea_year: str = typer.Option(
+        fetch_inputs.DEFAULT_EA_YEAR, "--ea-year", help="EA LIDAR Composite year."
+    ),
+    osm_region: str = typer.Option(
+        fetch_inputs.DEFAULT_OSM_REGION,
+        "--osm-region",
+        help="Geofabrik region path. It must contain the coverage plus the margin.",
+    ),
+    terrain50_version: str | None = typer.Option(
+        None,
+        "--terrain50-version",
+        help="Pin an OS Terrain 50 release, e.g. 2026-07. Default: the cached release, "
+        "else the one OS serves now. Fails if the pin is neither cached nor current.",
+    ),
 ) -> None:
-    """Print the OS 5 km tile codes to download for this area of interest."""
-    lat, lon = _parse_centre(centre)
-    codes = tile_codes_for_aoi(lat, lon, radius)
-    typer.echo(", ".join(codes))
+    """Download every build input for a coverage polygon and lock it by hash.
+
+    \b
+    Inputs:
+      - Environment Agency LIDAR Composite, 1 m, in 5 km tiles: last-return DSM,
+        DTM and first-return DSM, for the coverage plus 3 km (see --margin).
+      - OS Terrain 50 for Great Britain (the far horizon).
+      - A dated Geofabrik .osm.pbf extract (streets, paths, buildings).
+
+    Requests are spaced about a second apart and back off on HTTP 403. An
+    interrupted download resumes on the next run, and a run with everything
+    already cached makes no requests.
+
+    Every input is recorded in fetch.lock.json with its source, version, SHA-256
+    and path. Once recorded, a cached or re-downloaded file whose SHA-256
+    differs is refused. EA tiles the server does not publish (open sea) are
+    recorded as absent.
+    """
+    try:
+        polygon = Coverage.from_file(coverage)
+        lock = fetch_inputs.fetch(
+            polygon,
+            out,
+            osm_date=osm_date,
+            client=fetch_inputs.UrllibClient(),
+            ea_year=ea_year,
+            osm_region=osm_region,
+            terrain50_version=terrain50_version,
+            margin_m=margin,
+            report=typer.echo,
+        )
+    except (CoverageError, fetch_inputs.FetchError) as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from None
+    present = [entry for entry in lock.inputs if not entry.absent]
+    absent = len(lock.inputs) - len(present)
+    size_mb = sum(entry.bytes or 0 for entry in present) / 1e6
+    typer.echo(
+        f"{len(present)} inputs ({size_mb:.0f} MB) locked in {out / fetch_inputs.LOCKFILE_NAME}"
+        + (f"; {absent} EA tiles not published" if absent else "")
+    )
 
 
 @app.command(name="profile-only")

@@ -18,8 +18,10 @@ import numpy.typing as npt
 from ciao_sun.tile_codec import Tile, read_tile
 
 WALK_SPEED_M_PER_MIN = 80.0
-# Mean Earth radius (IUGG), metres: the one lat/lon distance formula's only constant.
-EARTH_RADIUS_M = 6_371_008.8
+# Mean Earth radius (IUGG), metres: the radius of every lat/lon distance (the
+# haversine) and of the origin's local plane, as `app/src/router/world.ts` has it.
+# The horizon's rays use their own, `ciao_sun.horizon.CURVATURE_EARTH_RADIUS_M`.
+DISTANCE_EARTH_RADIUS_M = 6_371_008.8
 
 
 def load_tiles(directory: Path) -> list[Tile]:
@@ -33,7 +35,7 @@ def distance_m(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
     half_dphi = (phi_b - phi_a) / 2.0
     half_dlambda = math.radians(lon_b - lon_a) / 2.0
     h = math.sin(half_dphi) ** 2 + math.cos(phi_a) * math.cos(phi_b) * math.sin(half_dlambda) ** 2
-    return 2.0 * EARTH_RADIUS_M * math.asin(math.sqrt(h))
+    return 2.0 * DISTANCE_EARTH_RADIUS_M * math.asin(math.sqrt(h))
 
 
 @dataclass(frozen=True, eq=False)
@@ -136,7 +138,7 @@ def walk_metres(
     # Local plane: metres east and north of the origin.
     east = np.radians(world.node_lon - origin_lon) * math.cos(math.radians(origin_lat))
     north = np.radians(world.node_lat - origin_lat)
-    x, y = east * EARTH_RADIUS_M, north * EARTH_RADIUS_M
+    x, y = east * DISTANCE_EARTH_RADIUS_M, north * DISTANCE_EARTH_RADIUS_M
 
     best: tuple[float, int, float] | None = None  # (distance, edge, fraction from its first node)
     for e, (a, b, _) in enumerate(world.edges):

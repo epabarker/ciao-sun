@@ -10,8 +10,8 @@ import { PROFILE_SAMPLES, type Tile, spotName } from "../tile/decode";
 
 /** Walking speed, metres per minute. */
 export const WALK_SPEED_M_PER_MIN = 80;
-/** Mean Earth radius (IUGG), metres: the one lat/lon distance formula's only constant. */
-export const EARTH_RADIUS_M = 6_371_008.8;
+/** Mean Earth radius (IUGG), metres: the radius of every lat/lon distance (the haversine) and of the origin's local plane. */
+export const DISTANCE_EARTH_RADIUS_M = 6_371_008.8;
 
 // As Python's math.radians and numpy's radians: one multiplication by pi/180.
 const radians = (degrees: number) => degrees * RADIANS_PER_DEGREE;
@@ -23,7 +23,7 @@ export function distanceM(latA: number, lonA: number, latB: number, lonB: number
   const halfDphi = (phiB - phiA) / 2;
   const halfDlambda = radians(lonB - lonA) / 2;
   const h = Math.sin(halfDphi) ** 2 + Math.cos(phiA) * Math.cos(phiB) * Math.sin(halfDlambda) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+  return 2 * DISTANCE_EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
 /**
@@ -232,8 +232,8 @@ export function walkMetres(world: World, originLat: number, originLon: number, l
   const x = new Float64Array(nodes);
   const y = new Float64Array(nodes);
   for (let n = 0; n < nodes; n++) {
-    x[n] = radians(world.nodeLon[n]! - originLon) * cosLat * EARTH_RADIUS_M;
-    y[n] = radians(world.nodeLat[n]! - originLat) * EARTH_RADIUS_M;
+    x[n] = radians(world.nodeLon[n]! - originLon) * cosLat * DISTANCE_EARTH_RADIUS_M;
+    y[n] = radians(world.nodeLat[n]! - originLat) * DISTANCE_EARTH_RADIUS_M;
   }
 
   let bestAway = Infinity;

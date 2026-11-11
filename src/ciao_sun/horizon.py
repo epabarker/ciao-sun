@@ -29,9 +29,11 @@ from ciao_sun.raster import RasterGrid, sample
 
 _BNG = Proj("EPSG:27700")
 
-EARTH_RADIUS_M = 6371000.0
+# The Earth radius the rays' curvature drop uses (with refraction, R_EFF); not the
+# lat/lon distances' DISTANCE_EARTH_RADIUS_M (`ciao_sun.reference.world`).
+CURVATURE_EARTH_RADIUS_M = 6371000.0
 STANDARD_REFRACTION_COEFF = 1.13
-R_EFF = EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
+R_EFF = CURVATURE_EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
 
 # Variable-density ray sampling: dense near the observer where parallax matters
 # most. Uniform 1 m sampling all the way to max_ray is ~14x the work for no

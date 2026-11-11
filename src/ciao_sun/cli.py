@@ -1,8 +1,9 @@
-"""ciao-sun CLI: `fetch` and `profile-only`."""
+"""ciao-sun CLI: `fetch`, `build` and `profile-only`."""
 
 from __future__ import annotations
 
 import csv
+import os
 import warnings
 from pathlib import Path
 
@@ -10,13 +11,16 @@ import numpy as np
 import typer
 from pyproj import Transformer
 
+from ciao_sun import build as tile_build
 from ciao_sun import fetch as fetch_inputs
+from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.config import CiaoSunConfig
 from ciao_sun.coverage import Coverage, CoverageError
 from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
 from ciao_sun.raster import TilesNotFoundError, find_tiles, load_mosaic_cached
 from ciao_sun.raster import sample as raster_sample
 from ciao_sun.solar import NOMINAL_RISE_SET_ELEVATION_DEG, sun_track
+from ciao_sun.terrain50 import Terrain50Error
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -114,6 +118,63 @@ def fetch(
         f"{len(present)} inputs ({size_mb:.0f} MB) locked in {out / fetch_inputs.LOCKFILE_NAME}"
         + (f"; {absent} EA tiles not published" if absent else "")
     )
+
+
+@app.command()
+def build(
+    coverage: Path = typer.Option(
+        ...,
+        "--coverage",
+        help="GeoJSON file holding the coverage polygon (Polygon or MultiPolygon, WGS84 "
+        "longitude/latitude). Candidates come only from inside it. It must lie within "
+        "the coverage the inputs were fetched for.",
+    ),
+    inputs: Path = typer.Option(
+        Path("data/inputs"),
+        "--inputs",
+        help="Directory `ciao-sun fetch` wrote: the inputs and fetch.lock.json.",
+    ),
+    out: Path = typer.Option(
+        Path("data/builds"),
+        "--out",
+        help="Where builds go. This build is written to <out>/f1/<build id>/.",
+    ),
+    workers: int = typer.Option(
+        max(1, (os.cpu_count() or 2) - 1), "--workers", min=1, help="Tiles to build at once."
+    ),
+) -> None:
+    """Build the tiles and manifest for a coverage polygon from the fetched inputs.
+
+    \b
+    Writes one build directory:
+      <out>/f1/<build id>/manifest.json
+      <out>/f1/<build id>/tiles/<grid ref>.bin   one per 1 km square
+
+    The build id is today's UTC date plus a letter, e.g. 20261110a.
+
+    \b
+    Two checks fail the build, and a failed build leaves no build directory:
+      - tile Horizon profiles are compared with direct ray casting at a sample
+        of Candidates;
+      - no Candidate's horizon may be set by a water cell (the water guard).
+
+    The manifest records the attribution, the licence, the LIDAR survey years,
+    every input's version and SHA-256, the coverage, the tile index and the
+    tolerances the checks passed at.
+    """
+    try:
+        polygon = Coverage.from_file(coverage)
+        build_dir = tile_build.build(polygon, inputs, out, workers=workers, report=typer.echo)
+    except (
+        CoverageError,
+        fetch_inputs.FetchError,
+        tile_build.BuildError,
+        BuildCheckError,
+        Terrain50Error,
+    ) as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Wrote {build_dir}")
 
 
 @app.command(name="profile-only")

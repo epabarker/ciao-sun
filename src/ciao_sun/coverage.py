@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import shapely
 from pyproj import Transformer
 
 _WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
@@ -64,6 +66,27 @@ class Coverage:
             [_WGS84_TO_BNG.transform(lon, lat) for lon, lat in ring]
             for ring in self._outer_rings_wgs84()
         ]
+
+    def polygon_bng(self) -> Any:
+        """The coverage as a shapely geometry in British National Grid metres, holes kept."""
+        coordinates = self.geometry["coordinates"]
+        polygons = [coordinates] if self.geometry["type"] == "Polygon" else coordinates
+
+        def project(lonlat: np.ndarray) -> np.ndarray:
+            x, y = _WGS84_TO_BNG.transform(lonlat[:, 0], lonlat[:, 1])
+            return np.column_stack([x, y])
+
+        try:
+            parts = [
+                shapely.Polygon(
+                    [position[:2] for position in polygon[0]],
+                    [[position[:2] for position in hole] for hole in polygon[1:]],
+                )
+                for polygon in polygons
+            ]
+        except (TypeError, ValueError, IndexError) as exc:
+            raise CoverageError(f"Malformed coverage coordinates: {exc}") from exc
+        return shapely.transform(shapely.union_all(parts), project)
 
     def _outer_rings_wgs84(self) -> list[list[Point]]:
         coordinates = self.geometry["coordinates"]

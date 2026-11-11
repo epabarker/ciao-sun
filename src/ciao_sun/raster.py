@@ -7,6 +7,7 @@ area actually needed (home +/- radius +/- max_ray), never a full 5 km tile.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,10 +66,12 @@ def find_tiles(tile_dir: Path) -> list[Path]:
 
 
 def load_mosaic(
-    paths: list[Path],
+    paths: Sequence[Path | str],
     bounds: tuple[float, float, float, float] | None = None,
 ) -> RasterGrid:
     """Merge tiles into one raster, masking nodata to NaN.
+
+    A path may be anything GDAL opens, such as a `/vsizip/` path into a zip.
 
     `bounds` (minx, miny, maxx, maxy), when given, restricts the merge to that
     window via rasterio's windowed reads, so full 5 km tiles are never fully

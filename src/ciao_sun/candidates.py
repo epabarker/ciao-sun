@@ -22,7 +22,7 @@ The rules, all from the Stage 1 spec:
 from __future__ import annotations
 
 import heapq
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +34,7 @@ from pyproj import Transformer
 
 from ciao_sun.raster import RasterGrid, sample
 from ciao_sun.tile_codec import Candidates, Tile, WalkGraph
+from ciao_sun.tiles import grid_ref_of, grid_ref_origin
 
 # A Candidate is at most this far from a public walk edge. Binding: the spec
 # sets it over the older routing module's unlimited snap.
@@ -47,42 +48,6 @@ _WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
 _BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
 _Floats = npt.NDArray[np.float64]
-
-# --- 1 km OS grid refs -------------------------------------------------------
-
-_HUNDRED_KM = 100_000
-_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ"  # the grid has no I
-
-
-def _square_letters(e100k: int, n100k: int) -> str:
-    """The two letters of a 100 km square (OS, "A guide to coordinate systems", Annex C)."""
-    if not (0 <= e100k <= 6 and 0 <= n100k <= 12):
-        raise ValueError(f"100 km square ({e100k}, {n100k}) is outside the National Grid")
-    first = (19 - n100k) - (19 - n100k) % 5 + (e100k + 10) // 5
-    second = (19 - n100k) * 5 % 25 + e100k % 5
-    return _LETTERS[first] + _LETTERS[second]
-
-
-_SQUARE_ORIGINS = {
-    _square_letters(e, n): (e * _HUNDRED_KM, n * _HUNDRED_KM) for e in range(7) for n in range(13)
-}
-
-
-def grid_ref_of(easting: float, northing: float) -> str:
-    """The 1 km grid ref (e.g. "ST5873") of the square holding a National Grid point."""
-    e100k, n100k = int(easting // _HUNDRED_KM), int(northing // _HUNDRED_KM)
-    e_km = int((easting - e100k * _HUNDRED_KM) // TILE_M)
-    n_km = int((northing - n100k * _HUNDRED_KM) // TILE_M)
-    return f"{_square_letters(e100k, n100k)}{e_km:02d}{n_km:02d}"
-
-
-def grid_ref_origin(grid_ref: str) -> tuple[int, int]:
-    """The (easting, northing) of the south-west corner of a 1 km grid ref's square."""
-    origin = _SQUARE_ORIGINS.get(grid_ref[:2])
-    if origin is None or len(grid_ref) != 6 or not grid_ref[2:].isdecimal():
-        raise ValueError(f"{grid_ref!r} is not a 1 km OS grid ref like 'ST5873'")
-    return (origin[0] + int(grid_ref[2:4]) * TILE_M, origin[1] + int(grid_ref[4:6]) * TILE_M)
-
 
 # --- Reading OSM -------------------------------------------------------------
 
@@ -422,12 +387,19 @@ def _nearest_segment(
 
 
 def build_tile(
-    network: WalkNetwork, grid_ref: str, dsm: RasterGrid, dtm: RasterGrid
+    network: WalkNetwork,
+    grid_ref: str,
+    dsm: RasterGrid,
+    dtm: RasterGrid,
+    *,
+    within: Callable[[_Floats, _Floats], npt.NDArray[np.bool_]] | None = None,
 ) -> TileOutline | None:
     """One 1 km tile's Candidates and walk graph, or None if the square has neither.
 
     `dsm` is the last-return surface and `dtm` the bare earth; where either has
-    no data there are no Candidates.
+    no data there are no Candidates. `within`, given eastings and northings,
+    says which lie inside the coverage: Candidates come only from there, while
+    the walk graph is kept whole.
     """
     west, south = grid_ref_origin(grid_ref)
     ax, ay = network.node_x[network.edge_a], network.node_y[network.edge_a]
@@ -445,6 +417,9 @@ def build_tile(
         with np.errstate(invalid="ignore"):
             open_ground = (sample(dsm, x, y) - sample(dtm, x, y)) <= OPEN_GROUND_MAX_M
         x, y = x[open_ground], y[open_ground]
+        if within is not None:
+            covered = within(x, y)
+            x, y = x[covered], y[covered]
         nearest, distance = _nearest_segment(x, y, ax[near], ay[near], bx[near], by[near])
         snapped = distance <= SNAP_M
         x, y, edge = x[snapped], y[snapped], near[nearest[snapped]]

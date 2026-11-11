@@ -1,7 +1,8 @@
-"""OS National Grid 5 km tile codes, derived arithmetically -- no lookup table.
+"""OS National Grid references, derived arithmetically -- no lookup table.
 
-Environment Agency LIDAR is published in these 5 km squares; `ciao-sun fetch`
-uses `tile_codes_near_polygon` to decide which ones a coverage needs.
+Environment Agency LIDAR is published in 5 km squares; `ciao-sun fetch` uses
+`tile_codes_near_polygon` to decide which ones a coverage needs. Ciao Sun's own
+tiles are 1 km squares named by grid ref (`grid_ref_of`, `grid_ref_origin`).
 """
 
 from __future__ import annotations
@@ -9,12 +10,13 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-# 100 km grid letters, A-Z with no lookup table: see OS's "A guide to coordinate
+# 100 km grid letters, derived arithmetically: see OS's "A guide to coordinate
 # systems in Great Britain", Annex C. Verified against two well-known reference
 # squares: BNG origin (0, 0) is grid square SV, and central London is TQ.
-_GRID_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_GRID_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ"  # the grid has no I
 _TILE_SIZE_M = 5000
 _HUNDRED_KM = 100_000
+KM = 1000
 
 
 def _grid_letters(e100k: int, n100k: int) -> str:
@@ -25,11 +27,20 @@ def _grid_letters(e100k: int, n100k: int) -> str:
         )
     l1 = (19 - n100k) - (19 - n100k) % 5 + (e100k + 10) // 5
     l2 = (19 - n100k) % 5 * 5 + e100k % 5
-    if l1 > 7:
-        l1 += 1
-    if l2 > 7:
-        l2 += 1
     return _GRID_LETTERS[l1] + _GRID_LETTERS[l2]
+
+
+_SQUARE_ORIGINS = {
+    _grid_letters(e, n): (e * _HUNDRED_KM, n * _HUNDRED_KM) for e in range(7) for n in range(13)
+}
+
+
+def square_origin(letters: str) -> tuple[int, int]:
+    """The (easting, northing) of the south-west corner of a 100 km square, e.g. "ST"."""
+    origin = _SQUARE_ORIGINS.get(letters.upper())
+    if origin is None:
+        raise ValueError(f"{letters!r} is not a 100 km National Grid square")
+    return origin
 
 
 def bng_to_tile_code(easting: float, northing: float) -> str:
@@ -41,6 +52,22 @@ def bng_to_tile_code(easting: float, northing: float) -> str:
     e5 = int(e_in // _TILE_SIZE_M) * 5
     n5 = int(n_in // _TILE_SIZE_M) * 5
     return f"{letters}{e5:02d}{n5:02d}"
+
+
+def grid_ref_of(easting: float, northing: float) -> str:
+    """The 1 km grid ref (e.g. "ST5873") of the square holding a National Grid point."""
+    e100k, n100k = int(easting // _HUNDRED_KM), int(northing // _HUNDRED_KM)
+    e_km = int((easting - e100k * _HUNDRED_KM) // KM)
+    n_km = int((northing - n100k * _HUNDRED_KM) // KM)
+    return f"{_grid_letters(e100k, n100k)}{e_km:02d}{n_km:02d}"
+
+
+def grid_ref_origin(grid_ref: str) -> tuple[int, int]:
+    """The (easting, northing) of the south-west corner of a 1 km grid ref's square."""
+    origin = _SQUARE_ORIGINS.get(grid_ref[:2])
+    if origin is None or len(grid_ref) != 6 or not grid_ref[2:].isdecimal():
+        raise ValueError(f"{grid_ref!r} is not a 1 km OS grid ref like 'ST5873'")
+    return (origin[0] + int(grid_ref[2:4]) * KM, origin[1] + int(grid_ref[4:6]) * KM)
 
 
 Point = tuple[float, float]

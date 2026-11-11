@@ -1,0 +1,136 @@
+"""`manifest.json`: what a build is, what it was made from, and how to credit it.
+
+One per build, beside `tiles/`. The client renders all attribution from it and
+hardcodes none. Its schema is part of format f1: a change an existing app could
+not read is a format bump.
+
+    {
+      "format": 1,
+      "build": "20261110a",                 UTC date plus a letter
+      "licence": {"name", "spdx", "url"},   of the bundle: ODbL 1.0
+      "attribution": [                      one per source, in display order
+        {"source", "text", "licence", "licenceUrl"}
+      ],
+      "lidarSurveyYears": [2019, 2021],     years the EA LIDAR in the build was flown
+      "inputs": [                           every line of the fetch lockfile
+        {"kind", "source", "tile", "version", "url", "sha256", "bytes", "absent",
+         "timestamp"}                       timestamp: OSM replication time, OSM only
+      ],
+      "coverage": {GeoJSON Polygon or MultiPolygon, WGS84},
+      "horizon": {"nearReachM", "farReachM"},
+      "tiles": {"ST5873": {"bytes", "sha256", "candidates"}},   the tile index
+      "buildChecks": {
+        "profile": {"candidatesPerTile", "toleranceDeg", "storageHalfStepDeg",
+                    "fractionWithin", "candidatesChecked"},
+        "waterGuard": {"candidatesAllowed", "candidatesFound"}
+      }
+    }
+
+A tile in the index is at `tiles/<grid ref>.bin`; a square not in the index has
+no tile. `buildChecks` are the tolerances the build passed (`build_checks.py`).
+The basemap (#37) adds its own input line and keeps the Protomaps credit.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from ciao_sun.coverage import Coverage
+from ciao_sun.fetch import EA_PRODUCTS, LockedInput
+from ciao_sun.tile_codec import FORMAT
+
+MANIFEST_NAME = "manifest.json"
+
+LICENCE = {
+    "name": "Open Database License (ODbL) v1.0",
+    "spdx": "ODbL-1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+}
+_OGL = {
+    "licence": "Open Government Licence v3.0",
+    "licenceUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+}
+_ODBL = {"licence": LICENCE["name"], "licenceUrl": LICENCE["url"]}
+
+
+def _attribution(inputs: Sequence[LockedInput]) -> list[dict[str, str]]:
+    ea_year = max(entry.version for entry in inputs if entry.kind in EA_PRODUCTS)
+    (terrain,) = [entry for entry in inputs if entry.kind == "terrain50"]
+    # OS's copyright year is the release's: Terrain 50 versions are "YYYY-MM".
+    os_year = (
+        terrain.version[:4] if re.match(r"(19|20)\d\d", terrain.version) else terrain.fetched_at[:4]
+    )
+    return [
+        {
+            "source": "Environment Agency",
+            "text": f"© Environment Agency copyright and/or database right {ea_year}. "
+            "All rights reserved.",
+            **_OGL,
+        },
+        {
+            "source": "Ordnance Survey",
+            "text": f"Contains OS data © Crown copyright and database right {os_year}",
+            **_OGL,
+        },
+        {"source": "OpenStreetMap", "text": "© OpenStreetMap contributors", **_ODBL},
+        # The basemap is OpenStreetMap data cut by Protomaps; #37 owns this line.
+        {"source": "Protomaps", "text": "Protomaps © OpenStreetMap", **_ODBL},
+    ]
+
+
+def manifest_document(
+    *,
+    build_id: str,
+    inputs: Sequence[LockedInput],
+    osm_timestamp: str | None,
+    lidar_survey_years: Sequence[int],
+    coverage: Coverage,
+    horizon: Mapping[str, float],
+    tiles: Mapping[str, Mapping[str, Any]],
+    build_checks: Mapping[str, Any],
+) -> dict[str, Any]:
+    """The manifest for one build. `tiles` is the tile index, keyed by grid ref."""
+    listed = []
+    for entry in inputs:
+        line: dict[str, Any] = {
+            "kind": entry.kind,
+            "source": entry.source,
+            "tile": entry.tile,
+            "version": entry.version,
+            "url": entry.url,
+            "sha256": entry.sha256,
+            "bytes": entry.bytes,
+            "absent": entry.absent,
+        }
+        if entry.kind == "osm":
+            line["timestamp"] = osm_timestamp
+        listed.append(line)
+    return {
+        "format": FORMAT,
+        "build": build_id,
+        "licence": dict(LICENCE),
+        "attribution": _attribution(inputs),
+        "lidarSurveyYears": sorted(lidar_survey_years),
+        "inputs": listed,
+        "coverage": coverage.geometry,
+        "horizon": dict(horizon),
+        "tiles": {grid_ref: dict(tiles[grid_ref]) for grid_ref in sorted(tiles)},
+        "buildChecks": dict(build_checks),
+    }
+
+
+def write_manifest(build_dir: Path, document: Mapping[str, Any]) -> Path:
+    path = build_dir / MANIFEST_NAME
+    path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def read_manifest(build_dir: Path) -> dict[str, Any]:
+    document = json.loads((build_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("format") != FORMAT:
+        raise ValueError(f"{build_dir / MANIFEST_NAME} is not a format {FORMAT} manifest.")
+    return document

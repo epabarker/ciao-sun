@@ -10,8 +10,7 @@ from ciao_sun.config import CiaoSunConfig
 def test_defaults_with_required_fields():
     cfg = CiaoSunConfig.load(None, home_lat=51.472, home_lon=-2.604)
     assert cfg.max_ray == 3000.0
-    assert cfg.step_minutes == 5.0
-    assert cfg.window_minutes == 60.0
+    assert cfg.tz == "Europe/London"
 
 
 def test_load_from_toml_file(tmp_path):
@@ -21,13 +20,13 @@ def test_load_from_toml_file(tmp_path):
 home_lat = 51.4720
 home_lon = -2.6040
 max_ray = 800.0
-step_minutes = 2.0
+tz = "UTC"
 """
     )
     cfg = CiaoSunConfig.load(toml_path)
     assert cfg.home_lat == 51.4720
     assert cfg.max_ray == 800.0
-    assert cfg.step_minutes == 2.0
+    assert cfg.tz == "UTC"
 
 
 def test_cli_overrides_beat_toml_file(tmp_path):

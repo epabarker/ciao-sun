@@ -3,6 +3,7 @@
 
 import type { Answer, Query } from "../contract";
 import type { SunTrack } from "../solar/sun-track";
+import { lampOnly } from "./lamp";
 import { type WindowPlan, nowMinute, wakeMinute } from "./windows";
 
 /** The window ends this long after Wake time. */
@@ -51,7 +52,7 @@ export function planMorning(query: Query, track: SunTrack): WindowPlan | Answer 
   };
 }
 
-/** The Morning window holds no daylight: the lamp-only Answer (#44). */
-function noDaylight(query: Query, _track: SunTrack): Answer {
-  throw new Error(`lamp-only Answers are not written yet (#44): ${query.date} ${query.wakeTime}`);
+/** The Morning window holds no daylight: the lamp-only Answer. */
+function noDaylight(query: Query, track: SunTrack): Answer {
+  return lampOnly(query, track);
 }

@@ -1,7 +1,6 @@
 // The golden-fixture harness (docs/fixtures.md): every fixture of one build,
 // checked against the JS: tile decoding, the sun track, the sun's three
-// events, and the Answer, for every fixture `answerParityPending` (./scorer)
-// does not hold back.
+// events, and the Answer.
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +15,7 @@ import {
   sunEvents,
   unexplainedDifferences,
 } from "./parity";
-import { answerParityPending, scorer } from "./scorer";
+import { scorer } from "./scorer";
 
 const set = new FixtureSet(pinFromEnvironment());
 const worst = { azimuth: 0, apparentElevation: 0, lowest: Infinity, minutes: 0, events: 0 };
@@ -95,12 +94,8 @@ describe(`golden fixtures of build f${set.pin.format}/${set.pin.build}`, () => {
       }
     });
 
-    it.skipIf(!scorer)("has the reference's Answer", async (context) => {
+    it.skipIf(!scorer)("has the reference's Answer", async () => {
       const fixture = await loaded;
-      const pending = answerParityPending(fixture.query, entry.status);
-      if (pending) {
-        context.skip(pending);
-      }
 
       // The scorer is pure: it must not reach for the network.
       vi.stubGlobal("fetch", () => {

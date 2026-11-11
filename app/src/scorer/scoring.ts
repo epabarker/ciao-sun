@@ -11,7 +11,7 @@ import {
   walkMetres,
 } from "../router/world";
 import type { SunTrack } from "../solar/sun-track";
-import { OPENNESS_CUTOFF, lowSun, opennessSector, runs, skyOpenness, sunInView } from "./sunview";
+import { OPENNESS_CUTOFF, lastSun, lowSun, opennessSector, runs, skyOpenness, sunInView } from "./sunview";
 import { type WindowPlan, clock } from "./windows";
 
 /**
@@ -129,7 +129,8 @@ export function buildSpot(scoring: Scoring, candidate: Scored, leave: number, ta
     targetMet: walkMin + sunFromArrival >= targetMin,
   };
   if (plan.reportsLastSun) {
-    throw new Error("Last sun is not written yet (#44)");
+    const last = lastSun(profileCodesOf(world, k), track);
+    if (last !== null) spot.lastSun = clock(track, last);
   }
   return spot;
 }

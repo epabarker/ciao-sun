@@ -146,6 +146,13 @@ describe("the committed synthetic set", () => {
     expect(fixtures.filter((fixture) => !nearBoundaryFreedom(fixture).any)).toHaveLength(10);
   });
 
+  it("has every status of the Answer contract, so fixture parity covers each one", () => {
+    // Spec #27, "The Query -> Answer contract".
+    const statuses = ["ranked", "fallback", "lamp-only", "no-evening-window", "not-covered"];
+
+    expect([...new Set(set.entries.map((entry) => entry.status))].sort()).toEqual(statuses.sort());
+  });
+
   it("lists morning-no-sun-in-reach's near-boundary minute inside its window", async () => {
     const entry = set.entries.find(({ id }) => id === "morning-no-sun-in-reach")!;
     const fixture = await set.load(entry);

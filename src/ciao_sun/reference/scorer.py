@@ -3,7 +3,7 @@
 The JS client is canonical (ADR 0001); this is the reference its golden
 fixtures come from. The rules live beside it:
 
-- `windows`, `morning`: the window, its weights and its Leave-by rule
+- `windows`, `morning`, `evening`: the window, its weights and its Leave-by rule
 - `sunview`: sun in view, the 0-30 degree band, Sky openness
 - `world`: tiles joined into one walk graph; the origin snap and the walk
 - `scoring`: per-Candidate scores, and a scored Candidate as a Spot
@@ -22,6 +22,7 @@ import pandas as pd
 
 from ciao_sun.coverage import Coverage
 from ciao_sun.reference.contract import Answer, Query, Sky, Spot, Status, Window, WindowName
+from ciao_sun.reference.evening import plan_evening
 from ciao_sun.reference.fallback import fallback_spots, nearest_sun_beyond_limit
 from ciao_sun.reference.lamp import lamp
 from ciao_sun.reference.morning import plan_morning
@@ -37,7 +38,7 @@ DURATION_TARGET_MIN: dict[Sky, int] = {"clear": 10, "partly": 20, "overcast": 30
 # A planner returns the query's window, or the whole Answer when there is no
 # window to rank in (lamp-only, no-evening-window).
 Planner = Callable[[Query, SunTrack], WindowPlan | Answer]
-PLANNERS: dict[WindowName, Planner] = {"morning": plan_morning}
+PLANNERS: dict[WindowName, Planner] = {"morning": plan_morning, "evening": plan_evening}
 
 
 def answer(query: Query, tiles: Sequence[Tile], coverage: Coverage | None = None) -> Answer:
@@ -48,8 +49,6 @@ def answer(query: Query, tiles: Sequence[Tile], coverage: Coverage | None = None
     """
     if coverage is not None and not coverage.contains(query.origin_lat, query.origin_lon):
         return Answer(status="not-covered")
-    if query.window not in PLANNERS:
-        raise NotImplementedError(f"the {query.window} window is not built yet (ticket #39)")
     track = sun_track(query.origin_lat, query.origin_lon, query.date, tz=TIME_ZONE)
     plan = PLANNERS[query.window](query, track)
     if isinstance(plan, Answer):

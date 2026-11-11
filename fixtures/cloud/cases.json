@@ -1,0 +1,445 @@
+{
+  "about": "Canned Open-Meteo hourly cloud_cover responses (models=ukmo_seamless, timeformat=unixtime) and the cloud category that both the Python reference (ciao_sun.reference.cloud) and the JS forecast adapter (app/src/forecast) must give for each span. Every expected value is worked by hand in the case's note. A null category means the forecast does not cover the span. `coordinates` holds origins and the request coordinate each rounds to, at 0.05 degrees.",
+  "coordinates": [
+    {
+      "origin": {
+        "lat": 51.4723,
+        "lon": -2.6049
+      },
+      "request": {
+        "lat": "51.45",
+        "lon": "-2.60"
+      }
+    },
+    {
+      "origin": {
+        "lat": 51.4751,
+        "lon": -2.6251
+      },
+      "request": {
+        "lat": "51.50",
+        "lon": "-2.65"
+      }
+    },
+    {
+      "origin": {
+        "lat": 51.4249,
+        "lon": -2.5749
+      },
+      "request": {
+        "lat": "51.40",
+        "lon": "-2.55"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "morning window, just under 25% is clear",
+      "note": "Constant 24%. The span is the Morning window, 08:13-10:00 GMT.",
+      "query": {
+        "window": "morning",
+        "date": "2026-12-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-12-21T08:13:00+00:00",
+        "end": "2026-12-21T10:00:00+00:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1797836400,
+            1797840000,
+            1797843600,
+            1797847200,
+            1797850800
+          ],
+          "cloud_cover": [
+            24,
+            24,
+            24,
+            24,
+            24
+          ]
+        }
+      },
+      "category": "clear",
+      "meanCloudCover": 24
+    },
+    {
+      "name": "evening window shorter than 3 h, exactly 25% is partly cloudy",
+      "note": "Constant 25%. The Evening window is 14:00-16:04 GMT, shorter than 3 h, so all of it is the span.",
+      "query": {
+        "window": "evening",
+        "date": "2026-12-21",
+        "wakeTime": "08:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-12-21T14:00:00+00:00",
+        "end": "2026-12-21T16:04:00+00:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1797854400,
+            1797858000,
+            1797861600,
+            1797865200,
+            1797868800,
+            1797872400
+          ],
+          "cloud_cover": [
+            25,
+            25,
+            25,
+            25,
+            25,
+            25
+          ]
+        }
+      },
+      "category": "partly",
+      "meanCloudCover": 25
+    },
+    {
+      "name": "last 3 h of the evening window, just under 80% is partly cloudy",
+      "note": "Constant 79%. The Evening window is 13:12-21:31 BST; its last 3 h are 17:31-20:31 UTC.",
+      "query": {
+        "window": "evening",
+        "date": "2026-06-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-06-21T18:31:00+01:00",
+        "end": "2026-06-21T21:31:00+01:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1782054000,
+            1782057600,
+            1782061200,
+            1782064800,
+            1782068400,
+            1782072000,
+            1782075600,
+            1782079200
+          ],
+          "cloud_cover": [
+            79,
+            79,
+            79,
+            79,
+            79,
+            79,
+            79,
+            79
+          ]
+        }
+      },
+      "category": "partly",
+      "meanCloudCover": 79
+    },
+    {
+      "name": "morning window in BST, exactly 80% is overcast",
+      "note": "Constant 80%. The Morning window is 06:40-09:40 BST, 05:40-08:40 UTC.",
+      "query": {
+        "window": "morning",
+        "date": "2026-06-21",
+        "wakeTime": "06:40",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-06-21T06:40:00+01:00",
+        "end": "2026-06-21T09:40:00+01:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1782014400,
+            1782018000,
+            1782021600,
+            1782025200,
+            1782028800,
+            1782032400,
+            1782036000
+          ],
+          "cloud_cover": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        }
+      },
+      "category": "overcast",
+      "meanCloudCover": 80
+    },
+    {
+      "name": "morning window, interpolated from the hour before the span",
+      "note": "08:00 0%, 09:00 30%, 10:00 30% (GMT). 08:13 interpolates to 6.5%, so C = (47 x (6.5 + 30) / 2 + 60 x 30) / 107 = 24.84: clear. The plain mean of the hours inside the span would be 30: partly cloudy.",
+      "query": {
+        "window": "morning",
+        "date": "2026-12-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-12-21T08:13:00+00:00",
+        "end": "2026-12-21T10:00:00+00:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1797840000,
+            1797843600,
+            1797847200
+          ],
+          "cloud_cover": [
+            0,
+            30,
+            30
+          ]
+        }
+      },
+      "category": "clear",
+      "meanCloudCover": 24.838785046728972
+    },
+    {
+      "name": "last 3 h of the evening window, hours read as UTC",
+      "note": "16:00-20:00 UTC 90%, 21:00 0%. 20:31 interpolates to 43.5%, so C = (149 x 90 + 31 x (90 + 43.5) / 2) / 180 = 86.0: overcast. Taking the hours as local (BST) times would shift the span an hour later, to C = 59.5: partly cloudy.",
+      "query": {
+        "window": "evening",
+        "date": "2026-06-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-06-21T18:31:00+01:00",
+        "end": "2026-06-21T21:31:00+01:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1782057600,
+            1782061200,
+            1782064800,
+            1782068400,
+            1782072000,
+            1782075600,
+            1782079200
+          ],
+          "cloud_cover": [
+            90,
+            90,
+            90,
+            90,
+            90,
+            0,
+            0
+          ]
+        }
+      },
+      "category": "overcast",
+      "meanCloudCover": 85.99583333333334
+    },
+    {
+      "name": "past the forecast horizon: no value after the span",
+      "note": "10:00 GMT and later are null, as past the model's horizon, so the end of the span has no value.",
+      "query": {
+        "window": "morning",
+        "date": "2026-12-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-12-21T08:13:00+00:00",
+        "end": "2026-12-21T10:00:00+00:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1797836400,
+            1797840000,
+            1797843600,
+            1797847200,
+            1797850800
+          ],
+          "cloud_cover": [
+            10,
+            10,
+            10,
+            null,
+            null
+          ]
+        }
+      },
+      "category": null,
+      "meanCloudCover": null
+    },
+    {
+      "name": "past the forecast horizon: the hours stop inside the span",
+      "note": "The data ends at 09:00 GMT, before the span does.",
+      "query": {
+        "window": "morning",
+        "date": "2026-12-21",
+        "wakeTime": "07:00",
+        "origin": {
+          "lat": 51.45,
+          "lon": -2.6
+        },
+        "maxWalkMin": 15,
+        "sky": "clear"
+      },
+      "span": {
+        "start": "2026-12-21T08:13:00+00:00",
+        "end": "2026-12-21T10:00:00+00:00"
+      },
+      "response": {
+        "latitude": 51.46,
+        "longitude": -2.6,
+        "generationtime_ms": 0.1,
+        "utc_offset_seconds": 0,
+        "timezone": "GMT",
+        "timezone_abbreviation": "GMT",
+        "elevation": 80.0,
+        "hourly_units": {
+          "time": "unixtime",
+          "cloud_cover": "%"
+        },
+        "hourly": {
+          "time": [
+            1797836400,
+            1797840000,
+            1797843600
+          ],
+          "cloud_cover": [
+            10,
+            10,
+            10
+          ]
+        }
+      },
+      "category": null,
+      "meanCloudCover": null
+    }
+  ]
+}

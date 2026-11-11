@@ -10,6 +10,8 @@ fixtures come from. The rules live beside it:
 - `ranking`: the deterministic order and the de-dupe
 - `fallback`: the nearest open spots, and the nearest sun beyond max walk
 - `lamp`: the lamp message and the lamp-only Answer
+
+Beside the scorer, `cloud` turns a forecast into the Query's sky (#45).
 """
 
 from __future__ import annotations

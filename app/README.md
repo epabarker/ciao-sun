@@ -38,6 +38,7 @@ src/solar/spa-tables.ts SPA periodic terms, generated from pvlib; not edited by 
 src/solar/local-day.ts  local civil days and ISO times in a time zone, via Intl
 src/router/world.ts     router: tiles joined into one walk graph; origin snap and Dijkstra walk
 src/scorer/answer.ts    scorer: (Query, tiles) -> Answer; its rules beside it (see its header)
+src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's category or "unavailable" (fixtures/cloud/cases.json)
 test/parity/            the golden-fixture harness (below)
 ```
 

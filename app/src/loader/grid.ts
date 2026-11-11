@@ -8,16 +8,17 @@
 // good to a few metres, against pyproj's transform in the build; callers pad
 // distances by GRID_ERROR_M.
 
+import { RADIANS_PER_DEGREE } from "../angles";
+import { GRID_REF } from "../ids";
+
 /** Metres the Helmert transform may be off by; a reach is widened by it. */
 export const GRID_ERROR_M = 10;
 
 const KM = 1000;
 const HUNDRED_KM = 100_000;
 const GRID_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ"; // the grid has no I
-const GRID_REF = /^([A-HJ-Z]{2})(\d{2})(\d{2})$/;
 
-const DEG = Math.PI / 180;
-const ARCSEC = DEG / 3600;
+const ARCSEC = RADIANS_PER_DEGREE / 3600;
 
 // GRS80 (WGS84 to within a millimetre here) and Airy 1830.
 const WGS84 = { a: 6_378_137, b: 6_356_752.3141 };
@@ -36,8 +37,8 @@ const HELMERT = {
 
 // National Grid projection constants.
 const F0 = 0.9996012717;
-const LAT0 = 49 * DEG;
-const LON0 = -2 * DEG;
+const LAT0 = 49 * RADIANS_PER_DEGREE;
+const LON0 = -2 * RADIANS_PER_DEGREE;
 const E0 = 400_000;
 const N0 = -100_000;
 
@@ -60,7 +61,7 @@ function fromCartesian(x: number, y: number, z: number, a: number, b: number): [
 
 /** A WGS84 position as National Grid [easting, northing] metres. */
 export function wgs84ToNationalGrid(latDeg: number, lonDeg: number): [number, number] {
-  const [x1, y1, z1] = toCartesian(latDeg * DEG, lonDeg * DEG, WGS84.a, WGS84.b);
+  const [x1, y1, z1] = toCartesian(latDeg * RADIANS_PER_DEGREE, lonDeg * RADIANS_PER_DEGREE, WGS84.a, WGS84.b);
   const { tx, ty, tz, s, rx, ry, rz } = HELMERT;
   const s1 = 1 + s;
   const x2 = tx + x1 * s1 - y1 * rz + z1 * ry;

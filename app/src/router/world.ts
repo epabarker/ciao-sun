@@ -5,6 +5,7 @@
 // snap and the walk rules are its own, expression for expression, so that both
 // give the same whole metres. Terms follow GLOSSARY.md.
 
+import { RADIANS_PER_DEGREE } from "../angles";
 import { PROFILE_SAMPLES, type Tile, spotName } from "../tile/decode";
 
 /** Walking speed, metres per minute. */
@@ -13,7 +14,6 @@ export const WALK_SPEED_M_PER_MIN = 80;
 export const EARTH_RADIUS_M = 6_371_008.8;
 
 // As Python's math.radians and numpy's radians: one multiplication by pi/180.
-const RADIANS_PER_DEGREE = Math.PI / 180;
 const radians = (degrees: number) => degrees * RADIANS_PER_DEGREE;
 
 /** Great-circle (haversine) distance between two WGS84 positions, in metres. */

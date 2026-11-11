@@ -8,14 +8,13 @@
 //   build     the pinned build id, e.g. "20261111a"
 
 import pinFile from "../../release.json";
+import { BUILD_ID } from "../ids";
 
 export interface ReleaseConfig {
   dataBase: string;
   format: number;
   build: string;
 }
-
-const BUILD_ID = /^\d{8}[a-z]$/;
 
 /** A release config from its JSON, or an error naming what is wrong with it. */
 export function parseReleaseConfig(json: unknown): ReleaseConfig {

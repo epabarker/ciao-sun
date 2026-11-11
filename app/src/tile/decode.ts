@@ -3,6 +3,8 @@
 // docs/tile-format-f1.md is the specification, and `ciao_sun.tile_codec` the
 // Python reader this one must agree with. Terms follow GLOSSARY.md.
 
+import { GRID_REF } from "../ids";
+
 /** The only format number this reader knows. */
 export const FORMAT = 1;
 /** Horizon profile samples per Candidate: sample i is at true azimuth i * 0.25 degrees. */
@@ -14,7 +16,6 @@ export const CODE_COUNT = 228;
 
 const FINE_TOP_CODE = 120;
 const HEADER_BYTES = 28;
-const GRID_REF = /^[A-HJ-Z]{2}[0-9]{4}$/;
 const NODE_ID_LIMIT = 2n ** 53n;
 
 /** The bytes are not a valid f1 tile. */
@@ -69,7 +70,8 @@ export interface Tile {
   readonly walkGraph: WalkGraph;
 }
 
-const DEGREES_BY_CODE = Float64Array.from({ length: CODE_COUNT }, (_, code) =>
+/** The Horizon profile angle, in degrees, of each storage code, indexed by code. */
+export const DEGREES_BY_CODE: Readonly<Float64Array> = Float64Array.from({ length: CODE_COUNT }, (_, code) =>
   // The reference's own expressions, so both give the same double for every code.
   code <= FINE_TOP_CODE ? -2.0 + 0.1 * code : 10.0 + 0.5 * (code - FINE_TOP_CODE),
 );

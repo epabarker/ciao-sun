@@ -45,6 +45,8 @@ src/ui/                 the answer screen (below)
 src/map/                the map under the sheet (below): its interface, MapLibre adapter and basemap style
 src/about/about.ts      the About sheet's content: credits, survey years, licence from the manifest; the fixed caveats
 src/contract.ts         the Query and Answer types, as fixture JSON holds them
+src/ids.ts              the grid-ref and build-id patterns; imports nothing, so the release job shares them
+src/angles.ts           the degree/radian factors
 src/tile/decode.ts      tile decoder: f1 bytes -> Tile (docs/tile-format-f1.md)
 src/solar/sun-track.ts  solar model: sunTrack(), refraction, the three events (docs/solar-model.md)
 src/solar/spa.ts        NREL SPA geometric position

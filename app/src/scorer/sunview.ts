@@ -1,8 +1,9 @@
 // Sun in view and Sky openness: a sun track against Horizon profiles.
 // `ciao_sun.reference.sunview` is the reference.
 
+import { RADIANS_PER_DEGREE } from "../angles";
 import type { SunTrack } from "../solar/sun-track";
-import { CODE_COUNT, PROFILE_SAMPLES, codeToDegrees } from "../tile/decode";
+import { DEGREES_BY_CODE, PROFILE_SAMPLES } from "../tile/decode";
 
 export const LOW_SUN_MIN_DEG = 0;
 export const LOW_SUN_MAX_DEG = 30;
@@ -10,10 +11,8 @@ export const OPENNESS_SECTOR_MARGIN_DEG = 10;
 export const OPENNESS_CUTOFF = 0.75;
 
 const SAMPLES_PER_DEG = PROFILE_SAMPLES / 360;
-const RADIANS_PER_DEGREE = Math.PI / 180;
-const DEGREES_OF_CODE = Float64Array.from({ length: CODE_COUNT }, (_, code) => codeToDegrees(code));
 /** What one profile sample adds to the sector's Sky openness: cos^2(max(h, 0)). */
-const OPEN_SKY_OF_CODE = DEGREES_OF_CODE.map((h) => {
+const OPEN_SKY_OF_CODE = DEGREES_BY_CODE.map((h) => {
   const c = Math.cos(Math.max(h, 0) * RADIANS_PER_DEGREE);
   return c * c;
 });
@@ -34,8 +33,8 @@ export function sunInView(codes: Uint8Array, track: SunTrack, start: number, end
     const position = wrap(track.azimuth[m]!, 360) * SAMPLES_PER_DEG;
     const below = Math.floor(position);
     const fraction = position - below;
-    const before = DEGREES_OF_CODE[codes[wrap(below, PROFILE_SAMPLES)]!]!;
-    const after = DEGREES_OF_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!]!;
+    const before = DEGREES_BY_CODE[codes[wrap(below, PROFILE_SAMPLES)]!]!;
+    const after = DEGREES_BY_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!]!;
     const horizon = before * (1 - fraction) + after * fraction;
     inView[m - start] = track.apparentElevation[m]! > horizon ? 1 : 0;
   }

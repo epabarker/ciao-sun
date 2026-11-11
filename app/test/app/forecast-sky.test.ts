@@ -131,13 +131,18 @@ describe("the sky slot with a forecast", () => {
   it("keeps a manual override when the forecast arrives after it", async () => {
     let release: () => void = () => {};
     const held = new Promise<void>((r) => (release = r));
+    let asked: () => void = () => {};
+    const inFlight = new Promise<void>((r) => (asked = r));
     const forecast: Forecast = async (url) => {
+      asked();
       await held;
       return canned(90)(url);
     };
+    const served = host(forecast);
     const root = document.createElement("div");
-    const app = startApp(root, deps(host(forecast).fetch));
-    await new Promise((r) => setTimeout(r, 0));
+    const app = startApp(root, deps(served.fetch));
+    await inFlight;
+    expect(served.forecasts()).toHaveLength(1);
     change(skySlot(root), "partly");
     release();
     await app.idle();

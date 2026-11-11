@@ -70,10 +70,10 @@ export const WORDING: Record<WindowName, Wording> = {
     from: "min from",
     end: ".",
   },
-  // "I woke at 07:00 on 21 Dec, the evening sky looks clear, and before
+  // "I wake at 07:00 on 21 Dec, the evening sky looks clear, and before
   // sunset I'll walk up to 15 min from here."
   evening: {
-    wake: "I woke at",
+    wake: "I wake at",
     on: "on",
     sky: ", the evening sky looks",
     walk: ", and before sunset I'll walk up to",

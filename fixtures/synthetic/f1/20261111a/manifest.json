@@ -1,0 +1,271 @@
+{
+  "format": 1,
+  "build": "20261111a",
+  "licence": {
+    "name": "Open Database License (ODbL) v1.0",
+    "spdx": "ODbL-1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+  },
+  "attribution": [
+    {
+      "source": "Environment Agency",
+      "text": "© Environment Agency copyright and/or database right 2022. All rights reserved.",
+      "licence": "Open Government Licence v3.0",
+      "licenceUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    },
+    {
+      "source": "Ordnance Survey",
+      "text": "Contains OS data © Crown copyright and database right 2026",
+      "licence": "Open Government Licence v3.0",
+      "licenceUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    },
+    {
+      "source": "OpenStreetMap",
+      "text": "© OpenStreetMap contributors",
+      "licence": "Open Database License (ODbL) v1.0",
+      "licenceUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    },
+    {
+      "source": "Protomaps",
+      "text": "Protomaps © OpenStreetMap",
+      "licence": "Open Database License (ODbL) v1.0",
+      "licenceUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "lidarSurveyYears": [
+    2019,
+    2021
+  ],
+  "inputs": [
+    {
+      "kind": "dsm",
+      "source": "Environment Agency LIDAR Composite Last Return DSM 1m",
+      "tile": "ST5070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_last_return_dsm/2022/1/ST5070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dtm",
+      "source": "Environment Agency LIDAR Composite DTM 1m",
+      "tile": "ST5070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_dtm/2022/1/ST5070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "first_return_dsm",
+      "source": "Environment Agency LIDAR Composite First Return DSM 1m",
+      "tile": "ST5070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST5070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dsm",
+      "source": "Environment Agency LIDAR Composite Last Return DSM 1m",
+      "tile": "ST5570",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_last_return_dsm/2022/1/ST5570",
+      "sha256": "1faa00744f467be1e81f379e4f177ceb01bf8c888863d3dd54ff3a93f09aa5fc",
+      "bytes": 2227,
+      "absent": false
+    },
+    {
+      "kind": "dtm",
+      "source": "Environment Agency LIDAR Composite DTM 1m",
+      "tile": "ST5570",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_dtm/2022/1/ST5570",
+      "sha256": "a10a57f926099a13a33828f72bb70b3c91280a93e866822e7fc0c9c51a39e1a3",
+      "bytes": 1803,
+      "absent": false
+    },
+    {
+      "kind": "first_return_dsm",
+      "source": "Environment Agency LIDAR Composite First Return DSM 1m",
+      "tile": "ST5570",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST5570",
+      "sha256": "c29e42bd594f6e0ed86c21f3e549725b36493768de2dd30c7336deb7ec5401da",
+      "bytes": 1917,
+      "absent": false
+    },
+    {
+      "kind": "dsm",
+      "source": "Environment Agency LIDAR Composite Last Return DSM 1m",
+      "tile": "ST5575",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_last_return_dsm/2022/1/ST5575",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dtm",
+      "source": "Environment Agency LIDAR Composite DTM 1m",
+      "tile": "ST5575",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_dtm/2022/1/ST5575",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "first_return_dsm",
+      "source": "Environment Agency LIDAR Composite First Return DSM 1m",
+      "tile": "ST5575",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST5575",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dsm",
+      "source": "Environment Agency LIDAR Composite Last Return DSM 1m",
+      "tile": "ST6070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_last_return_dsm/2022/1/ST6070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dtm",
+      "source": "Environment Agency LIDAR Composite DTM 1m",
+      "tile": "ST6070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_dtm/2022/1/ST6070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "first_return_dsm",
+      "source": "Environment Agency LIDAR Composite First Return DSM 1m",
+      "tile": "ST6070",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST6070",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dsm",
+      "source": "Environment Agency LIDAR Composite Last Return DSM 1m",
+      "tile": "ST6075",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_last_return_dsm/2022/1/ST6075",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "dtm",
+      "source": "Environment Agency LIDAR Composite DTM 1m",
+      "tile": "ST6075",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_dtm/2022/1/ST6075",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "first_return_dsm",
+      "source": "Environment Agency LIDAR Composite First Return DSM 1m",
+      "tile": "ST6075",
+      "version": "2022",
+      "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST6075",
+      "sha256": null,
+      "bytes": null,
+      "absent": true
+    },
+    {
+      "kind": "terrain50",
+      "source": "Ordnance Survey OS Terrain 50, ASCII Grid, GB",
+      "tile": null,
+      "version": "2026-07",
+      "url": "https://api.os.uk/downloads/v1/products/Terrain50/downloads?area=GB&format=ASCII+Grid+and+GML+%28Grid%29&redirect",
+      "sha256": "b67f9d203bc6e3e3f1b3d08983efe527aca1875db3848fd82a48a2fd16885b18",
+      "bytes": 1343,
+      "absent": false
+    },
+    {
+      "kind": "osm",
+      "source": "Geofabrik OpenStreetMap extract europe/united-kingdom/england/bristol",
+      "tile": null,
+      "version": "261110",
+      "url": "https://download.geofabrik.de/europe/united-kingdom/england/bristol-261110.osm.pbf",
+      "sha256": "28c7e232fc3694dc4bbc05a2458e38b51b516ddc73f131f3867e3e7a6686f162",
+      "bytes": 360,
+      "absent": false,
+      "timestamp": "2026-11-09T21:20:45Z"
+    }
+  ],
+  "coverage": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -2.608702620614721,
+          51.457994802289726
+        ],
+        [
+          -2.603089691584964,
+          51.45802381867346
+        ],
+        [
+          -2.603113401598144,
+          51.45982202430133
+        ],
+        [
+          -2.6087265511658946,
+          51.459793006060856
+        ],
+        [
+          -2.608702620614721,
+          51.457994802289726
+        ]
+      ]
+    ]
+  },
+  "horizon": {
+    "nearReachM": 3000.0,
+    "farReachM": 50000.0
+  },
+  "tiles": {
+    "ST5773": {
+      "bytes": 2584,
+      "sha256": "4999ccb485c1c76de063cd7d5e023d17d32195f65e62a31a5369a245ec783ea2",
+      "candidates": 46
+    },
+    "ST5873": {
+      "bytes": 2787,
+      "sha256": "6975714f0d111ab3924a326f18f137ab1bb8c3974de2f183bb6991e5763b5e95",
+      "candidates": 49
+    }
+  },
+  "buildChecks": {
+    "profile": {
+      "candidatesPerTile": 16,
+      "toleranceDeg": 0.05,
+      "storageHalfStepDeg": {
+        "upTo10Deg": 0.05,
+        "above10Deg": 0.25
+      },
+      "fractionWithin": 0.99,
+      "candidatesChecked": 32
+    },
+    "waterGuard": {
+      "candidatesAllowed": 0,
+      "candidatesFound": 0
+    }
+  }
+}

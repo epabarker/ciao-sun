@@ -45,6 +45,20 @@ class Query:
             now=data.get("now"),
         )
 
+    def to_json(self) -> dict[str, Any]:
+        """The Query as a fixture holds it; `from_json` reads it back."""
+        out: dict[str, Any] = {
+            "window": self.window,
+            "date": self.date,
+            "wakeTime": self.wake_time,
+            "origin": {"lat": self.origin_lat, "lon": self.origin_lon},
+            "maxWalkMin": self.max_walk_min,
+            "sky": self.sky,
+        }
+        if self.now is not None:
+            out["now"] = self.now
+        return out
+
 
 @dataclass(frozen=True)
 class Interval:

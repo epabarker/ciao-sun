@@ -23,6 +23,7 @@ from ciao_sun.build import BuildError, build, check_profiles
 from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.cli import app
 from ciao_sun.fetch import read_lockfile
+from ciao_sun.reference.fixtures import bristol_query_set
 from ciao_sun.tile_codec import Tile, read_tile, write_tile
 from tests import build_world as world
 from tests.osm_extract import bng_of
@@ -303,6 +304,27 @@ def test_the_build_command_writes_a_build_directory(built: Built, tmp_path: Path
     (manifest,) = (tmp_path / "builds" / "f1").glob("*/manifest.json")
     assert re.fullmatch(r"\d{8}a", manifest.parent.name)
     assert json.loads(manifest.read_text())["tiles"] == built.manifest["tiles"]
+    # Without --queries the golden fixtures are the committed Bristol query set's (#41).
+    fixtures = json.loads((manifest.parent / "fixtures" / "index.json").read_text())["fixtures"]
+    assert [line["id"] for line in fixtures] == [entry.id for entry in bristol_query_set()]
+    assert all((manifest.parent / "fixtures" / line["file"]).is_file() for line in fixtures)
+
+
+def test_the_build_command_refuses_an_unreadable_query_set_before_building(
+    built: Built, tmp_path: Path
+):
+    queries = tmp_path / "queries.json"
+    queries.write_text('{"queries": [{"id": "Not An Id", "query": {}}]}')
+    result = CliRunner().invoke(
+        app,
+        ["build", "--coverage", str(_coverage_file(tmp_path / "coverage.geojson")),
+         "--inputs", str(built.inputs), "--out", str(tmp_path / "builds"),
+         "--queries", str(queries)],
+    )  # fmt: skip
+
+    assert result.exit_code == 1
+    assert "queries.json" in result.output and "Traceback" not in result.output
+    assert not (tmp_path / "builds").exists()
 
 
 def test_the_build_command_reports_a_refused_build_without_a_traceback(
@@ -328,5 +350,6 @@ def test_build_help_names_what_is_written_and_what_fails_a_build():
     for phrase in [
         "--coverage", "GeoJSON", "--inputs", "fetch.lock.json", "--out", "manifest.json",
         "tiles/<grid ref>.bin", "direct ray casting", "water", "SHA-256", "--workers",
+        "--queries", "fixtures/index.json", "golden fixture",
     ]:  # fmt: skip
         assert phrase in text, f"`build --help` does not mention {phrase!r}"

@@ -21,21 +21,31 @@ _DEGREES_OF_CODE = codes_to_degrees(np.arange(CODE_COUNT))
 _OPEN_SKY_OF_CODE = np.cos(np.radians(np.maximum(_DEGREES_OF_CODE, 0.0))) ** 2
 
 
+def horizon_at_sun(
+    profile_codes: npt.NDArray[np.uint8], track: SunTrack, start: int, end: int
+) -> npt.NDArray[np.float64]:
+    """The Horizon profile at the sun's true azimuth, in degrees, per Candidate
+    (rows) and minute from `start` to `end`: interpolated linearly between the
+    two neighbouring samples."""
+    position = (track.azimuth[start:end] % 360.0) * _SAMPLES_PER_DEG
+    below = np.floor(position).astype(np.int64)
+    fraction = position - below
+    before = _DEGREES_OF_CODE[profile_codes[:, below % PROFILE_SAMPLES]]
+    after = _DEGREES_OF_CODE[profile_codes[:, (below + 1) % PROFILE_SAMPLES]]
+    horizon: npt.NDArray[np.float64] = before * (1.0 - fraction) + after * fraction
+    return horizon
+
+
 def sun_in_view(
     profile_codes: npt.NDArray[np.uint8], track: SunTrack, start: int, end: int
 ) -> npt.NDArray[np.bool_]:
     """Whether the sun is in view, per Candidate (rows) and minute from `start` to `end`.
 
     In view means the apparent elevation of the disc centre exceeds the
-    Horizon profile at the sun's true azimuth, interpolated linearly between
-    the two neighbouring samples. A profile below 0 degrees is used as it is.
+    Horizon profile at the sun's true azimuth (`horizon_at_sun`). A profile
+    below 0 degrees is used as it is.
     """
-    position = (track.azimuth[start:end] % 360.0) * _SAMPLES_PER_DEG
-    below = np.floor(position).astype(np.int64)
-    fraction = position - below
-    before = _DEGREES_OF_CODE[profile_codes[:, below % PROFILE_SAMPLES]]
-    after = _DEGREES_OF_CODE[profile_codes[:, (below + 1) % PROFILE_SAMPLES]]
-    horizon = before * (1.0 - fraction) + after * fraction
+    horizon = horizon_at_sun(profile_codes, track, start, end)
     in_view: npt.NDArray[np.bool_] = track.apparent_elevation[start:end] > horizon
     return in_view
 

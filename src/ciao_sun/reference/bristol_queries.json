@@ -1,0 +1,102 @@
+{
+  "about": "The Bristol query set: `ciao-sun build` writes one golden fixture per query into the build's fixtures/ (docs/fixtures.md). It covers spots across Bristol, both solstices, both equinoxes, a deep-winter date, both windows and every status case. Origins: Redland 51.4720,-2.6040; College Green 51.4525,-2.6010; Easton 51.4635,-2.5655; Bedminster 51.4400,-2.6010; Horfield 51.4890,-2.5890; and Bath, outside the coverage. `expect` is the status each query is here to exercise; the build reports any query that gets another.",
+  "queries": [
+    {
+      "id": "morning-winter-solstice-lamp",
+      "expect": "ranked",
+      "note": "The lamp message: Nominal sunrise (08:13) is more than 1 h after Wake time.",
+      "query": {"window": "morning", "date": "2026-12-21", "wakeTime": "07:00", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-winter-solstice",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-12-21", "wakeTime": "07:45", "origin": {"lat": 51.4400, "lon": -2.6010}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "morning-summer-solstice",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-06-21", "wakeTime": "06:30", "origin": {"lat": 51.4635, "lon": -2.5655}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-summer-solstice-now",
+      "expect": "ranked",
+      "note": "`now` clips the window start and the earliest Leave-by.",
+      "query": {"window": "morning", "date": "2026-06-21", "wakeTime": "06:30", "now": "2026-06-21T07:40:00+01:00", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 10, "sky": "clear"}
+    },
+    {
+      "id": "morning-march-equinox",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-03-20", "wakeTime": "07:00", "origin": {"lat": 51.4525, "lon": -2.6010}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "morning-september-equinox",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-09-23", "wakeTime": "07:00", "origin": {"lat": 51.4890, "lon": -2.5890}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-deep-winter",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2027-01-15", "wakeTime": "07:30", "origin": {"lat": 51.4635, "lon": -2.5655}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-overcast-fallback",
+      "expect": "fallback",
+      "note": "The overcast fallback: the nearest open spots, no nearest sun beyond the limit.",
+      "query": {"window": "morning", "date": "2026-03-20", "wakeTime": "07:00", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 15, "sky": "overcast"}
+    },
+    {
+      "id": "morning-no-sun-in-reach",
+      "expect": "fallback",
+      "note": "The no-sun fallback: a 2 min walk from a terraced street, in a window that is the 10 min after Nominal sunrise (06:13). Whether a spot with sun lies beyond the limit, within 20 min, depends on the build.",
+      "query": {"window": "morning", "date": "2026-03-20", "wakeTime": "03:23", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 2, "sky": "clear"}
+    },
+    {
+      "id": "morning-lamp-only",
+      "expect": "lamp-only",
+      "note": "No daylight: the Morning window ends at 07:00, before Nominal sunrise.",
+      "query": {"window": "morning", "date": "2026-12-21", "wakeTime": "04:00", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-not-covered",
+      "expect": "not-covered",
+      "note": "Bath: outside the Bristol coverage.",
+      "query": {"window": "morning", "date": "2026-06-21", "wakeTime": "07:00", "origin": {"lat": 51.3811, "lon": -2.3590}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-winter-solstice",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-12-21", "wakeTime": "07:00", "origin": {"lat": 51.4525, "lon": -2.6010}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-summer-solstice",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-06-21", "wakeTime": "06:30", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "evening-march-equinox",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-03-20", "wakeTime": "07:00", "origin": {"lat": 51.4400, "lon": -2.6010}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-september-equinox",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-09-23", "wakeTime": "07:00", "origin": {"lat": 51.4890, "lon": -2.5890}, "maxWalkMin": 20, "sky": "partly"}
+    },
+    {
+      "id": "evening-deep-winter",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2027-01-15", "wakeTime": "07:30", "origin": {"lat": 51.4720, "lon": -2.6040}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-overcast-fallback",
+      "expect": "fallback",
+      "query": {"window": "evening", "date": "2026-09-23", "wakeTime": "07:00", "origin": {"lat": 51.4635, "lon": -2.5655}, "maxWalkMin": 15, "sky": "overcast"}
+    },
+    {
+      "id": "evening-no-window",
+      "expect": "no-evening-window",
+      "note": "Wake time + 6 h is after Nominal sunset (16:04).",
+      "query": {"window": "evening", "date": "2026-12-21", "wakeTime": "11:00", "origin": {"lat": 51.4525, "lon": -2.6010}, "maxWalkMin": 15, "sky": "clear"}
+    }
+  ]
+}

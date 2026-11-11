@@ -2,6 +2,7 @@
 
     <out>/f1/<build>/manifest.json
     <out>/f1/<build>/tiles/<grid ref>.bin
+    <out>/f1/<build>/fixtures/              golden fixtures, when given a query set
 
 `build` reads everything through the fetch lockfile (`fetch.read_lockfile`),
 and makes a tile for every 1 km square the coverage touches that has a
@@ -19,8 +20,9 @@ Candidate or a walk edge. Tile by tile, on `workers` processes:
 
 The build id is the UTC date plus the first letter not yet used under
 `<out>/f1/`. Tiles are written to `<build>.partial/` and the directory takes its
-name only once both build checks have passed and the manifest is written, so a
-directory named by a build id is always a whole, checked build. A failed build
+name only once both build checks have passed and the manifest and the golden
+fixtures (`reference.fixtures`) are written, so a directory named by a build id
+is always a whole, checked build. A failed build
 leaves its `.partial` directory behind for inspection; the next build removes it.
 
 Tiles depend only on the inputs, never on the build id, the clock or
@@ -64,6 +66,7 @@ from ciao_sun.horizon_precompute import (
 )
 from ciao_sun.manifest import manifest_document, read_manifest, write_manifest
 from ciao_sun.raster import RasterGrid, load_mosaic
+from ciao_sun.reference.fixtures import SetQuery, write_fixtures
 from ciao_sun.surface import (
     BuildingFootprints,
     crown_envelope_surface,
@@ -376,13 +379,15 @@ def build(
     today: date | None = None,
     far_reach_m: float = FAR_REACH_M,
     tolerances: Tolerances | None = None,
+    queries: Sequence[SetQuery] | None = None,
     report: Callable[[str], None] = _silent,
 ) -> Path:
     """Build `coverage` from the fetched `inputs` into a new build directory under `out`.
 
     Returns `<out>/f1/<build>/`. Raises BuildCheckError, and leaves no build
     directory, if the direct-ray profile check or the water guard fails.
-    `today` is the UTC date the build id is cut from.
+    `today` is the UTC date the build id is cut from. `queries` is the query
+    set whose golden fixtures go in the build's `fixtures/`; None writes none.
     """
     tolerances = tolerances or Tolerances()
     lock = read_lockfile(inputs)
@@ -442,6 +447,8 @@ def build(
             build_checks=checks,
         ),
     )
+    if queries is not None:
+        write_fixtures(partial, queries, report)
     partial.rename(build_dir)
     report(
         f"build {build_id}: {len(tiles)} tiles, "

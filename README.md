@@ -15,8 +15,10 @@ exports have been removed. What the CLI exposes today is:
   against heywhatsthat by hand.
 - `fetch` -- download every build input for a coverage polygon and lock it by
   hash.
-- `build` -- turn the fetched inputs into one build directory of tiles and a
-  manifest.
+- `build` -- turn the fetched inputs into one build directory of tiles, a
+  manifest and golden fixtures.
+- `reference` -- print the golden fixture for one Query over a build: the
+  reference scorer's Answer, for debugging a JS mismatch on one case.
 
 The build's output is one binary file per 1 km square, in tile format `f1`.
 `docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
@@ -101,6 +103,13 @@ Candidate's horizon may be set by a cell inside an OSM water area.
 `ciao_sun.build_checks` gives the tolerances and `ciao_sun.manifest` the
 manifest's schema.
 
+`build` also runs a query set through the reference scorer and writes one
+golden fixture per query into the build's `fixtures/`, with an `index.json`.
+The default query set is the committed Bristol one,
+`src/ciao_sun/reference/bristol_queries.json`; `--queries` names another.
+`docs/fixtures.md` specifies the fixtures, the query set file and the parity
+tolerances the JS scorer is held to.
+
 `profile-only` does not read this cache yet: it still wants unzipped GeoTIFFs
 under `data/dsm/` and `data/dtm/` (searched recursively).
 
@@ -128,8 +137,14 @@ uv sync
 ```
 ciao-sun fetch --coverage bristol.geojson --osm-date 261110
 ciao-sun build --coverage bristol.geojson
+ciao-sun reference query.json --build data/builds/f1/20261110a
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
+
+`reference` prints exactly the JSON a golden fixture holds for one Query over a
+build directory: the Query, the tiles it touches, the Answer, the day's sun
+track and the near-boundary minutes. The Query is a JSON file or the JSON
+itself (`docs/fixtures.md`).
 
 `profile-only` dumps the full Horizon profile (obstruction angle vs true
 azimuth, 1 degree steps, 0-360, clockwise from true north) for one point as
@@ -190,3 +205,11 @@ uv run mypy src
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same three on every push.
+
+`fixtures/synthetic/` is a small committed build with its golden fixtures, for
+the JS tests. After changing the build, the tile format, the reference or the
+synthetic query set, regenerate it and commit the result:
+
+```
+uv run python -m tests.synthetic_fixtures
+```

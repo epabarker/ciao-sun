@@ -33,6 +33,11 @@ The basemap is exploded into `<build>.partial/basemap/` from the fetched cut of
 the Protomaps build (`basemap.explode`) once the build checks have passed, so it
 takes its place with the tiles in the one rename.
 
+The workers never read the national OSM extract itself: reading an `.osm.pbf`
+with node locations stores every node in the file, over 7 GB for England. The
+build first cuts the part it needs into a temporary file (`osm_clip.clip_osm`)
+and the workers read that.
+
 `check_profiles` reruns the direct-ray check on a finished build directory.
 """
 
@@ -71,6 +76,7 @@ from ciao_sun.horizon_precompute import (
     precompute_tiles,
 )
 from ciao_sun.manifest import manifest_document, read_manifest, write_manifest
+from ciao_sun.osm_clip import clip_osm
 from ciao_sun.raster import RasterGrid, load_mosaic
 from ciao_sun.reference.fixtures import SetQuery, write_fixtures
 from ciao_sun.report import silent
@@ -90,6 +96,10 @@ _SURVEY_COLUMN = "SD_FLOWN"
 
 Bounds = tuple[float, float, float, float]
 
+# The OSM clip reaches this far past the bounds the workers read OSM within, so
+# a way or area crossing into them with no node inside the clip is still kept.
+OSM_CLIP_MARGIN_M = 2000.0
+
 
 class BuildError(Exception):
     """The build cannot run on these inputs."""
@@ -104,6 +114,7 @@ class _Job:
 
     inputs_root: Path
     coverage_json: str
+    osm_pbf: Path  # the clip of the fetched OSM extract (`_clip_osm`)
     tiles_dir: Path
     far_reach_m: float
     tolerances: Tolerances
@@ -117,10 +128,7 @@ class _Inputs:
         self.lock = read_lockfile(job.inputs_root)
         self.polygon = Coverage.from_geojson(json.loads(job.coverage_json)).polygon_bng()
         minx, miny, maxx, maxy = self.polygon.bounds
-        self._near_bounds = (
-            minx - NEAR_REACH_M - KM, miny - NEAR_REACH_M - KM,
-            maxx + NEAR_REACH_M + KM, maxy + NEAR_REACH_M + KM,
-        )  # fmt: skip
+        self._near_bounds = _near_bounds(self.polygon.bounds)
         self._far_bounds = (
             minx - job.far_reach_m - KM, miny - job.far_reach_m - KM,
             maxx + job.far_reach_m + KM, maxy + job.far_reach_m + KM,
@@ -132,15 +140,15 @@ class _Inputs:
 
     @functools.cached_property
     def network(self) -> WalkNetwork:
-        return load_walk_network(self._only("osm"))
+        return load_walk_network(self.job.osm_pbf, within=self._near_bounds)
 
     @functools.cached_property
     def footprints(self) -> BuildingFootprints:
-        return read_building_footprints(self._only("osm"), _BNG, self._near_bounds)
+        return read_building_footprints(self.job.osm_pbf, _BNG, self._near_bounds)
 
     @functools.cached_property
     def water(self) -> BuildingFootprints:
-        return read_water_areas(self._only("osm"), _BNG, self._near_bounds)
+        return read_water_areas(self.job.osm_pbf, _BNG, self._near_bounds)
 
     @functools.cached_property
     def terrain50(self) -> RasterGrid:
@@ -168,6 +176,31 @@ class _Inputs:
 
     def contains(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return np.asarray(shapely.contains_xy(self.polygon, x, y), dtype=bool)
+
+
+def _near_bounds(coverage_bounds: Bounds) -> Bounds:
+    """Where a tile can need OSM from: the coverage plus the near reach and a square."""
+    minx, miny, maxx, maxy = coverage_bounds
+    pad = NEAR_REACH_M + KM
+    return (minx - pad, miny - pad, maxx + pad, maxy + pad)
+
+
+def _clip_osm(
+    lock: Lockfile, coverage: Coverage, scratch: Path, report: Callable[[str], None],
+    clock: Callable[[], float],
+) -> Path:  # fmt: skip
+    """Cut the fetched OSM extract down to what the workers can read, into `scratch`."""
+    (entry,) = [entry for entry in lock.inputs if entry.kind == "osm"]
+    minx, miny, maxx, maxy = _near_bounds(coverage.polygon_bng().bounds)
+    box = (
+        minx - OSM_CLIP_MARGIN_M, miny - OSM_CLIP_MARGIN_M,
+        maxx + OSM_CLIP_MARGIN_M, maxy + OSM_CLIP_MARGIN_M,
+    )  # fmt: skip
+    started = clock()
+    report(f"cutting {lock.path_of(entry).name} to the coverage")
+    clip = clip_osm(lock.path_of(entry), box, scratch / "clip.osm.pbf")
+    report(f"cut to {clip.stat().st_size / 1e6:.0f} MB in {_duration(clock() - started)}")
+    return clip
 
 
 @functools.lru_cache(maxsize=1)
@@ -446,21 +479,23 @@ def build(
     tiles_dir = partial / "tiles"
     tiles_dir.mkdir(parents=True)
 
-    job = _Job(
-        inputs_root=inputs.resolve(),
-        coverage_json=json.dumps(coverage.geometry, sort_keys=True),
-        tiles_dir=tiles_dir.resolve(),
-        far_reach_m=far_reach_m,
-        tolerances=tolerances,
-    )
     grid_refs = grid_refs_touching(coverage)
     report(f"build {build_id}: {len(grid_refs)} squares on {workers} workers")
-    reports = precompute_tiles(
-        grid_refs,
-        functools.partial(_build_one, job),
-        workers=workers,
-        on_done=_progress(len(grid_refs), report, clock),
-    )
+    with tempfile.TemporaryDirectory(prefix="ciao-sun-osm-") as scratch:
+        job = _Job(
+            inputs_root=inputs.resolve(),
+            coverage_json=json.dumps(coverage.geometry, sort_keys=True),
+            osm_pbf=_clip_osm(lock, coverage, Path(scratch), report, clock),
+            tiles_dir=tiles_dir.resolve(),
+            far_reach_m=far_reach_m,
+            tolerances=tolerances,
+        )
+        reports = precompute_tiles(
+            grid_refs,
+            functools.partial(_build_one, job),
+            workers=workers,
+            on_done=_progress(len(grid_refs), report, clock),
+        )
     _raise_on_failures(reports, tolerances)
     try:
         exploded = basemap.explode(
@@ -517,14 +552,19 @@ def check_profiles(
     """
     tolerances = tolerances or Tolerances()
     manifest = read_manifest(build_dir)
-    job = _Job(
-        inputs_root=inputs.resolve(),
-        coverage_json=json.dumps(manifest["coverage"], sort_keys=True),
-        tiles_dir=(build_dir / "tiles").resolve(),
-        far_reach_m=float(manifest["horizon"]["farReachM"]),
-        tolerances=tolerances,
-    )
+    coverage = Coverage.from_geojson(manifest["coverage"])
     grid_refs: Sequence[str] = sorted(manifest["tiles"])
-    reports = precompute_tiles(grid_refs, functools.partial(_check_one, job), workers=workers)
+    with tempfile.TemporaryDirectory(prefix="ciao-sun-osm-") as scratch:
+        job = _Job(
+            inputs_root=inputs.resolve(),
+            coverage_json=json.dumps(manifest["coverage"], sort_keys=True),
+            osm_pbf=_clip_osm(
+                read_lockfile(inputs), coverage, Path(scratch), silent, time.monotonic
+            ),
+            tiles_dir=(build_dir / "tiles").resolve(),
+            far_reach_m=float(manifest["horizon"]["farReachM"]),
+            tolerances=tolerances,
+        )
+        reports = precompute_tiles(grid_refs, functools.partial(_check_one, job), workers=workers)
     _raise_on_failures(reports, tolerances)
     return sum(r.candidates_checked for r in reports.values())

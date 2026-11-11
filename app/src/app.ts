@@ -14,7 +14,6 @@ import { cloudSpan } from "./forecast/span";
 import { type Build, DataUnavailableError, openBuild } from "./loader/loader";
 import { type MapLink, linkMap } from "./map/link";
 import type { MapFactory } from "./map/map";
-import { parseOrigin } from "./query/origin";
 import { buildQuery, chooseWindow, nextWindowDate } from "./query/query";
 import { answer } from "./scorer/answer";
 import { type SavedPlace, type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
@@ -23,7 +22,7 @@ import { renderAbout } from "./ui/about-view";
 import { h } from "./ui/dom";
 import { renderPlaces } from "./ui/places";
 import { type Result, mapContainer, renderScreen, screenInsets } from "./ui/screen";
-import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
+import { type OriginSlot, type SentenceState, originPosition, renderSentence } from "./ui/sentence";
 import type { SheetStop } from "./ui/sheet";
 import { fixedCopy, renderTabs } from "./ui/tabs";
 
@@ -91,13 +90,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     pending = Promise.all([pending, work.catch(() => {})]);
   };
 
-  const origin = (): { lat: number; lon: number } | undefined => {
-    const slot = state.origin;
-    if (slot.kind === "gps") return { lat: slot.lat, lon: slot.lon };
-    if (slot.kind === "typed") return parseOrigin(slot.text);
-    if (slot.kind === "place") return { lat: slot.place.lat, lon: slot.place.lon };
-    return undefined;
-  };
+  const origin = () => originPosition(state.origin);
 
   let map: MapLink | undefined;
   /** The highlighted spot's candidateId, linking its row and its marker. */

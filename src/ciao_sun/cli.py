@@ -1,4 +1,4 @@
-"""sunspot CLI: tiles, find, compare, and the --profile-only debug command."""
+"""ciao-sun CLI: tiles, find, compare, and the --profile-only debug command."""
 
 from __future__ import annotations
 
@@ -10,20 +10,20 @@ import numpy as np
 import typer
 from pyproj import Transformer
 
-from sunspot.config import SunspotConfig
-from sunspot.export import to_geojson, to_horizon_geotiff, to_map
-from sunspot.horizon import horizon_angle, meridian_convergence, ray_samples
-from sunspot.raster import (
+from ciao_sun.config import CiaoSunConfig
+from ciao_sun.export import to_geojson, to_horizon_geotiff, to_map
+from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
+from ciao_sun.raster import (
     RasterGrid,
     TilesNotFoundError,
     assert_aligned,
     find_tiles,
     load_mosaic_cached,
 )
-from sunspot.raster import (
+from ciao_sun.raster import (
     sample as raster_sample,
 )
-from sunspot.search import (
+from ciao_sun.search import (
     SearchResult,
     clear_window_minutes,
     passing_mask,
@@ -31,8 +31,8 @@ from sunspot.search import (
     rank_nearest,
     score_candidates,
 )
-from sunspot.solar import sunrise_hour_track
-from sunspot.tiles import tile_codes_for_aoi
+from ciao_sun.solar import sunrise_hour_track
+from ciao_sun.tiles import tile_codes_for_aoi
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -74,7 +74,7 @@ def _load_config(
     date: str | None,
     radius: float | None,
     min_clear_minutes: float | None = None,
-) -> SunspotConfig:
+) -> CiaoSunConfig:
     overrides: dict[str, object] = {}
     if centre is not None:
         lat, lon = _parse_centre(centre)
@@ -86,10 +86,10 @@ def _load_config(
         overrides["radius"] = radius
     if min_clear_minutes is not None:
         overrides["min_clear_minutes"] = min_clear_minutes
-    return SunspotConfig.load(config, **overrides)
+    return CiaoSunConfig.load(config, **overrides)
 
 
-def _load_rasters(cfg: SunspotConfig) -> tuple[RasterGrid, RasterGrid, float, float]:
+def _load_rasters(cfg: CiaoSunConfig) -> tuple[RasterGrid, RasterGrid, float, float]:
     hx, hy = _WGS84_TO_BNG.transform(cfg.home_lon, cfg.home_lat)
     pad = cfg.radius + cfg.max_ray
     bounds = (hx - pad, hy - pad, hx + pad, hy + pad)
@@ -209,7 +209,7 @@ def find(
     walk_metres = None  # aligned to result.x[mask], for to_geojson
     walk_metres_full = None  # aligned to the full result array, for the table
     if walk and mask.any():
-        from sunspot.routing import walk_distances
+        from ciao_sun.routing import walk_distances
 
         idx_full = np.nonzero(mask)[0]
         lon, lat = _BNG_TO_WGS84.transform(result.x[idx_full], result.y[idx_full])
@@ -284,7 +284,7 @@ def compare(
     result = None
 
     for date in date_list:
-        cfg = SunspotConfig.load(None, home_lat=lat, home_lon=lon, date=date, radius=radius)
+        cfg = CiaoSunConfig.load(None, home_lat=lat, home_lon=lon, date=date, radius=radius)
         try:
             dsm, dtm, hx, hy = _load_rasters(cfg)
         except (TilesNotFoundError, ValueError) as exc:
@@ -328,7 +328,7 @@ def profile_only(
     independent terrain data.
     """
     lat, lon = _parse_centre(point)
-    cfg = SunspotConfig.load(config, home_lat=lat, home_lon=lon, date=date, max_ray=max_ray)
+    cfg = CiaoSunConfig.load(config, home_lat=lat, home_lon=lon, date=date, max_ray=max_ray)
     px, py = _WGS84_TO_BNG.transform(lon, lat)
     pad = max_ray
     bounds = (px - pad, py - pad, px + pad, py + pad)

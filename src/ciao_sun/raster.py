@@ -96,7 +96,7 @@ def load_mosaic(
     if arr.shape[1] == 0 or arr.shape[2] == 0:
         raise TilesNotFoundError(
             f"No tile data covers the requested area {bounds}. "
-            "Run `sunspot tiles` for this AOI and check all listed tiles are downloaded."
+            "Run `ciao-sun tiles` for this AOI and check all listed tiles are downloaded."
         )
     band = arr[0].astype("float32")
     band[band < NODATA_BELOW] = np.nan

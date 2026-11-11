@@ -1,4 +1,4 @@
-"""Pydantic settings model for sunspot, optionally backed by a TOML config file."""
+"""Pydantic settings model for Ciao Sun, optionally backed by a TOML config file."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class SunspotConfig(BaseSettings):
-    """All parameters for a `sunspot find` / `sunspot compare` run."""
+class CiaoSunConfig(BaseSettings):
+    """All parameters for a `ciao-sun find` / `ciao-sun compare` run."""
 
-    model_config = SettingsConfigDict(env_prefix="SUNSPOT_", extra="forbid")
+    model_config = SettingsConfigDict(env_prefix="CIAO_SUN_", extra="forbid")
 
     home_lat: float = Field(..., description="Home latitude, WGS84 degrees")
     home_lon: float = Field(..., description="Home longitude, WGS84 degrees")
@@ -35,7 +35,7 @@ class SunspotConfig(BaseSettings):
     output_dir: Path = Path(".")
 
     @model_validator(mode="after")
-    def _check_ranges(self) -> SunspotConfig:
+    def _check_ranges(self) -> CiaoSunConfig:
         if not (-90.0 <= self.home_lat <= 90.0):
             raise ValueError(f"home_lat out of range: {self.home_lat}")
         if not (-180.0 <= self.home_lon <= 180.0):
@@ -51,7 +51,7 @@ class SunspotConfig(BaseSettings):
         return self
 
     @classmethod
-    def load(cls, config_path: Path | None = None, **overrides: object) -> SunspotConfig:
+    def load(cls, config_path: Path | None = None, **overrides: object) -> CiaoSunConfig:
         """Build a config from an optional TOML file, with keyword overrides on top."""
         data: dict[str, object] = {}
         if config_path is not None:

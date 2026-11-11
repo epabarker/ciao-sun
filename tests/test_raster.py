@@ -6,7 +6,7 @@ import numpy as np
 from affine import Affine
 from rasterio.crs import CRS
 
-from sunspot.raster import RasterGrid, sample
+from ciao_sun.raster import RasterGrid, sample
 
 # 4x4 grid, pixel size 1, corner origin (0, 4): cell (row, col) covers
 # x in [col, col+1), y in (4-row-1, 4-row], i.e. cell (0, 0) covers x in [0, 1),

@@ -19,6 +19,7 @@ export const LAMP_NOTICE = "Sunrise is more than an hour after you wake: switch 
 export const LAMP_ONLY_TITLE = "No daylight in your Morning window.";
 export const LAMP_ONLY_ADVICE = "Switch on a bright lamp when you get up.";
 export const WINDOW_OVER_TITLE = "Morning window has ended.";
+export const EVENING_OVER_TITLE = "Evening window has ended.";
 
 /** What a message can send the person to. */
 export interface AnswerActions {
@@ -190,8 +191,27 @@ function lampOnlyView(answer: Answer, { query, actions }: AnswerContext): Node {
   );
 }
 
-/** No Evening window: it would start after Nominal sunset. */
-function noEveningView(answer: Answer, { query }: AnswerContext): Node {
+/**
+ * No Evening window: it would start after Nominal sunset. When the Query was
+ * asked at or after Nominal sunset that is because the evening is over, which
+ * it says instead, pointing to tomorrow's Morning.
+ */
+function noEveningView(answer: Answer, { query, actions }: AnswerContext): Node {
+  const sunset = answer.nominalSunset;
+  if (query?.now !== undefined && sunset !== undefined && Date.parse(query.now) >= Date.parse(sunset)) {
+    return h(
+      "section",
+      { class: "answer message message-no-evening-window", "data-status": answer.status, role: "status" },
+      h("p", { class: "message-title", "data-field": "no-evening-window" }, EVENING_OVER_TITLE),
+      h(
+        "p",
+        { class: "mute" },
+        `Sunset was at ${clockOf(sunset)}. Plan `,
+        actionButton("plan-tomorrow-morning", "tomorrow's Morning", actions?.planTomorrowMorning),
+        ".",
+      ),
+    );
+  }
   const when = query === undefined || query.now !== undefined ? "today" : `on ${dateLabel(query.date)}`;
   return h(
     "section",

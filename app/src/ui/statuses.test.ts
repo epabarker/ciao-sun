@@ -275,6 +275,17 @@ describe("no Evening window", () => {
     expect(root.querySelectorAll("[data-spot]")).toHaveLength(0);
   });
 
+  it("says the Evening window has ended when now is already past Nominal sunset, and leads to tomorrow's Morning", () => {
+    const actions = { planTomorrowMorning: vi.fn(), showEvening: vi.fn() };
+    const afterSunset = { ...late, wakeTime: "07:00", now: "2026-12-21T16:05:00+00:00" };
+    const root = render(none, { query: afterSunset, actions });
+    expect(text(root, "no-evening-window")).toBe("Evening window has ended.");
+    expect(root.textContent).toContain("Sunset was at 16:04");
+    expect(root.textContent).not.toContain("6 h after you wake");
+    (root.querySelector("[data-action=plan-tomorrow-morning]") as HTMLButtonElement).click();
+    expect(actions.planTomorrowMorning).toHaveBeenCalledOnce();
+  });
+
   it("names the day when the query plans another one", () => {
     const root = render(none, { query: { ...late, now: undefined } });
     expect(text(root, "no-evening-window")).toBe("No Evening window on Mon 21 Dec.");

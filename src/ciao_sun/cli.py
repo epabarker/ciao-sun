@@ -49,8 +49,10 @@ def tiles(
 def profile_only(
     point: str = typer.Argument(..., help="LAT,LON in WGS84 degrees"),
     config: Path | None = typer.Option(None, "--config"),
-    date: str = typer.Option("2026-12-21", "--date"),
-    max_ray: float = typer.Option(3000.0, "--max-ray"),
+    date: str | None = typer.Option(None, "--date", help="Default: config, else 2026-12-21"),
+    max_ray: float | None = typer.Option(
+        None, "--max-ray", help="Metres. Default: config, else 3000"
+    ),
     eye_height: float = typer.Option(EYE_HEIGHT_DEFAULT, "--eye-height"),
     curvature: bool = typer.Option(True, "--curvature/--no-curvature"),
     output_dir: Path = typer.Option(Path("."), "--output-dir"),
@@ -64,6 +66,7 @@ def profile_only(
     """
     lat, lon = _parse_centre(point)
     cfg = CiaoSunConfig.load(config, home_lat=lat, home_lon=lon, date=date, max_ray=max_ray)
+    date, max_ray = cfg.date, cfg.max_ray
     px, py = _WGS84_TO_BNG.transform(lon, lat)
     pad = max_ray
     bounds = (px - pad, py - pad, px + pad, py + pad)

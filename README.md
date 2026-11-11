@@ -11,7 +11,7 @@ The package is mid-way to that shape. The earlier laptop tool's `find` and
 `compare` commands, walking-distance routing and GeoJSON / map / GeoTIFF
 exports have been removed. What the CLI exposes today is:
 
-- `profile-only` -- dump one point's Horizon profile, for cross-checking
+- `profile-only` -- dump the Horizon profile at one coordinate, for cross-checking
   against heywhatsthat by hand.
 - `tiles` -- a placeholder that prints the LIDAR tile codes to download, until
   `fetch` replaces it.
@@ -33,8 +33,8 @@ Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
 elevation exceeds -0.833 degrees at the home coordinate -- the standard
 flat-horizon definition used by almanacs. **This is not the actual local
 sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. This sunrise-hour track is what `profile-only` overlays
-on its plot; it stays only until the Stage 1 solar model replaces it.
+angle is above zero. The track across the hour after Nominal sunrise is what `profile-only`
+overlays on its plot; it stays only until the Stage 1 solar model replaces it.
 
 ## Data
 
@@ -77,7 +77,7 @@ are missing.
 ### Licence and attribution
 
 Environment Agency LIDAR is released under the Open Government Licence.
-Any exported map or report using this data must carry:
+Anything published from this data must carry:
 
 > © Environment Agency copyright and/or database right 2022. All rights
 > reserved.
@@ -116,12 +116,14 @@ rejected):
 | `dsm_dir` | `data/dsm` | Where the DSM tiles are |
 | `dtm_dir` | `data/dtm` | Where the DTM tiles are |
 | `cache_dir` | `data/cache` | Mosaic cache |
+| `date` | `2026-12-21` | Date of the overlaid sun track (`--date` overrides) |
+| `max_ray` | `3000.0` | Furthest obstruction considered, metres (`--max-ray` overrides) |
 | `tz` | `Europe/London` | Time zone of the overlaid sun track |
 | `step_minutes` | `5.0` | Sun-track sampling interval |
-| `window_minutes` | `60.0` | How far past nominal sunrise to track the sun |
+| `window_minutes` | `60.0` | How far past Nominal sunrise to track the sun |
 
-`home_lat` and `home_lon` are required in the file but `profile-only` replaces
-them with its point argument, and `date` and `max_ray` with its flags.
+The point comes from the command's argument, not the file. `--eye-height` and
+`--curvature/--no-curvature` are flags only.
 
 ## Limitations
 

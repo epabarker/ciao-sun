@@ -6,13 +6,14 @@
 // `now`, and the actions a message offers. #47 moves the list into the map's
 // bottom sheet and links rows to markers through `data-spot` (the candidateId).
 
+import { PROTOCOLS_FACTOR } from "../about/about";
 import type { Answer, Query, Spot, Status } from "../contract";
 import { morningWindowOver } from "../query/query";
 import { h } from "./dom";
 import { clockOf, dateLabel, walkLabel } from "./format";
 import { axisScale, timelineBar } from "./timeline";
 
-export const RANKING_REASON = "Ranked by low-sun minutes. Protocols factor: untested in humans.";
+export const RANKING_REASON = `Ranked by low-sun minutes. ${PROTOCOLS_FACTOR}.`;
 
 export const LAMP_NOTICE = "Sunrise is more than an hour after you wake: switch on a bright lamp when you get up.";
 export const LAMP_ONLY_TITLE = "No daylight in your Morning window.";

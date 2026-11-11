@@ -38,6 +38,7 @@ data loader pointed at it as `dataBase`, with the pin `{format: 1, build:
 
 ```
 fixtures/synthetic/queries.json
+fixtures/synthetic/decoded-tiles.json
 fixtures/synthetic/f1/20261111a/manifest.json
 fixtures/synthetic/f1/20261111a/tiles/ST5773.bin
 fixtures/synthetic/f1/20261111a/tiles/ST5873.bin
@@ -80,6 +81,25 @@ What the set exercises:
 | `morning-not-covered` | origin outside the coverage polygon |
 | `evening-winter-solstice`, `evening-summer-solstice`, `evening-september-equinox` | ranked Evening answers, with Last sun and split sun intervals |
 | `evening-no-window` | no Evening window |
+
+### What the Python reader decodes
+
+`fixtures/synthetic/decoded-tiles.json` is outside the build directory and is
+not part of a build. It holds, per grid ref, what `ciao_sun.tile_codec` reads
+from each committed tile, so the JS tile decoder is checked against the Python
+reader with no Python:
+
+| Member | Holds |
+|---|---|
+| `names` | The Spot names, in order |
+| `candidates` | The columns `latE7`, `lonE7`, `nodeIndex`, `offsetCm`, `nameIndex`, whole; `spotNames`, the Spot name of each Candidate |
+| `candidates.profileCodesSha256` | SHA-256 of every Candidate's 1,440 storage codes, one byte each, in Candidate order, with the azimuth delta undone |
+| `candidates.profileDegreesSha256` | SHA-256 of the same profiles as angles: little-endian float64 degrees |
+| `candidates.firstProfileCodes` | Candidate 0's storage codes, to chase a wrong digest with |
+| `walkGraph` | The columns `nodeId`, `nodeLatE7`, `nodeLonE7`, `edgeFrom`, `edgeTo`, `edgeLengthCm`, whole |
+
+The same command writes it, and `tests/test_fixtures.py` fails while it is
+stale.
 
 The world is 320 m long, so no Answer lists more than two spots. Long ranked
 lists, and saturated ties among thousands of Candidates, are only in the

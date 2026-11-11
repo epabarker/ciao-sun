@@ -50,6 +50,7 @@ src/solar/local-day.ts  local civil days and ISO times in a time zone, via Intl
 src/router/world.ts     router: tiles joined into one walk graph; origin snap and Dijkstra walk
 src/scorer/answer.ts    scorer: (Query, tiles, coverage) -> Answer; its rules beside it (see its header)
 src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's category or "unavailable" (fixtures/cloud/cases.json)
+src/forecast/span.ts    the span C is averaged over, from a Query and the scorer's window plans
 test/parity/            the golden-fixture harness (below)
 ```
 
@@ -85,7 +86,8 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 | File | Does | Extended by |
 |---|---|---|
 | `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer; #51 an About link there |
-| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
+| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot` |
+| `ui/sky-slot.ts` | where the sky slot's value came from (`SkySource`, on the select as `data-sky-source`); the line under the sentence with the fetch time and `SKY_CREDIT`, shown only when the forecast filled the slot | |
 | `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
 | `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |
 | `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
@@ -96,6 +98,14 @@ it over the synthetic build. The scorer is called in one place, `score()` in
 `app.ts`, with the manifest's coverage polygon: the scorer decides
 `not-covered` (`scorer/coverage.ts`, which the loader also uses to skip
 fetching tiles for an origin outside it).
+
+The sky slot is pre-filled from the forecast (`askForecast()` in `app.ts`):
+`forecast/span.ts` turns the Query into the span (from the scorer's window
+plans), and `forecastSky()` asks Open-Meteo through the same `fetch` with only
+the 0.05° coordinate (`test/app/forecast-sky.test.ts` checks no request carries
+more). The query never waits for it. A slot set by hand stays so, whatever
+arrives, until the window, date or place changes; offline, a failed or slow
+request, or a date past the horizon leaves the slot for manual entry.
 
 The settings store (`openSettings(() => localStorage)`) has `read()`,
 `update(change)` and `persistent`; a new setting is a field of `Settings` with

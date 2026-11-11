@@ -5,7 +5,7 @@
 // It never throws and never waits long: offline, a failed or hung request,
 // or a span the forecast does not cover gives "unavailable", and the sky
 // slot falls back to manual entry. The span (the Morning window, or the last
-// 3 h of the Evening window) is the caller's to work out from the window.
+// 3 h of the Evening window) is `cloudSpan` in `span.ts`.
 
 import type { Sky } from "../contract";
 

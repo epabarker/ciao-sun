@@ -1,5 +1,5 @@
 [project]
-name = "sunspot"
+name = "ciao-sun"
 version = "0.1.0"
 description = "Find the nearest unobstructed sunrise viewpoint using Environment Agency LIDAR"
 readme = "README.md"
@@ -21,14 +21,14 @@ routing = ["osmnx>=1.9", "networkx>=3.2", "scikit-learn>=1.4"]
 map = ["folium>=0.16"]
 
 [project.scripts]
-sunspot = "sunspot.cli:app"
+ciao-sun = "ciao_sun.cli:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sunspot"]
+packages = ["src/ciao_sun"]
 
 [dependency-groups]
 dev = [
@@ -47,7 +47,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 # typer's Option()/Argument() calls as argument defaults are the documented API.
-"src/sunspot/cli.py" = ["B008"]
+"src/ciao_sun/cli.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

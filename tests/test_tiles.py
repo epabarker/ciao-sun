@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sunspot.tiles import bng_to_tile_code, tile_codes_for_aoi
+from ciao_sun.tiles import bng_to_tile_code, tile_codes_for_aoi
 
 
 def test_bng_origin_is_grid_square_sv():

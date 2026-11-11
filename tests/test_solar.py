@@ -39,9 +39,9 @@ def test_solar_position_matches_usno(ts, expected_alt, expected_az):
 def test_find_sunrise_matches_usno_rise_time():
     """USNO's rise time for 2026-12-21 (tz=0) is 08:13, and its own definition
     (upper limb, standard refraction) is the same -0.833 degree apparent-elevation
-    convention sunspot uses, so this is a valid independent cross-check on time.
+    convention Ciao Sun uses, so this is a valid independent cross-check on time.
     """
-    from sunspot.solar import find_sunrise
+    from ciao_sun.solar import find_sunrise
 
     sunrise = find_sunrise(LAT, LON, "2026-12-21", tz="UTC")
     expected = pd.Timestamp("2026-12-21 08:13", tz="UTC")

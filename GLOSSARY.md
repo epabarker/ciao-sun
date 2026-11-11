@@ -1,4 +1,4 @@
-# Ciao Sun (formerly sunspot)
+# Ciao Sun
 
 Helps a person say hello to the sun after waking and goodbye to it before sunset: it finds nearby places, and times, with the most open sky and the sun in view, for Morning light and Evening light.
 

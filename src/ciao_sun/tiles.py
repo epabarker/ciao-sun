@@ -1,7 +1,7 @@
 """OS National Grid 5 km tile codes, derived arithmetically -- no lookup table.
 
 Downloading LIDAR tiles from environment.data.gov.uk is a manual step (the
-portal is an interactive ESRI widget); `sunspot tiles` tells the user which
+portal is an interactive ESRI widget); `ciao-sun tiles` tells the user which
 5 km squares to select.
 """
 
@@ -23,7 +23,7 @@ def _grid_letters(e100k: int, n100k: int) -> str:
     if not (0 <= e100k <= 6 and 0 <= n100k <= 12):
         raise ValueError(
             "Coordinates fall outside the lettered British National Grid area "
-            f"(e100k={e100k}, n100k={n100k}); sunspot only covers England."
+            f"(e100k={e100k}, n100k={n100k}); Ciao Sun only covers England."
         )
     l1 = (19 - n100k) - (19 - n100k) % 5 + (e100k + 10) // 5
     l2 = (19 - n100k) % 5 * 5 + e100k % 5

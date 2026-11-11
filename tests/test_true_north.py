@@ -21,11 +21,11 @@ from pyproj import Geod, Transformer
 from rasterio.transform import rowcol
 from typer.testing import CliRunner
 
-from sunspot.cli import app
-from sunspot.horizon import horizon_angle, meridian_convergence, ray_samples
-from sunspot.raster import RasterGrid
-from sunspot.search import score_candidates
-from sunspot.solar import SunTrack
+from ciao_sun.cli import app
+from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
+from ciao_sun.raster import RasterGrid
+from ciao_sun.search import score_candidates
+from ciao_sun.solar import SunTrack
 from tests.conftest import make_flat_grid
 
 _WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
@@ -157,7 +157,7 @@ def test_profile_only_reports_a_true_north_horizon_profile(tmp_path):
     dsm, dtm, hx, hy = _bristol_world()
     _write_tile(dsm, tmp_path / "dsm" / "dsm.tif")
     _write_tile(dtm, tmp_path / "dtm" / "dtm.tif")
-    config = tmp_path / "sunspot.toml"
+    config = tmp_path / "ciao-sun.toml"
     config.write_text(
         "home_lat = 0.0\nhome_lon = 0.0\n"
         f'dsm_dir = "{tmp_path / "dsm"}"\n'

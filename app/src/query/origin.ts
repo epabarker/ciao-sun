@@ -1,4 +1,5 @@
-// The typed origin: "lat, lon" in decimal degrees, until saved places (#49).
+// The typed origin: "lat, lon" in decimal degrees. Saved places (#49) are the
+// other non-GPS origin; their coordinates come from the settings store.
 
 export function parseOrigin(text: string): { lat: number; lon: number } | undefined {
   const match = /^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/.exec(text);

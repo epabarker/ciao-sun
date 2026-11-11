@@ -13,9 +13,11 @@ import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./l
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
-import { type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
+import { type SavedPlace, type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
 import { renderAbout } from "./ui/about-view";
+import { h } from "./ui/dom";
+import { renderPlaces } from "./ui/places";
 import { type Result, renderScreen } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
 
@@ -50,7 +52,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   const saved = settings.read();
   const window: WindowName = "morning";
 
-  const state: SentenceState & { dateEdited: boolean } = {
+  const state: SentenceState & { dateEdited: boolean; placesOpen: boolean; placeDraft: string } = {
     window,
     wakeTime: saved.wakeTime,
     savedWakeTime: saved.wakeTime,
@@ -59,6 +61,9 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     sky: "clear",
     maxWalkMin: saved.maxWalkMin,
     origin: { kind: "locating" },
+    places: saved.places,
+    placesOpen: false,
+    placeDraft: "",
   };
   let result: Result = { kind: "loading" };
   let build: Build | undefined;
@@ -74,13 +79,24 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     const slot = state.origin;
     if (slot.kind === "gps") return { lat: slot.lat, lon: slot.lon };
     if (slot.kind === "typed") return parseOrigin(slot.text);
+    if (slot.kind === "place") return { lat: slot.place.lat, lon: slot.place.lon };
     return undefined;
   };
 
   const draw = () => {
+    const places = renderPlaces(
+      {
+        places: state.places,
+        open: state.placesOpen,
+        canSave: state.origin.kind !== "place" && origin() !== undefined,
+        draft: state.placeDraft,
+        persistent: settings.persistent,
+      },
+      placeEvents,
+    );
     renderScreen(root, {
       window,
-      sentence: renderSentence(state, events),
+      sentence: h("div", { class: "ask" }, renderSentence(state, events), places),
       result,
       onAbout: () => setAbout(true),
       about: aboutOpen ? renderAbout(readAbout(build?.manifest), () => setAbout(false)) : undefined,
@@ -139,7 +155,15 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     track(
       deps.locate().then(
         (at) => current() && setOrigin({ kind: "gps", lat: at.lat, lon: at.lon }),
-        () => current() && setOrigin({ kind: "typed", text: "", reason: "Location unavailable: type a position." }),
+        () =>
+          current() &&
+          setOrigin({
+            kind: "typed",
+            text: "",
+            reason: state.places.length
+              ? "Location unavailable: pick a saved place or type a position."
+              : "Location unavailable: type a position.",
+          }),
       ),
     );
   };
@@ -173,6 +197,51 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     useGps() {
       locate();
       refresh();
+    },
+    usePlace(id: string) {
+      const place = state.places.find((p) => p.id === id);
+      if (place) setOrigin({ kind: "place", place });
+    },
+  };
+
+  // Saved places: only ever written to the settings store (#49).
+  const savePlaces = (places: SavedPlace[]) => {
+    state.places = settings.update({ places }).places;
+  };
+  const placeEvents = {
+    togglePlaces() {
+      state.placesOpen = !state.placesOpen;
+      draw();
+    },
+    draftPlace(name: string) {
+      state.placeDraft = name;
+    },
+    savePlace() {
+      const at = state.origin.kind === "place" ? undefined : origin();
+      if (!at) return;
+      const id = String(Math.max(0, ...state.places.map((p) => Number(p.id) || 0)) + 1);
+      const name = state.placeDraft.trim() || `Place ${id}`;
+      savePlaces([...state.places, { id, name, lat: at.lat, lon: at.lon }]);
+      state.placeDraft = "";
+      // The origin is unchanged, so no new query: "here" now says its name.
+      const place = state.places.find((p) => p.id === id);
+      if (place) state.origin = { kind: "place", place };
+      draw();
+    },
+    renamePlace(id: string, name: string) {
+      savePlaces(state.places.map((p) => (p.id === id ? { ...p, name } : p)));
+      const slot = state.origin;
+      const renamed = state.places.find((p) => p.id === id);
+      if (slot.kind === "place" && slot.place.id === id && renamed) state.origin = { kind: "place", place: renamed };
+      draw();
+    },
+    deletePlace(id: string) {
+      savePlaces(state.places.filter((p) => p.id !== id));
+      if (state.origin.kind === "place" && state.origin.place.id === id) {
+        events.useGps();
+      } else {
+        draw();
+      }
     },
   };
 

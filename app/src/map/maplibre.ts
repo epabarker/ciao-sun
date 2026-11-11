@@ -26,6 +26,7 @@ setWorkerUrl(workerUrl);
 const FRAME_MAX_ZOOM = 17;
 const MAX_ZOOM = 19;
 const EDGE_PX = 32;
+const MIN_FRAME_PX = 80;
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -90,8 +91,8 @@ export const createMapLibre: MapFactory = (container: HTMLElement, options: MapO
   const padding = () => {
     const { top, bottom } = options.insets();
     const height = container.clientHeight;
-    // Leave at least a quarter of the map to frame in.
-    const room = Math.max(0, height * 0.75 - top - 2 * EDGE_PX);
+    // Frame between the header and the sheet, in at least MIN_FRAME_PX.
+    const room = Math.max(0, height - top - 2 * EDGE_PX - MIN_FRAME_PX);
     return { top: top + EDGE_PX, bottom: Math.min(bottom, room) + EDGE_PX, left: EDGE_PX, right: EDGE_PX };
   };
 

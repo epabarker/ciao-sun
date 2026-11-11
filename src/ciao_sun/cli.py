@@ -79,6 +79,13 @@ def fetch(
         help="Pin an OS Terrain 50 release, e.g. 2026-07. Default: the cached release, "
         "else the one OS serves now. Fails if the pin is neither cached nor current.",
     ),
+    protomaps_build: str = typer.Option(
+        fetch_inputs.DEFAULT_PROTOMAPS_BUILD,
+        "--protomaps-build",
+        help="Date of the Protomaps daily build the basemap is cut from, as YYYYMMDD. It must "
+        "be the last build of a basemap version Protomaps has finished with: it deletes the "
+        "others after a week. See maps.protomaps.com/builds.",
+    ),
 ) -> None:
     """Download every build input for a coverage polygon and lock it by hash.
 
@@ -88,6 +95,9 @@ def fetch(
         DTM and first-return DSM, for the coverage plus 3 km (see --margin).
       - OS Terrain 50 for Great Britain (the far horizon).
       - A dated Geofabrik .osm.pbf extract (streets, paths, buildings).
+      - The basemap: the vector tiles over the coverage's bounding box, zooms 10
+        to 15, read by byte range out of a pinned Protomaps build and kept as
+        one small PMTiles archive.
 
     Requests are spaced about a second apart and back off on HTTP 403. An
     interrupted download resumes on the next run, and a run with everything
@@ -108,6 +118,7 @@ def fetch(
             ea_year=ea_year,
             osm_region=osm_region,
             terrain50_version=terrain50_version,
+            protomaps_build=protomaps_build,
             margin_m=margin,
             report=typer.echo,
         )
@@ -158,6 +169,7 @@ def build(
     Writes one build directory from the fetched inputs:
       <out>/f1/<build id>/manifest.json
       <out>/f1/<build id>/tiles/<grid ref>.bin   one per 1 km square
+      <out>/f1/<build id>/basemap/{z}/{x}/{y}.mvt   the map behind them
       <out>/f1/<build id>/fixtures/<id>.json     one per query of the query set
       <out>/f1/<build id>/fixtures/index.json
 
@@ -172,6 +184,10 @@ def build(
     The manifest records the attribution, the licence, the LIDAR survey years,
     every input's version and SHA-256, the coverage, the tile index and the
     tolerances the checks passed at.
+
+    The basemap is the Protomaps vector tiles over the coverage's bounding box,
+    zooms 10 to 15, one uncompressed file per tile: no PMTiles archive is
+    written. The manifest records the Protomaps build date and credit.
 
     Each golden fixture is the reference scorer's Answer to one query over the
     new tiles, as `ciao-sun reference` prints it. A query whose Answer does not

@@ -43,7 +43,12 @@ fixtures/synthetic/f1/20261111a/tiles/ST5773.bin
 fixtures/synthetic/f1/20261111a/tiles/ST5873.bin
 fixtures/synthetic/f1/20261111a/fixtures/index.json
 fixtures/synthetic/f1/20261111a/fixtures/<id>.json      15 fixtures, about 26 kB each
+fixtures/synthetic/f1/20261111a/basemap/{z}/{x}/{y}.mvt  7 placeholder files
 ```
+
+The `basemap/` files are a few bytes of text each (`mvt 15/16146/10903`), from
+the synthetic Protomaps build of `tests/basemap_world.py`. They are not vector
+tiles and will not render.
 
 It is the real `build` run on the synthetic world of `tests/build_world.py`:
 one 300 m east-west street astride two 1 km squares, its three edges named West

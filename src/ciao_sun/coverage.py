@@ -73,6 +73,12 @@ class Coverage:
         """
         return shapely.union_all([shapely.Polygon(ring) for ring in self.rings_bng()])
 
+    def bounds_wgs84(self) -> tuple[float, float, float, float]:
+        """The coverage's bounding box in WGS84 degrees: west, south, east, north."""
+        positions = [position for ring in self._outer_rings_wgs84() for position in ring]
+        lons, lats = zip(*positions, strict=True)
+        return min(lons), min(lats), max(lons), max(lats)
+
     def contains(self, lat: float, lon: float) -> bool:
         """Whether a WGS84 position is inside the coverage: inside any outer ring.
 

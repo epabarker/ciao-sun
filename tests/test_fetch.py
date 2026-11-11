@@ -1,4 +1,4 @@
-"""`ciao-sun fetch` against a fake HTTP client: no real EA, OS or Geofabrik traffic.
+"""`ciao-sun fetch` against a fake HTTP client: no real EA, OS, Geofabrik or Protomaps traffic.
 
 Everything is observed through `fetch()`, the lockfile it writes and the files
 the lockfile points at. Time is a fake clock that only `sleep` advances.
@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from pyproj import Transformer
 
+from ciao_sun.basemap import tiles_covering
 from ciao_sun.coverage import Coverage
 from ciao_sun.fetch import (
     FetchError,
@@ -24,6 +25,8 @@ from ciao_sun.fetch import (
     fetch,
     read_lockfile,
 )
+from ciao_sun.pmtiles import Archive
+from tests import basemap_world as protomaps
 
 EA = "https://environment.data.gov.uk/tiles/collections/survey"
 DSM_URL = f"{EA}/lidar_composite_last_return_dsm/2022/1/ST5570"
@@ -48,6 +51,9 @@ def _coverage_in_st5570() -> Coverage:
     return Coverage.from_geojson({"type": "Polygon", "coordinates": [ring]})
 
 
+PROTOMAPS_BUILD = protomaps.archive_bytes(_coverage_in_st5570().bounds_wgs84())
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -69,9 +75,12 @@ class FakeWeb:
             T50_META_URL: json.dumps({"id": "Terrain50", "version": "2026-07"}).encode(),
             T50_URL: b"terrain-50-gb-zip " * 40,
             OSM_URL: b"osm-pbf-bytes " * 40,
+            protomaps.BUILDS_URL: protomaps.builds_json(),
+            protomaps.ARCHIVE_URL: PROTOMAPS_BUILD,
         }
         self.scripted: dict[str, list[Handler]] = {}
         self.honour_range = True
+        self.protomaps_honours_range = True
 
     def clock(self) -> float:
         return self.now
@@ -92,9 +101,10 @@ class FakeWeb:
             return Response(404, iter(()))
         body = self.bodies[url]
         rng = headers.get("Range")
+        if url == protomaps.ARCHIVE_URL:
+            return protomaps.serve_range(body, headers if self.protomaps_honours_range else {})
         if rng and self.honour_range:
-            start = int(rng.removeprefix("bytes=").removesuffix("-"))
-            return Response(206, iter([body[start:]]))
+            return protomaps.serve_range(body, headers)
         return Response(200, iter([body[:100], body[100:]]))
 
     def urls(self) -> list[str]:
@@ -143,7 +153,7 @@ def test_fetch_downloads_all_three_ea_products_terrain_50_and_the_osm_extract(we
 
     lock = read_lockfile(tmp_path)
     by_kind = {entry.kind: entry for entry in lock.inputs}
-    assert sorted(by_kind) == ["dsm", "dtm", "first_return_dsm", "osm", "terrain50"]
+    assert sorted(by_kind) == ["basemap", "dsm", "dtm", "first_return_dsm", "osm", "terrain50"]
     for kind, url in [
         ("dsm", DSM_URL), ("dtm", DTM_URL), ("first_return_dsm", FIRST_URL),
         ("terrain50", T50_URL), ("osm", OSM_URL),
@@ -162,7 +172,7 @@ def test_lockfile_records_source_version_and_retrieval_time_for_every_input(web,
     versions = {item["kind"]: item["version"] for item in raw["inputs"]}
     assert versions == {
         "dsm": "2022", "dtm": "2022", "first_return_dsm": "2022",
-        "terrain50": "2026-07", "osm": "261110",
+        "terrain50": "2026-07", "osm": "261110", "basemap": "20260811",
     }
     for item in raw["inputs"]:
         assert item["source"]
@@ -184,6 +194,7 @@ def test_inputs_are_cached_per_source_tile_and_version(web, tmp_path):
         "first_return_dsm": "ea/lidar_composite_first_return_dsm/2022/ST5570.zip",
         "terrain50": "terrain50/2026-07/terr50_gagg_gb.zip",
         "osm": "osm/europe-united-kingdom-england-261110.osm.pbf",
+        "basemap": "basemap/20260811/z10-15_x16146-16146_y10904-10904.pmtiles",
     }
 
 
@@ -253,7 +264,7 @@ def test_requests_are_spaced_at_least_a_second_apart(web, tmp_path):
     _run(web, tmp_path)
 
     times = [t for t, _, _ in web.requests]
-    assert len(times) == 6
+    assert len(times) > 6  # six downloads, then the basemap's byte ranges
     gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
     assert min(gaps) >= 1.0
 
@@ -307,9 +318,10 @@ def test_a_later_run_resumes_a_download_an_earlier_run_gave_up_on(web, tmp_path)
 
     _run(web, tmp_path)
 
-    assert [(url, headers) for _, url, headers in web.requests] == [
-        (OSM_URL, {"Range": "bytes=60-"})
-    ]
+    # The basemap comes after the OSM extract, so the first run never reached it.
+    assert [
+        (url, headers) for _, url, headers in web.requests if "protomaps" not in url
+    ] == [(OSM_URL, {"Range": "bytes=60-"})]
     (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "osm"]
     assert (tmp_path / entry.path).read_bytes() == web.bodies[OSM_URL]
 
@@ -390,3 +402,102 @@ def test_changing_the_osm_date_fetches_only_the_new_extract(web, tmp_path):
     (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "osm"]
     assert entry.version == "261201"
     assert entry.sha256 == _sha(b"a newer extract")
+
+
+# --- the basemap ------------------------------------------------------------------
+
+
+def _basemap_entry(root: Path):
+    (entry,) = [e for e in read_lockfile(root).inputs if e.kind == "basemap"]
+    return entry
+
+
+def test_fetch_cuts_the_coverages_basemap_tiles_from_the_pinned_protomaps_build(web, tmp_path):
+    _run(web, tmp_path)
+
+    entry = _basemap_entry(tmp_path)
+    assert entry.version == "20260811"  # the Protomaps build date
+    assert entry.url == "https://build.protomaps.com/20260811.pmtiles"
+    assert "Protomaps" in entry.source
+    assert entry.path.startswith("basemap/20260811/") and entry.path.endswith(".pmtiles")
+    cut = tmp_path / entry.path
+    assert entry.sha256 == _sha(cut.read_bytes()) and entry.bytes == cut.stat().st_size
+    archive = Archive.open(cut)
+    wanted = tiles_covering(_coverage_in_st5570())
+    assert len(wanted) >= 6
+    for z, x, y in wanted:
+        assert archive.tile(z, x, y) is not None
+
+
+def test_the_protomaps_build_is_only_ever_read_by_byte_range(web, tmp_path):
+    _run(web, tmp_path)
+
+    asked = [headers for _, url, headers in web.requests if url == protomaps.ARCHIVE_URL]
+    assert asked
+    for headers in asked:
+        first, _, last = headers["Range"].removeprefix("bytes=").partition("-")
+        assert int(first) <= int(last)
+    assert len(cut := (tmp_path / _basemap_entry(tmp_path).path).read_bytes()) < len(
+        PROTOMAPS_BUILD
+    ), len(cut)
+
+
+def test_a_server_that_ignores_range_is_not_sent_the_whole_planet(web, tmp_path):
+    web.protomaps_honours_range = False
+
+    with pytest.raises(FetchError, match="ignored the Range header"):
+        _run(web, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("build", "why"),
+    [
+        ("20260810", "not the last build of basemap version 4.15.1"),
+        ("20261111", "4.15.2, which is still being built daily"),
+        ("20200101", "no build dated 20200101"),
+    ],
+)
+def test_a_build_protomaps_will_not_keep_is_refused_and_the_one_to_pin_is_named(
+    web, tmp_path, build, why
+):
+    web.bodies[f"https://build.protomaps.com/{build}.pmtiles"] = PROTOMAPS_BUILD
+
+    with pytest.raises(FetchError) as excinfo:
+        _run(web, tmp_path, protomaps_build=build)
+
+    assert why in str(excinfo.value)
+    assert "the newest is 20260811" in str(excinfo.value)
+    assert not any("build.protomaps.com" in url for url in web.urls())
+
+
+def test_a_protomaps_build_that_is_not_a_date_is_refused_before_any_request(web, tmp_path):
+    with pytest.raises(FetchError, match="YYYYMMDD"):
+        _run(web, tmp_path, protomaps_build="latest")
+
+    assert web.requests == []
+
+
+def test_a_build_lacking_one_of_the_coverages_tiles_is_an_error(web, tmp_path):
+    z, x, y = tiles_covering(_coverage_in_st5570())[-1]
+    web.bodies[protomaps.ARCHIVE_URL] = protomaps.archive_bytes(
+        _coverage_in_st5570().bounds_wgs84(), without=(z, x, y)
+    )
+
+    with pytest.raises(FetchError, match=f"no tile {z}/{x}/{y}"):
+        _run(web, tmp_path)
+
+
+def test_a_wider_coverage_gets_its_own_basemap_cut(web, tmp_path):
+    _run(web, tmp_path)
+    first = _basemap_entry(tmp_path).path
+    wide = Coverage.from_geojson({
+        "type": "Polygon",
+        "coordinates": [[[-2.65, 51.43], [-2.55, 51.43], [-2.55, 51.47], [-2.65, 51.47],
+                         [-2.65, 51.43]]],
+    })  # fmt: skip
+    web.bodies[protomaps.ARCHIVE_URL] = protomaps.archive_bytes(wide.bounds_wgs84())
+
+    fetch(wide, tmp_path, osm_date="261110", margin_m=0.0, client=web, clock=web.clock,
+          sleep=web.sleep, now=lambda: datetime(2026, 11, 12, tzinfo=UTC))  # fmt: skip
+
+    assert _basemap_entry(tmp_path).path != first

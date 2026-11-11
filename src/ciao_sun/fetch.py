@@ -6,6 +6,8 @@ Inputs, all anonymous downloads:
   DTM and first-return DSM for every tile within the margin of the coverage.
 - OS Terrain 50 for Great Britain, one zip.
 - A dated Geofabrik `.osm.pbf` extract.
+- The basemap: the coverage's tiles out of a pinned Protomaps daily build, read
+  from the 140 GB planet archive by byte range (`basemap.extract`).
 
 Layout under the fetch root (cached per source, tile and version):
 
@@ -13,6 +15,7 @@ Layout under the fetch root (cached per source, tile and version):
     ea/<product>/<year>/<tile>.zip
     terrain50/<version>/terr50_gagg_gb.zip
     osm/<region-with-dashes>-<yymmdd>.osm.pbf
+    basemap/<build date>/z<zooms>_x<columns>_y<rows>.pmtiles
 
 `fetch.lock.json` lists every input with its source, version, URL, SHA-256,
 size, retrieval time and path relative to the lockfile, so `read_lockfile` is
@@ -24,10 +27,19 @@ file that differs from its lockfile hash is refused.
 
 The EA tile URLs are the portal's own undocumented backend (see the
 `research/lidar-access` branch); they are built in `_ea_url` and nowhere else.
+
+Protomaps keeps every daily build for a week and, after that, only the last
+build of each patch version of its basemap
+(https://docs.protomaps.com/basemaps/downloads). So the pinned build must be
+the last of a patch version that a newer version has since replaced: any other
+build is deleted within the week, or is not yet known to be the last.
+`_PROTOMAPS_BUILDS_URL` is the list the builds page (maps.protomaps.com/builds)
+reads; it is not documented.
 """
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -41,7 +53,7 @@ from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Protocol
 
-from ciao_sun import __version__
+from ciao_sun import __version__, basemap
 from ciao_sun.coverage import Coverage
 from ciao_sun.tiles import tile_codes_near_polygon
 
@@ -51,6 +63,7 @@ LOCKFILE_VERSION = 1
 DEFAULT_MARGIN_M = 3000.0
 DEFAULT_EA_YEAR = "2022"
 DEFAULT_OSM_REGION = "europe/united-kingdom/england"
+DEFAULT_PROTOMAPS_BUILD = "20260811"  # the last build of basemap version 4.15.1
 
 MIN_REQUEST_INTERVAL_S = 1.0
 BACKOFF_403_S = (30.0, 60.0, 120.0, 240.0, 480.0)
@@ -76,6 +89,8 @@ _TERRAIN50_URL = (
 )
 _TERRAIN50_FILE = "terr50_gagg_gb.zip"
 _GEOFABRIK_BASE = "https://download.geofabrik.de"
+_PROTOMAPS_BASE = "https://build.protomaps.com"
+_PROTOMAPS_BUILDS_URL = "https://build-metadata.protomaps.dev/builds.json"
 
 
 class FetchError(Exception):
@@ -120,7 +135,7 @@ class LockedInput:
     open sea; it has no file and no hash.
     """
 
-    kind: str  # "dsm" | "dtm" | "first_return_dsm" | "terrain50" | "osm"
+    kind: str  # "dsm" | "dtm" | "first_return_dsm" | "terrain50" | "osm" | "basemap"
     source: str
     tile: str | None
     version: str
@@ -180,6 +195,7 @@ def fetch(
     ea_year: str = DEFAULT_EA_YEAR,
     osm_region: str = DEFAULT_OSM_REGION,
     terrain50_version: str | None = None,
+    protomaps_build: str = DEFAULT_PROTOMAPS_BUILD,
     margin_m: float = DEFAULT_MARGIN_M,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -202,6 +218,8 @@ def fetch(
         raise FetchError(f"Not a Geofabrik region path: {osm_region!r}.")
     if terrain50_version is not None and not re.fullmatch(r"[\w.-]+", terrain50_version):
         raise FetchError(f"Not a Terrain 50 version: {terrain50_version!r}.")
+    if not re.fullmatch(r"\d{8}", protomaps_build):
+        raise FetchError(f"Protomaps build must be its date as YYYYMMDD, not {protomaps_build!r}.")
 
     root.mkdir(parents=True, exist_ok=True)
     session = _Session(client, clock, sleep, report)
@@ -243,6 +261,19 @@ def fetch(
             path=f"osm/{osm_region.replace('/', '-')}-{osm_date}.osm.pbf",
         )
     )
+    x0, x1, y0, y1 = basemap.tile_range(coverage, basemap.MAX_ZOOM)
+    wanted.append(
+        _Wanted(
+            kind="basemap",
+            source="Protomaps basemap daily build",
+            tile=None,
+            version=protomaps_build,
+            url=f"{_PROTOMAPS_BASE}/{protomaps_build}.pmtiles",
+            path=f"basemap/{protomaps_build}/z{basemap.MIN_ZOOM}-{basemap.MAX_ZOOM}"
+            f"_x{x0}-{x1}_y{y0}-{y1}.pmtiles",
+            download=functools.partial(_extract_basemap, coverage),
+        )
+    )
 
     entries = [_obtain(item, root, previous.get(item.path), session, stamp) for item in wanted]
 
@@ -260,6 +291,8 @@ class _Wanted:
     url: str
     path: str
     may_be_absent: bool = False
+    # Writes the input to a `.part` file; False means the server does not publish it.
+    download: Callable[[_Wanted, Path, _Session], bool] | None = None
 
 
 def _ea_url(product: str, year: str, tile: str) -> str:
@@ -315,6 +348,25 @@ class _Session:
                 self.report(f"connection dropped for {url}: {exc}")
         raise FetchError(f"{url}: connection dropped {MAX_DROPS_WITHOUT_PROGRESS} times.")
 
+    def get_range(self, url: str, offset: int, length: int) -> bytes:
+        """`length` bytes of a large file from `offset`; fewer only at its end. Retries drops."""
+        headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
+        for _ in range(MAX_DROPS_WITHOUT_PROGRESS):
+            try:
+                response = self.get(url, headers)
+                if response.status == 200:
+                    response.close()
+                    raise FetchError(
+                        f"{url}: the server ignored the Range header and offered the whole file."
+                    )
+                if response.status != 206:
+                    response.close()
+                    raise FetchError(f"{url}: HTTP {response.status}")
+                return b"".join(response.chunks)
+            except TransportError as exc:
+                self.report(f"connection dropped for {url}: {exc}")
+        raise FetchError(f"{url}: connection dropped {MAX_DROPS_WITHOUT_PROGRESS} times.")
+
 
 def _terrain50_version(root: Path, pinned: str | None, session: _Session) -> str:
     """The Terrain 50 version to use: cached if we have it, else what OS serves now.
@@ -345,6 +397,54 @@ def _terrain50_version(root: Path, pinned: str | None, session: _Session) -> str
     return served
 
 
+def _extract_basemap(coverage: Coverage, item: _Wanted, part: Path, session: _Session) -> bool:
+    """Cut the coverage's basemap tiles from the pinned Protomaps build into `part`."""
+    _check_protomaps_build(item.version, session)
+    try:
+        basemap.extract(functools.partial(session.get_range, item.url), coverage, part)
+    except basemap.BasemapError as exc:
+        raise FetchError(f"{item.url}: {exc}") from exc
+    return True
+
+
+def _check_protomaps_build(build: str, session: _Session) -> None:
+    """Refuse a build Protomaps does not keep: one that is not the last of a finished version."""
+    try:
+        listed = json.loads(session.get_bytes(_PROTOMAPS_BUILDS_URL))
+        builds = sorted(
+            (str(entry["key"]).removesuffix(".pmtiles"), str(entry["version"])) for entry in listed
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise FetchError(
+            f"{_PROTOMAPS_BUILDS_URL}: could not read the list of Protomaps builds: {exc!r}"
+        ) from exc
+    if not builds:
+        raise FetchError(f"{_PROTOMAPS_BUILDS_URL}: Protomaps lists no builds.")
+    newest_version = builds[-1][1]
+    last_of = {version: date for date, version in builds}  # sorted, so the last date wins
+    kept = sorted(date for version, date in last_of.items() if version != newest_version)
+    advice = (
+        f"Pin the last build of a version Protomaps has finished with, which it keeps: "
+        f"the newest is {kept[-1]}."
+        if kept
+        else "Protomaps lists no finished version yet."
+    )
+    versions = dict(builds)
+    if build not in versions:
+        raise FetchError(f"Protomaps has no build dated {build}. {advice}")
+    version = versions[build]
+    if version == newest_version:
+        raise FetchError(
+            f"Protomaps build {build} is of basemap version {version}, which is still being "
+            f"built daily, so it will be deleted within a week. {advice}"
+        )
+    if last_of[version] != build:
+        raise FetchError(
+            f"Protomaps build {build} is not the last build of basemap version {version} "
+            f"({last_of[version]} is), so it will be deleted within a week. {advice}"
+        )
+
+
 def _obtain(
     item: _Wanted,
     root: Path,
@@ -361,7 +461,7 @@ def _obtain(
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
         session.report(f"fetching {item.path}")
-        if not _download(item, part, session):
+        if not (item.download or _download)(item, part, session):
             session.report(f"not published (404), recorded as absent: {item.path}")
             return _entry(item, None, None, stamp, absent=True)
         _check_hash(item, part, expected, "downloaded")

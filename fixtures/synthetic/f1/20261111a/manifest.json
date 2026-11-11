@@ -207,6 +207,16 @@
       "bytes": 360,
       "absent": false,
       "timestamp": "2026-11-09T21:20:45Z"
+    },
+    {
+      "kind": "basemap",
+      "source": "Protomaps basemap daily build",
+      "tile": null,
+      "version": "20260811",
+      "url": "https://build.protomaps.com/20260811.pmtiles",
+      "sha256": "35b1a2683a902ce855ebb46c5de6ebb213d8c466b76b6e7cdba45896266561ae",
+      "bytes": 625,
+      "absent": false
     }
   ],
   "coverage": {
@@ -267,5 +277,20 @@
       "candidatesAllowed": 0,
       "candidatesFound": 0
     }
+  },
+  "basemap": {
+    "protomapsBuild": "20260811",
+    "tilesetVersion": "4.15.1",
+    "osmTimestamp": "2026-08-11T04:00:00Z",
+    "minZoom": 10,
+    "maxZoom": 15,
+    "bounds": [
+      -2.6087265511658946,
+      51.457994802289726,
+      -2.603089691584964,
+      51.45982202430133
+    ],
+    "tileCount": 7,
+    "bytes": 113
   }
 }

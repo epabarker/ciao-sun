@@ -1,4 +1,4 @@
-# Handoff: `sunspot` — nearest unobstructed sunrise viewpoint finder
+# Handoff: `ciao-sun` — nearest unobstructed sunrise viewpoint finder
 
 You are implementing a small, well-tested Python tool. A working prototype exists at
 `prototype/find_sunrise_spots.py`. Treat it as a reference for the maths, **not** as
@@ -77,7 +77,7 @@ carry the attribution string `© Environment Agency copyright and/or database ri
 an interactive ESRI widget. Instead:
 
 - Document the download steps in the README.
-- Provide `sunspot tiles --centre LAT,LON --radius M` which prints the list of OS
+- Provide `ciao-sun tiles --centre LAT,LON --radius M` which prints the list of OS
   5 km tile codes the user needs (e.g. `ST5575, ST5580, ST6075, ST6080`), so they
   know what to select. Derive tile codes arithmetically from BNG eastings/northings;
   do not hardcode a lookup table.
@@ -86,11 +86,11 @@ an interactive ESRI widget. Instead:
 ## 4. Deliverables
 
 ```
-sunspot/
+ciao-sun/
 ├── pyproject.toml            # uv or hatch; Python >=3.11
 ├── README.md
 ├── HANDOFF.md                # this file
-├── src/sunspot/
+├── src/ciao_sun/
 │   ├── __init__.py
 │   ├── cli.py                # typer
 │   ├── config.py             # pydantic settings model, TOML-backed
@@ -109,10 +109,10 @@ sunspot/
 ### CLI
 
 ```
-sunspot tiles   --centre 51.4720,-2.6040 --radius 1500
-sunspot find    --config sunspot.toml
-sunspot find    --centre 51.4720,-2.6040 --date 2026-12-21 --radius 1500
-sunspot compare --centre ... --dates 2026-12-21,2027-03-20,2027-06-21
+ciao-sun tiles   --centre 51.4720,-2.6040 --radius 1500
+ciao-sun find    --config ciao-sun.toml
+ciao-sun find    --centre 51.4720,-2.6040 --date 2026-12-21 --radius 1500
+ciao-sun compare --centre ... --dates 2026-12-21,2027-03-20,2027-06-21
 ```
 
 `compare` intersects the passing sets across dates and reports year-round spots.
@@ -207,8 +207,8 @@ from terrain data.
 ## 8. Acceptance criteria
 
 - [ ] `uv run pytest` passes; all eight test groups above present and meaningful.
-- [ ] `sunspot tiles` prints correct OS tile codes for the Bristol example.
-- [ ] `sunspot find` runs end to end on real Bristol tiles in under 2 minutes for
+- [ ] `ciao-sun tiles` prints correct OS tile codes for the Bristol example.
+- [ ] `ciao-sun find` runs end to end on real Bristol tiles in under 2 minutes for
       radius 1500 m, spacing 10 m, `max_ray` 3000 m, on a laptop CPU.
 - [ ] Missing or misaligned tiles produce an actionable error, not a traceback.
 - [ ] `--profile-only` output for the home coordinate is visually consistent with

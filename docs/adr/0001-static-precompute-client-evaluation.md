@@ -4,7 +4,7 @@ status: accepted
 
 # Static precomputed Horizon profiles, evaluated on the phone
 
-sunspot has no server. Horizon profiles are precomputed offline and served as static 1 km tiles. Each tile also holds the walk graph and Candidates. The phone does all of the date-dependent work: the sun track, the Morning window, Sun minutes, Sky openness, ranking and walk routing. So the JS client is the canonical scorer. The Python code is the build pipeline, plus a reference that generates parity fixtures for the JS to match. The JS solar model must agree with pvlib within 0.01°.
+Ciao Sun has no server. Horizon profiles are precomputed offline and served as static 1 km tiles. Each tile also holds the walk graph and Candidates. The phone does all of the date-dependent work: the sun track, the Morning window, Sun minutes, Sky openness, ranking and walk routing. So the JS client is the canonical scorer. The Python code is the build pipeline, plus a reference that generates parity fixtures for the JS to match. The JS solar model must agree with pvlib within 0.01°.
 
 Profiles don't depend on the date, so precomputing them loses nothing except a small interpolation error: about 0.5 min of first sun at 0.25° steps. On-demand evaluation costs about 72 core-seconds per query, against about 12 ms on the client. Static tiles also keep GPS on the phone and cost nothing per query. They also scale to Stage 3 on a CDN.
 

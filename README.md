@@ -1,4 +1,4 @@
-# sunspot
+# Ciao Sun
 
 Find the nearest places you can stand and see the sun during the first hour
 after sunrise, with nothing (terrain, buildings, trees) blocking the line of
@@ -7,12 +7,12 @@ sight, using Environment Agency LIDAR for England.
 ## How it works
 
 For each candidate standing position and each time step across the hour after
-sunrise, sunspot computes the sun's azimuth and apparent elevation, casts a ray
+sunrise, Ciao Sun computes the sun's azimuth and apparent elevation, casts a ray
 from the observer's eye along that azimuth across a Digital Surface Model, and
 compares the ray's maximum obstruction angle to the sun's elevation. That gives
 every candidate a clear/blocked pattern across the hour.
 
-`sunspot find` then looks for an **unbroken run of clear time steps** at least
+`ciao-sun find` then looks for an **unbroken run of clear time steps** at least
 `min_clear_minutes` long (default 5) -- not just an overall fraction of the
 hour clear, which says nothing about whether the clear moments are contiguous
 or scattered across the hour. A candidate that's clear for six separate
@@ -20,7 +20,7 @@ one-minute slivers is not useful for standing and watching a sunrise; one
 clear for fifteen minutes straight is. The nearest passing positions are
 reported, along with the actual clock time of their longest clear window.
 
-(`sunspot compare`, which looks for spots clear across several dates at once,
+(`ciao-sun compare`, which looks for spots clear across several dates at once,
 still uses the older `pass_fraction` -- overall fraction of the hour clear --
 rather than the contiguous-window logic. That's a known inconsistency, not a
 design decision; `find` is where the window-based logic actually lives.)
@@ -35,7 +35,7 @@ Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
 elevation exceeds -0.833 degrees at the home coordinate -- the standard
 flat-horizon definition used by almanacs. **This is not the actual local
 sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. sunspot answers "where can I see the sun during the hour
+angle is above zero. Ciao Sun answers "where can I see the sun during the hour
 after nominal sunrise", not "when does the sun first appear at this exact
 spot".
 
@@ -60,7 +60,7 @@ tiles you need:
 1. Work out which 5 km tiles cover your area of interest:
 
    ```
-   uv run sunspot tiles --centre 51.4720,-2.6040 --radius 1500
+   uv run ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
    ```
 
 2. Go to <https://environment.data.gov.uk/>, search "LIDAR", open "Download
@@ -69,12 +69,12 @@ tiles you need:
 3. Download **LIDAR Composite DSM - 1m** for that area, and separately
    **LIDAR Composite DTM - 1m** for the same area.
 4. Unzip both downloads into `data/dsm/` and `data/dtm/` respectively.
-   sunspot searches those directories recursively for `.tif` files, so the
+   Ciao Sun searches those directories recursively for `.tif` files, so the
    per-tile subdirectories the portal creates (e.g.
    `data/dtm/lidar_composite_dtm-2022-1-ST57ne/ST57ne_DTM_1m.tif`) are fine as
    they are.
 
-`sunspot find` will fail with a clear message (not a traceback) if tiles are
+`ciao-sun find` will fail with a clear message (not a traceback) if tiles are
 missing or don't cover the requested area.
 
 ### Licence and attribution
@@ -106,12 +106,12 @@ uv sync --extra routing --extra map
 ## CLI
 
 ```
-sunspot tiles   --centre 51.4720,-2.6040 --radius 1500
-sunspot find    --config sunspot.toml
-sunspot find    --centre 51.4720,-2.6040 --date 2026-12-21 --radius 1500 --min-clear-minutes 10
-sunspot find    --centre 51.4720,-2.6040 --date 2026-12-21 --walk --map
-sunspot compare --centre 51.4720,-2.6040 --dates 2026-12-21,2027-03-20,2027-06-21
-sunspot profile-only 51.4720,-2.6040 --date 2026-12-21
+ciao-sun tiles   --centre 51.4720,-2.6040 --radius 1500
+ciao-sun find    --config ciao-sun.toml
+ciao-sun find    --centre 51.4720,-2.6040 --date 2026-12-21 --radius 1500 --min-clear-minutes 10
+ciao-sun find    --centre 51.4720,-2.6040 --date 2026-12-21 --walk --map
+ciao-sun compare --centre 51.4720,-2.6040 --dates 2026-12-21,2027-03-20,2027-06-21
+ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
 
 `compare` intersects the passing sets across dates and reports the
@@ -124,7 +124,7 @@ which computes the same thing from independent terrain data.
 
 ### Configuration
 
-Most parameters can be set via `--config sunspot.toml` (CLI flags, where they
+Most parameters can be set via `--config ciao-sun.toml` (CLI flags, where they
 exist, override the file). The ones most worth knowing about:
 
 | Key | Default | Meaning |
@@ -139,7 +139,7 @@ exist, override the file). The ones most worth knowing about:
 | `eye_height` | `1.6` | Observer eye height above bare earth, metres |
 | `curvature` | `true` | Earth curvature + standard refraction in the horizon calculation |
 
-A minimal `sunspot.toml`:
+A minimal `ciao-sun.toml`:
 
 ```toml
 home_lat = 51.4720
@@ -190,7 +190,7 @@ don't, for this level of use.)
 `--walk` ranks candidates by walking-network distance instead of straight
 line, using `osmnx`/`networkx` (install with `uv sync --extra routing`). This
 also implicitly filters out points in private gardens, which straight-line
-ranking cannot do. If osmnx/networkx aren't installed, sunspot warns and falls
+ranking cannot do. If osmnx/networkx aren't installed, Ciao Sun warns and falls
 back to straight-line distance rather than failing. osmnx's own street-network
 cache is redirected to `data/cache/osmnx/` (its default is a `cache/`
 directory wherever you happen to run the command from).
@@ -221,7 +221,7 @@ directory wherever you happen to run the command from).
   timestamp, so it's a lower bound at the sampling resolution -- see
   `step_minutes` above.
 - **England only.** LIDAR coverage and the OS National Grid tile-code scheme
-  used by `sunspot tiles` don't extend elsewhere.
+  used by `ciao-sun tiles` don't extend elsewhere.
 
 ## Development
 

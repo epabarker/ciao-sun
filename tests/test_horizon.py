@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from sunspot.horizon import R_EFF, curvature_drop, horizon_angle, ray_samples
+from ciao_sun.horizon import R_EFF, curvature_drop, horizon_angle, ray_samples
 
 EYE_HEIGHT = 1.6
 

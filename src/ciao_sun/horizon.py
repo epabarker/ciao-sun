@@ -26,7 +26,7 @@ import warnings
 import numpy as np
 from pyproj import Proj, Transformer
 
-from sunspot.raster import RasterGrid, sample
+from ciao_sun.raster import RasterGrid, sample
 
 _BNG = Proj("EPSG:27700")
 _BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)

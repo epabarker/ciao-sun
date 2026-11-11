@@ -14,9 +14,9 @@ import pandas as pd
 from affine import Affine
 from rasterio.crs import CRS
 
-from sunspot.raster import RasterGrid
-from sunspot.search import passing_mask, score_candidates
-from sunspot.solar import SunTrack
+from ciao_sun.raster import RasterGrid
+from ciao_sun.search import passing_mask, score_candidates
+from ciao_sun.solar import SunTrack
 
 RIDGE_T = 60.0
 RIDGE_HEIGHT = 2.0

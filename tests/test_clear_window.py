@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from sunspot.search import (
+from ciao_sun.search import (
     SearchResult,
     clear_window_minutes,
     longest_clear_run,

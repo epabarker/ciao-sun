@@ -29,7 +29,7 @@ def walk_distances(
     except ImportError:
         warnings.warn(
             "osmnx/networkx not installed; falling back to straight-line distance. "
-            "Install sunspot[routing] to enable walking distance.",
+            "Install ciao-sun[routing] to enable walking distance.",
             stacklevel=2,
         )
         return None

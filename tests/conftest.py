@@ -7,7 +7,7 @@ import pytest
 from affine import Affine
 from rasterio.crs import CRS
 
-from sunspot.raster import RasterGrid
+from ciao_sun.raster import RasterGrid
 
 BNG = CRS.from_epsg(27700)
 

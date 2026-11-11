@@ -1,6 +1,6 @@
 // The About sheet's content (spec #27, user stories 50-55): the credits,
 // survey years and licence of the build actually loaded, read from its
-// manifest, plus the fixed caveats.
+// manifest, plus the fixed caveats and privacy line.
 //
 // Nothing here names a data source: every credit, year and licence comes from
 // the manifest (`ciao_sun.manifest`), so a new build's credits need no app
@@ -72,6 +72,14 @@ export const CAVEATS = {
 } as const;
 
 export type CaveatKey = keyof typeof CAVEATS;
+
+/**
+ * What the data host can learn, as fixed copy (Ed's ruling on the #27 review;
+ * ADR 0001). The position never leaves the phone, but the tiles a query loads
+ * show roughly where it is.
+ */
+export const PRIVACY =
+  "Map and data tiles are fetched from our data host, so it sees roughly which area you're looking at, never your exact position.";
 
 /** "2019", "2019 and 2021", "2017, 2019 and 2021". */
 export function listYears(years: readonly number[]): string {

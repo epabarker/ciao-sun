@@ -90,6 +90,22 @@ def _attribution(inputs: Sequence[LockedInput]) -> list[dict[str, str]]:
         {"source": "OpenStreetMap", "text": "© OpenStreetMap contributors", **_ODBL},
         # The basemap is OpenStreetMap data, built into tiles by Protomaps.
         {"source": "Protomaps", "text": PROTOMAPS_ATTRIBUTION, **_ODBL},
+        # The sky slot's forecast, credited as the sky slot itself words it
+        # (`SKY_CREDIT` in `app/src/ui/sky-slot.ts`): the Met Office's data is
+        # CC BY-SA 4.0, Open-Meteo's service CC BY 4.0.
+        {
+            "source": "Met Office",
+            "text": "Forecast data from the Met Office via Open-Meteo, "
+            "cloud cover categorised by Ciao Sun",
+            "licence": "CC BY-SA 4.0",
+            "licenceUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+        },
+        {
+            "source": "Open-Meteo",
+            "text": "Weather data by Open-Meteo.com",
+            "licence": "CC BY 4.0",
+            "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+        },
     ]
 
 

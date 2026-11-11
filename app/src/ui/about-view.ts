@@ -5,10 +5,11 @@
 //     survey years [data-field=survey-years]
 //     licence      [data-field=licence], the bundle's
 //     caveats      one [data-caveat=<key>] per CAVEATS entry
+//     privacy      [data-field=privacy], what the data host sees
 //
 // Whether it is open is app state, so a re-render keeps it open.
 
-import { type About, CAVEATS, type CaveatKey, type Credit, PROTOCOLS_FACTOR, listYears } from "../about/about";
+import { type About, CAVEATS, type CaveatKey, type Credit, PRIVACY, PROTOCOLS_FACTOR, listYears } from "../about/about";
 import { h } from "./dom";
 
 export const ABOUT_TITLE = "About the data";
@@ -42,6 +43,7 @@ export function renderAbout(about: About | undefined, onClose: () => void): HTML
         ),
       ),
     ),
+    h("p", { class: "mute", "data-field": "privacy" }, PRIVACY),
     close,
   );
 }

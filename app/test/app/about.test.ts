@@ -55,6 +55,10 @@ function openAbout(root: HTMLElement) {
   return sheet as HTMLElement;
 }
 
+// Ed's ruling on the #27 review: the data host sees which tiles a query loads.
+const PRIVACY =
+  "Map and data tiles are fetched from our data host, so it sees roughly which area you're looking at, never your exact position.";
+
 const credits = (sheet: HTMLElement) => [...sheet.querySelectorAll("[data-credit]")].map((el) => el.textContent);
 
 describe("About the data sheet", () => {
@@ -67,6 +71,8 @@ describe("About the data sheet", () => {
       "Ordnance Survey: Contains OS data © Crown copyright and database right 2026 Open Government Licence v3.0",
       "OpenStreetMap: © OpenStreetMap contributors Open Database License (ODbL) v1.0",
       "Protomaps: Protomaps © OpenStreetMap Open Database License (ODbL) v1.0",
+      "Met Office: Forecast data from the Met Office via Open-Meteo, cloud cover categorised by Ciao Sun CC BY-SA 4.0",
+      "Open-Meteo: Weather data by Open-Meteo.com CC BY 4.0",
     ]);
     expect(sheet.querySelector("[data-field=survey-years]")?.textContent).toBe(
       "The LIDAR in this build was flown in 2019 and 2021.",
@@ -77,6 +83,7 @@ describe("About the data sheet", () => {
     expect(sheet.querySelector<HTMLAnchorElement>("[data-field=licence] a")?.href).toBe(
       "https://opendatacommons.org/licenses/odbl/1-0/",
     );
+    expect(sheet.querySelector("[data-field=privacy]")?.textContent).toBe(PRIVACY);
   });
 
   it("renders the credits, years and licence from the manifest it is given, not from the app", async () => {
@@ -156,5 +163,6 @@ describe("About the data sheet", () => {
     expect(credits(sheet)).toEqual([]);
     expect(sheet.querySelector("[data-field=credits-pending]")?.textContent).toBe("Credits and the licence load with the data.");
     expect(sheet.querySelectorAll("[data-caveat]")).toHaveLength(5);
+    expect(sheet.querySelector("[data-field=privacy]")?.textContent).toBe(PRIVACY);
   });
 });

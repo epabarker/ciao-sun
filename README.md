@@ -13,8 +13,8 @@ exports have been removed. What the CLI exposes today is:
 
 - `profile-only` -- dump the Horizon profile at one coordinate, for cross-checking
   against heywhatsthat by hand.
-- `tiles` -- a placeholder that prints the LIDAR tile codes to download, until
-  `fetch` replaces it.
+- `fetch` -- download every build input for a coverage polygon and lock it by
+  hash.
 
 The build's output is one binary file per 1 km square, in tile format `f1`.
 `docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
@@ -31,20 +31,23 @@ moment when its apparent elevation is above the horizon angle on its azimuth.
 `HANDOFF.md` is the original design brief for the laptop tool. It is kept for
 the maths and gotchas; its CLI and outputs sections are historical.
 
-## Sunrise definition
+## Solar model
 
-Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
-elevation exceeds -0.833 degrees at the home coordinate -- the standard
-flat-horizon definition used by almanacs. **This is not the actual local
-sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. The track across the hour after Nominal sunrise is what `profile-only`
-overlays on its plot; it stays only until the Stage 1 solar model replaces it.
+The sun track is one local day at 1 min steps: true azimuth from NREL SPA and
+the apparent elevation of the disc centre, which is the SPA geometric
+elevation plus one refraction model that stays continuous below 0 degrees.
+Nominal sunrise and Nominal sunset are when the geometric centre crosses
+-0.833 degrees, the flat-horizon definition almanacs use; they are **not**
+when the sun appears or disappears at an obstructed site. Solar noon is the
+upper transit. `docs/solar-model.md` specifies all of it for the JS port,
+which must agree within 0.01 degrees. `profile-only` overlays the day's track,
+from Nominal sunrise to Nominal sunset, on its plot.
 
 ## Data
 
 **Source:** Environment Agency, via <https://environment.data.gov.uk/>.
 
-Two products are required, both delivered as GeoTIFF in 5 km tiles on the OS
+The DSM and DTM are both delivered as GeoTIFF in 5 km tiles on the OS
 National Grid (EPSG:27700), values in metres above Ordnance Survey Newlyn
 datum, +/-15 cm vertical RMSE:
 
@@ -53,27 +56,33 @@ datum, +/-15 cm vertical RMSE:
 | LIDAR Composite DSM -- 1 m | Obstacles: last-return surface including buildings and vegetation |
 | LIDAR Composite DTM -- 1 m | Bare earth, for observer standing height |
 
-### Downloading tiles (manual step)
+### Fetching the build inputs
 
-The portal is an interactive ESRI widget and cannot be scripted. To get the
-tiles you need:
+```
+uv run ciao-sun fetch --coverage bristol.geojson --osm-date 261110
+```
 
-1. Work out which 5 km tiles cover your area of interest:
+`--coverage` is a GeoJSON Polygon or MultiPolygon in WGS84 longitude/latitude.
+`fetch` downloads, into `data/inputs/` (`--out`):
 
-   ```
-   uv run ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
-   ```
+| Input | Where it lands |
+|---|---|
+| EA LIDAR Composite 1 m last-return DSM, DTM and first-return DSM, every 5 km tile within 3 km of the coverage | `ea/<product>/<year>/<tile>.zip` |
+| OS Terrain 50 for Great Britain | `terrain50/<version>/terr50_gagg_gb.zip` |
+| The Geofabrik `.osm.pbf` extract of that date | `osm/<region>-<yymmdd>.osm.pbf` |
 
-2. Go to <https://environment.data.gov.uk/>, search "LIDAR", open "Download
-   the Survey Data", and draw an area of interest that covers those tiles (or
-   larger -- the tool only uses what's in each tile's bounding box).
-3. Download **LIDAR Composite DSM - 1m** for that area, and separately
-   **LIDAR Composite DTM - 1m** for the same area.
-4. Unzip both downloads into `data/dsm/` and `data/dtm/` respectively.
-   Ciao Sun searches those directories recursively for `.tif` files, so the
-   per-tile subdirectories the portal creates (e.g.
-   `data/dtm/lidar_composite_dtm-2022-1-ST57ne/ST57ne_DTM_1m.tif`) are fine as
-   they are.
+It also writes `fetch.lock.json` there: every input's source, version, URL,
+SHA-256, size, retrieval time and path relative to the lockfile, plus the
+coverage and margin. `ciao_sun.fetch.read_lockfile` reads it back.
+
+Requests are about a second apart and back off on HTTP 403. A dropped download
+resumes on the next run, and a run with everything cached makes no requests.
+No upstream publishes a SHA-256, so the first fetch records each hash and any
+later cached or re-downloaded file that differs is refused. EA tiles the
+server does not publish (404, e.g. open sea) are recorded as `absent`.
+
+`profile-only` does not read this cache yet: it still wants unzipped GeoTIFFs
+under `data/dsm/` and `data/dtm/` (searched recursively).
 
 `ciao-sun profile-only` fails with a clear message (not a traceback) if tiles
 are missing.
@@ -97,7 +106,7 @@ uv sync
 ## CLI
 
 ```
-ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
+ciao-sun fetch --coverage bristol.geojson --osm-date 261110
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
 
@@ -123,8 +132,6 @@ rejected):
 | `date` | `2026-12-21` | Date of the overlaid sun track (`--date` overrides) |
 | `max_ray` | `3000.0` | Furthest obstruction considered, metres (`--max-ray` overrides) |
 | `tz` | `Europe/London` | Time zone of the overlaid sun track |
-| `step_minutes` | `5.0` | Sun-track sampling interval |
-| `window_minutes` | `60.0` | How far past Nominal sunrise to track the sun |
 
 The point comes from the command's argument, not the file. `--eye-height` and
 `--curvature/--no-curvature` are flags only.
@@ -151,7 +158,7 @@ The point comes from the command's argument, not the file. `--eye-height` and
   earth. Using the DSM for standing height would place candidates on rooftops
   and in tree canopies.
 - **England only.** LIDAR coverage and the OS National Grid tile-code scheme
-  used by `ciao-sun tiles` don't extend elsewhere.
+  used by `ciao-sun fetch` don't extend elsewhere.
 
 ## Development
 

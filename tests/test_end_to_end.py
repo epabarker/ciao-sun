@@ -43,8 +43,11 @@ def test_positions_behind_the_ridge_are_all_blocked_and_near_side_passes():
     track = SunTrack(
         times=pd.DatetimeIndex(["2026-12-21 08:00"], tz="UTC"),
         azimuth=np.array([SUN_AZIMUTH]),
+        elevation=np.array([SUN_ELEVATION]),
         apparent_elevation=np.array([SUN_ELEVATION]),
-        sunrise=pd.Timestamp("2026-12-21 08:00", tz="UTC"),
+        nominal_sunrise=None,
+        nominal_sunset=None,
+        solar_noon=pd.Timestamp("2026-12-21 12:08", tz="UTC"),
     )
 
     result = score_candidates(

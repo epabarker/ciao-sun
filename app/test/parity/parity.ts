@@ -148,3 +148,80 @@ export function nearBoundaryFreedom(fixture: FixtureDocument): NearBoundaryFreed
     any: Object.keys(candidates).length > 0 || lowSunBandInWindow.length > 0,
   };
 }
+
+// What a flip of sun in view at one Candidate can change in that Candidate's
+// Spot (docs/fixtures.md, "Near-boundary minutes").
+const FOLLOWS_FROM_SUN_IN_VIEW = new Set([
+  "sunIntervals",
+  "lowSunIntervals",
+  "sunMinutes",
+  "lowSunMinutes",
+  "lastSun",
+  "leaveBy",
+  "targetMet",
+]);
+// What a flip of "low sun" at one minute can change in any Spot.
+const FOLLOWS_FROM_LOW_SUN = new Set(["lowSunIntervals", "lowSunMinutes"]);
+const SPOT_MEMBER = /^(spots\[(\d+)\]|nearestSunBeyondLimit)\.([A-Za-z]+)/;
+
+/**
+ * The near-boundary minutes that can change this fixture's Answer: the
+ * Candidate minutes inside the Answer's window, or the whole day's for an
+ * Evening window, whose Last sun is looked for over the whole day; and the
+ * low-sun-band minutes inside the window.
+ */
+export function effectiveFreedom(fixture: FixtureDocument): NearBoundaryFreedom {
+  const freedom = nearBoundaryFreedom(fixture);
+  const window = fixture.answer.window;
+  // An Evening window's Spots carry Last sun.
+  const wholeDay = fixture.query.window === "evening";
+  // Compared as instants: the offset changes within a day when the clocks do.
+  const inWindow = (iso: string) =>
+    window !== undefined &&
+    Date.parse(iso) >= Date.parse(window.start) &&
+    Date.parse(iso) < Date.parse(window.end);
+  const candidates: Record<string, string[]> = {};
+  for (const [candidateId, minutes] of Object.entries(freedom.candidates)) {
+    const kept = wholeDay ? minutes : minutes.filter(inWindow);
+    if (kept.length > 0) {
+      candidates[candidateId] = kept;
+    }
+  }
+  return {
+    candidates,
+    lowSunBandInWindow: freedom.lowSunBandInWindow,
+    any: Object.keys(candidates).length > 0 || freedom.lowSunBandInWindow.length > 0,
+  };
+}
+
+/**
+ * The `answerDifferences` that near-boundary freedom does not explain: all of
+ * them when the fixture has none. A difference is explained only when it is
+ * in a member of a reference Spot that a flip can change, at a listed minute
+ * of that Spot's own Candidate (sun in view) or of the window (low sun). A
+ * flip that reorders the list or changes the status is not allowed for yet:
+ * no fixture has met one, and a fixture that does fails here.
+ */
+export function unexplainedDifferences(differences: string[], fixture: FixtureDocument): string[] {
+  const freedom = effectiveFreedom(fixture);
+  if (!freedom.any) {
+    return differences;
+  }
+  const lowSunFree = freedom.lowSunBandInWindow.length > 0;
+  return differences.filter((difference) => {
+    const match = SPOT_MEMBER.exec(difference);
+    if (!match) {
+      return true;
+    }
+    const spot =
+      match[2] === undefined ? fixture.answer.nearestSunBeyondLimit : fixture.answer.spots[Number(match[2])];
+    const member = match[3]!;
+    if (spot === undefined) {
+      return true;
+    }
+    const sunFree = (freedom.candidates[spot.candidateId]?.length ?? 0) > 0;
+    const explained =
+      (sunFree && FOLLOWS_FROM_SUN_IN_VIEW.has(member)) || (lowSunFree && FOLLOWS_FROM_LOW_SUN.has(member));
+    return !explained;
+  });
+}

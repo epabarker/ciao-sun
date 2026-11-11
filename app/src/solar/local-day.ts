@@ -40,12 +40,18 @@ export function utcOffsetMinutes(ms: number, timeZone: string): number {
 }
 
 /** The instant at which the zone's wall clock reads the given date and time. */
-function instantOf(date: string, hour: number, minute: number, timeZone: string): number {
+export function instantOf(
+  date: string,
+  hour: number,
+  minute: number,
+  timeZone: string,
+  second = 0,
+): number {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) {
     throw new RangeError(`${JSON.stringify(date)} is not a date like 2026-12-21`);
   }
-  const wall = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour, minute);
+  const wall = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour, minute, second);
   const first = wall - utcOffsetMinutes(wall, timeZone) * MS_PER_MINUTE;
   // The offset at the guess may be the one from the other side of a clock change.
   return wall - utcOffsetMinutes(first, timeZone) * MS_PER_MINUTE;

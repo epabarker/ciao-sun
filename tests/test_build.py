@@ -298,6 +298,15 @@ def test_inputs_fetched_without_a_basemap_are_refused(built: Built, tmp_path: Pa
     assert not (tmp_path / "builds").exists()
 
 
+def test_a_far_reach_beyond_100_km_is_refused(tmp_path: Path):
+    lock = world.fetch_inputs(tmp_path)
+
+    with pytest.raises(ValueError, match="at most 100000 m"):
+        build(world.coverage(), lock.root, tmp_path / "builds", today=TODAY, far_reach_m=100_001.0)
+
+    assert not (tmp_path / "builds" / "f1" / "20261111a").exists()
+
+
 # --- Reproducibility ----------------------------------------------------------
 
 

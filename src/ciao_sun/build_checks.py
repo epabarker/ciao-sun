@@ -11,14 +11,14 @@ samples agree within the storage code's half step plus 0.05 deg.
   is within 0.2 min of a linear 0.1 deg code on first sun, #6).
 - 0.05 deg covers the far-field lattice (p99 0.035 deg at 100 m, #6) and the
   far field's sparser sampling beyond 10 km (p99 0.014 deg).
-- 99%, because those are p99 figures: where a far skyline steps, a Candidate
-  up to 71 m from its lattice point legitimately sees the step a sample or
-  two to one side.
+- 99%, because those are p99 figures: where the Horizon profile steps at a
+  far ridge, a Candidate up to 71 m from its lattice point legitimately sees
+  the step a sample or two to one side.
 
 The direct rays use the tile's one meridian convergence, as the precompute
 does, so the near field agrees exactly. A profile cast along grid north instead
 of true north is turned by about 0.5 deg in Bristol (two samples), and fails
-wherever the skyline has more than a handful of edges.
+wherever the Horizon profile has more than a handful of edges.
 
 **Water guard.** There is no water mask (ADR 0003). Instead the build counts
 the Candidates whose merged horizon is set, at any azimuth, by a cell inside an

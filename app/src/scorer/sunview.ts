@@ -12,7 +12,7 @@ export const OPENNESS_CUTOFF = 0.75;
 const SAMPLES_PER_DEG = PROFILE_SAMPLES / 360;
 const RADIANS_PER_DEGREE = Math.PI / 180;
 const DEGREES_OF_CODE = Float64Array.from({ length: CODE_COUNT }, (_, code) => codeToDegrees(code));
-/** What one profile sample adds to the sector sky-view fraction: cos^2(max(h, 0)). */
+/** What one profile sample adds to the sector's Sky openness: cos^2(max(h, 0)). */
 const OPEN_SKY_OF_CODE = DEGREES_OF_CODE.map((h) => {
   const c = Math.cos(Math.max(h, 0) * RADIANS_PER_DEGREE);
   return c * c;
@@ -86,7 +86,7 @@ export function opennessSector(track: SunTrack, start: number, end: number): Int
 }
 
 /**
- * One Candidate's Sky openness: the sector sky-view fraction, the mean of
+ * One Candidate's Sky openness over the sun path's sector: the mean of
  * cos^2(max(h, 0)) over the profile samples of `sector` (`opennessSector`):
  * the sun path's true azimuth range, widened by 10 degrees each side, ends
  * included.

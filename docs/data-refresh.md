@@ -127,7 +127,7 @@ and correct the doc named if it is wrong.
 - [ ] **The EA zip and Terrain 50 layouts.** `fetch` and `build` read the real
       archives: the file names inside the zips, and the CRS and nodata of the
       GeoTIFFs (`src/ciao_sun/fetch.py`, `README.md`).
-- [ ] **The build-check tolerances on steep far skylines.** The direct-ray
+- [ ] **The build-check tolerances on steep far ridges.** The direct-ray
       profile check passes without being loosened where the far ridge is
       steep (`ciao_sun.build_checks`).
 - [ ] **The water guard over open water.** The Avon and the docks set no

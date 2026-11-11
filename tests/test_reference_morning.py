@@ -229,7 +229,7 @@ def test_low_sun_minutes_count_only_sun_in_view_at_0_to_30_degrees(tmp_path: Pat
 # --- Sky openness ------------------------------------------------------------
 
 
-def test_sky_openness_is_the_sky_view_fraction_of_the_sun_path_widened_by_10_degrees(
+def test_sky_openness_is_taken_over_the_sun_path_widened_by_10_degrees(
     tmp_path: Path,
 ) -> None:
     # Wake time 07:00 at midwinter: the sun path runs from 128.25 (08:13) to

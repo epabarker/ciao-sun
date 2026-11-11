@@ -41,6 +41,7 @@ src/settings/store.ts   settings store: Wake time, max walk; browser storage wit
 src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
 src/query/origin.ts     the typed origin "lat, lon"
 src/ui/                 the answer screen (below)
+src/about/about.ts      the About sheet's content: credits, survey years, licence from the manifest; the fixed caveats
 src/contract.ts         the Query and Answer types, as fixture JSON holds them
 src/tile/decode.ts      tile decoder: f1 bytes -> Tile (docs/tile-format-f1.md)
 src/solar/sun-track.ts  solar model: sunTrack(), refraction, the three events (docs/solar-model.md)
@@ -84,7 +85,8 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 
 | File | Does | Extended by |
 |---|---|---|
-| `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer; #51 an About link there |
+| `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer |
+| `ui/about-view.ts` | the footer's "About the data" link (in the frame, so on both tabs) and the sheet. Every credit, year and licence is from the loaded manifest's `attribution`, `lidarSurveyYears` and `licence`, rendered in order with none named in code; only `CAVEATS` in `about/about.ts` is fixed copy. Open is app state (`aboutOpen`), so a re-render keeps it open | |
 | `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
 | `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
 | `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |

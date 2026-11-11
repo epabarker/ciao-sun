@@ -23,7 +23,7 @@ on every push.
 | `npm ci` | Clean install from the lockfile |
 | `npm run typecheck` | `tsc --noEmit` over `src/`, `test/` and the config |
 | `npm test` | Every test, once (`npm run test:watch` to keep it running) |
-| `npm run build` | The bundle, into `dist/`: `index.html` and hashed files under `assets/` |
+| `npm run build` | The bundle, into `dist/`: `index.html`, `sw.js` and hashed files under `assets/` |
 | `npm run dev` | Vite dev server at `/ciao-sun/`, serving the synthetic build at `/ciao-sun/synthetic-data/` (so does `vite preview`) |
 
 ## Layout
@@ -54,13 +54,14 @@ src/router/world.ts     router: tiles joined into one walk graph; origin snap an
 src/scorer/answer.ts    scorer: (Query, tiles, coverage) -> Answer; its rules beside it (see its header)
 src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's category or "unavailable" (fixtures/cloud/cases.json)
 src/forecast/span.ts    the span C is averaged over, from a Query and the scorer's window plans
+src/sw/                 the service worker and its registration (below); vite-sw.ts builds it into sw.js
 test/parity/            the golden-fixture harness (below)
 ```
 
 A module is a directory under `src/` named for the spec's module (data
 loader, router, scorer, forecast adapter, settings store, ...). Never name one
 `data/`: the repo's `.gitignore` ignores every `data/` directory. Static files
-that must keep their name, such as `sw.js`, go in `public/`.
+that must keep their name go in `public/`; `sw.js` is built (`vite-sw.ts`).
 
 ## The release config
 
@@ -157,8 +158,8 @@ factory that fails (no WebGL) leaves the list working.
   `basemapStyle` (`src/map/style.ts`) is Protomaps' v4 `light` flavour over it,
   with the source's `bounds`, `minzoom` and `maxzoom` set so no tile outside
   them is requested. The style has no label or icon layers, so it needs no
-  glyphs or sprite, and the map fetches nothing but the build's tiles (itself,
-  from its worker, not through `AppDeps.fetch`). The
+  glyphs or sprite, and the map fetches nothing but the build's tiles (with
+  the page's `fetch`, not through `AppDeps.fetch`; see "The service worker"). The
   camera is kept at or above `minZoom` and within the bounds plus a margin
   (`cameraBounds`). A tile that fails to load or parse is logged once and the
   map shows its plain ground under the markers (the synthetic build's tiles
@@ -171,6 +172,36 @@ factory that fails (no WebGL) leaves the list working.
 - **Worker:** MapLibre's worker is its own file
   (`assets/maplibre-gl-worker-<hash>.mjs`), set with `setWorkerUrl`; the shell
   includes it.
+
+## The service worker
+
+`/ciao-sun/sw.js`, scope `/ciao-sun/` (#52). What it does on install, activate
+and fetch is in `src/sw/worker.ts`'s header; the page's side (registration,
+reload on the next foreground) in `src/sw/register.ts`, called from `main.ts`
+in production builds only.
+
+- **Build:** `vite-sw.ts` bundles `src/sw/entry.ts` into one classic script
+  named `sw.js`, after Vite's own output, with `package.json`'s `version` (the
+  shell cache's `appVersion`) and the list of every file the build wrote as the
+  precache. A build missing `index.html` or MapLibre's chunk, stylesheet or
+  worker fails. `test/sw/build.test.ts` builds for real and installs the
+  result.
+- **Caches:** `ciao-sun-shell-<appVersion>` and `ciao-sun-data-f<format>-<build>`
+  from the pin. Bump `version` with every release, or the new shell lands in
+  the old cache name.
+- **Basemap tiles** go through the page: MapLibre's worker gets
+  `ciao-sun-page://<url>` tile URLs, which it hands to the page, where
+  `src/map/page-fetch.ts` fetches them. The Service Worker spec has the worker
+  controlled anyway (it is matched by its script URL, inside the scope), but
+  Safari's behaviour there is unverified, and offline maps on a phone depend
+  on it.
+- **Not cached:** the forecast (Open-Meteo), another build's files, anything
+  outside `/ciao-sun/`.
+- **Headers the site serves** (spec story 73): `/ciao-sun/assets/*` immutable;
+  `/ciao-sun/sw.js` and `/ciao-sun/index.html` no-cache. `/ciao-sun/index.html`
+  is answered with a 200, not a redirect (the worker copes with one, but
+  needn't); `/ciao-sun` redirects to `/ciao-sun/`; no `Service-Worker-Allowed`
+  header. `release.json` is bundled into `sw.js`, so a new pin is a new worker.
 
 ## Conventions
 

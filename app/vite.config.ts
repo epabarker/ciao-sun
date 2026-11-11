@@ -4,6 +4,8 @@ import { resolve, sep } from "node:path";
 import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
+import { serviceWorker } from "./vite-sw.ts";
+
 const BASE = "/ciao-sun/";
 
 /**
@@ -37,7 +39,7 @@ function syntheticData(): Plugin {
 export default defineConfig({
   // The bundle is served under /ciao-sun/ (spec #27, "Client app").
   base: BASE,
-  plugins: [syntheticData()],
+  plugins: [syntheticData(), serviceWorker()],
   build: {
     outDir: "dist",
     emptyOutDir: true,

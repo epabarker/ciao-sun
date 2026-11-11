@@ -1,4 +1,4 @@
-"""ciao-sun CLI: `fetch`, `build`, `reference` and `profile-only`."""
+"""ciao-sun CLI: `fetch`, `build`, `publish`, `reference` and `profile-only`."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pyproj import Transformer
 
 from ciao_sun import build as tile_build
 from ciao_sun import fetch as fetch_inputs
+from ciao_sun import publish as publisher
 from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.config import CiaoSunConfig
 from ciao_sun.coverage import Coverage, CoverageError
@@ -212,6 +213,95 @@ def build(
         typer.secho(str(exc), fg=typer.colors.RED)
         raise typer.Exit(code=1) from None
     typer.echo(f"Wrote {build_dir}")
+
+
+@app.command()
+def publish(
+    build_dir: Path = typer.Argument(
+        ..., help="The build directory `ciao-sun build` wrote: <out>/f1/<build id>."
+    ),
+    inputs: Path = typer.Option(
+        Path("data/inputs"),
+        "--inputs",
+        help="The inputs directory the build read; its OSM extract and Terrain 50 zip "
+        "are archived.",
+    ),
+    data_bucket: str = typer.Option(
+        ...,
+        "--data-bucket",
+        envvar="CIAO_SUN_DATA_BUCKET",
+        help="The public R2 bucket served at the data base URL.",
+    ),
+    inputs_bucket: str = typer.Option(
+        ...,
+        "--inputs-bucket",
+        envvar="CIAO_SUN_INPUTS_BUCKET",
+        help="The private R2 bucket that keeps each build's inputs.",
+    ),
+    endpoint_url: str = typer.Option(
+        ...,
+        "--endpoint-url",
+        envvar="CIAO_SUN_R2_ENDPOINT",
+        help="The R2 S3 endpoint: https://<account id>.r2.cloudflarestorage.com",
+    ),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Finish an interrupted publish of this same build: upload only the objects "
+        "that are missing. Refused once the build's manifest is in the bucket.",
+    ),
+    workers: int = typer.Option(
+        publisher.DEFAULT_WORKERS, "--workers", min=1, help="Uploads to run at once."
+    ),
+) -> None:
+    """Upload a build to the data bucket and archive its inputs.
+
+    \b
+    Every file of the build directory goes to
+      <data bucket>/f<format>/<build id>/...
+    with Cache-Control: public, max-age=31536000, immutable. Tiles are stored as
+    the gzip files on disk; basemap tiles are stored gzipped and served with
+    Content-Encoding: gzip. The manifest is uploaded last.
+
+    The OSM extract and the Terrain 50 zip the build was made from go to
+      <inputs bucket>/f<format>/<build id>/...
+
+    A published build is never rewritten and nothing is ever deleted. If either
+    bucket already holds anything under the build's prefix, nothing is uploaded;
+    --resume finishes an interrupted publish without replacing any object.
+    Before uploading, the build is checked against its manifest and the inputs
+    against the SHA-256s the manifest recorded.
+
+    The credentials are an R2 API token's S3 key pair, read by boto3 from
+    AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. The one-time bucket and CORS
+    setup is in docs/publishing.md.
+    """
+    try:
+        published = publisher.publish(
+            build_dir,
+            inputs,
+            publisher.S3ObjectStore.for_r2(endpoint_url),
+            data_bucket=data_bucket,
+            inputs_bucket=inputs_bucket,
+            resume=resume,
+            workers=workers,
+            report=typer.echo,
+        )
+    except publisher.PublishError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from None
+    except publisher.ObjectStoreError as exc:
+        typer.secho(
+            f"{exc}\nThe publish is incomplete and the manifest has not been uploaded. "
+            "Run it again with --resume to upload what is missing.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1) from None
+    typer.echo(
+        f"Published build {published.build} to {data_bucket}/{published.prefix} "
+        f"({published.data_objects} objects) and archived {published.input_objects} inputs "
+        f"to {inputs_bucket}/{published.prefix}; {published.uploaded} objects uploaded."
+    )
 
 
 @app.command()

@@ -132,6 +132,20 @@ describe("Morning screen over a local build", () => {
     await app.idle();
     expect(root.querySelectorAll("[data-spot]").length).toBeGreaterThan(0);
   });
+
+  it("keeps a typed origin when a GPS fix arrives after it", async () => {
+    let fix: (at: { lat: number; lon: number }) => void = () => {};
+    const late = new Promise<{ lat: number; lon: number }>((resolve) => (fix = resolve));
+    const root = document.createElement("div");
+    const app = startApp(root, deps({ locate: () => late }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (root.querySelector("[data-action=type-origin]") as HTMLButtonElement).click();
+    change(root.querySelector("[name=origin]"), `${WINTER.query.origin.lat}, ${WINTER.query.origin.lon}`);
+    fix(fixture("morning-not-covered").query.origin);
+    await app.idle();
+    expect(root.textContent).not.toMatch(/not covered here/i);
+    expect(root.querySelectorAll("[data-spot]").length).toBeGreaterThan(0);
+  });
 });
 
 describe("saved settings", () => {

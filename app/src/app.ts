@@ -78,6 +78,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   };
 
   const ask = async () => {
+    // Every call supersedes the one before, even one that returns early.
+    const ticket = ++asked;
     const at = origin();
     if (!build) {
       return; // Still opening, or refused: the result says which.
@@ -87,7 +89,6 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       return;
     }
     const query = buildQuery({ ...state, origin: at }, deps.now(), window);
-    const ticket = ++asked;
     result = { kind: "loading" };
     draw();
     let next: Result;
@@ -113,12 +114,16 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     refresh();
   };
 
+  let locating = 0;
   const locate = () => {
     state.origin = { kind: "locating" };
+    const id = ++locating;
+    // A fix that arrives after the person typed a position, or asked again, is dropped.
+    const current = () => id === locating && state.origin.kind === "locating";
     track(
       deps.locate().then(
-        (at) => setOrigin({ kind: "gps", lat: at.lat, lon: at.lon }),
-        () => setOrigin({ kind: "typed", text: "", reason: "Location unavailable: type a position." }),
+        (at) => current() && setOrigin({ kind: "gps", lat: at.lat, lon: at.lon }),
+        () => current() && setOrigin({ kind: "typed", text: "", reason: "Location unavailable: type a position." }),
       ),
     );
   };

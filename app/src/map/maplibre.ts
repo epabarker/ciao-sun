@@ -12,15 +12,20 @@
 // - The corner ⓘ is MapLibre's compact attribution, carrying the manifest's
 //   OpenStreetMap and Protomaps credits.
 
-import { LngLatBounds, Map as MapLibreMap, Marker, setWorkerUrl } from "maplibre-gl";
+// - Basemap tiles are fetched by the page, not MapLibre's worker, so the
+//   service worker caches them in every browser (`page-fetch.ts`).
+
+import { LngLatBounds, Map as MapLibreMap, Marker, addProtocol, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
 import type { Bounds, Credit, MapFactory, MapMarkers, MapOptions, MapSurface } from "./map";
+import { PAGE_SCHEME, pageTileLoader, throughPage } from "./page-fetch";
 import { basemapStyle } from "./style";
 
 // MapLibre looks for its worker beside its own module, which bundling moves.
 setWorkerUrl(workerUrl);
+addProtocol(PAGE_SCHEME, pageTileLoader((url, init) => fetch(url, init)));
 
 /** The closest a spot is framed, and the deepest the map goes (MapLibre overzooms the basemap). */
 const FRAME_MAX_ZOOM = 17;
@@ -59,7 +64,7 @@ export const createMapLibre: MapFactory = (container: HTMLElement, options: MapO
   const { basemap } = options;
   const map = new MapLibreMap({
     container,
-    style: basemapStyle(basemap),
+    style: basemapStyle(basemap && { ...basemap, tiles: throughPage(basemap.tiles) }),
     attributionControl: { compact: true, customAttribution: options.credits.map(creditHtml) },
     ...(basemap
       ? {

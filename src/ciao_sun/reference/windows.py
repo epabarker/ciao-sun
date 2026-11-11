@@ -42,6 +42,7 @@ class WindowPlan:
     weight_numerators: npt.NDArray[np.int64]
     weight_denominator: int
     leave_by: LeaveByRule
+    reports_last_sun: bool = False  # evening: each Spot carries its Last sun
 
 
 def minute_of(track: SunTrack, when: pd.Timestamp) -> int:

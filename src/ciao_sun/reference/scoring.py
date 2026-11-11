@@ -9,7 +9,14 @@ import numpy as np
 import numpy.typing as npt
 
 from ciao_sun.reference.contract import MAX_WALK_CAP_MIN, Interval, Query, Spot
-from ciao_sun.reference.sunview import OPENNESS_CUTOFF, low_sun, runs, sky_openness, sun_in_view
+from ciao_sun.reference.sunview import (
+    OPENNESS_CUTOFF,
+    last_sun,
+    low_sun,
+    runs,
+    sky_openness,
+    sun_in_view,
+)
 from ciao_sun.reference.windows import WindowPlan, clock
 from ciao_sun.reference.world import WALK_SPEED_M_PER_MIN, World, walk_metres
 from ciao_sun.solar import SunTrack
@@ -104,4 +111,10 @@ def build_spot(
         low_sun_minutes=int(scored.low_sun_hundredths[j]) / 100.0,
         sky_openness=math.floor(float(scored.sky_openness[j]) * 1000.0 + 0.5) / 1000.0,
         target_met=walk_min + sun_from_arrival >= target_min,
+        last_sun=_last_sun_clock(world, track, k) if plan.reports_last_sun else None,
     )
+
+
+def _last_sun_clock(world: World, track: SunTrack, k: int) -> str | None:
+    minute = last_sun(world.profile_codes[k], track)
+    return None if minute is None else clock(track, minute)

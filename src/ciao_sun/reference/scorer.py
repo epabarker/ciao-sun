@@ -3,7 +3,7 @@
 The JS client is canonical (ADR 0001); this is the reference its golden
 fixtures come from. The rules live beside it:
 
-- `windows`, `morning`: the window, its weights and its Leave-by rule
+- `windows`, `morning`, `evening`: the window, its weights and its Leave-by rule
 - `sunview`: sun in view, the 0-30 degree band, Sky openness
 - `world`: tiles joined into one walk graph; the origin snap and the walk
 - `scoring`: per-Candidate scores, and a scored Candidate as a Spot
@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from ciao_sun.reference.contract import Answer, Query, Sky, Spot, Status, Window, WindowName
+from ciao_sun.reference.evening import plan_evening
 from ciao_sun.reference.morning import plan_morning
 from ciao_sun.reference.ranking import dedupe, rank_by_low_sun
 from ciao_sun.reference.scoring import build_spot, score, walk_minutes
@@ -31,7 +32,7 @@ DURATION_TARGET_MIN: dict[Sky, int] = {"clear": 10, "partly": 20, "overcast": 30
 # A planner returns the query's window, or the whole Answer when there is no
 # window to rank in (lamp-only, no-evening-window).
 Planner = Callable[[Query, SunTrack], WindowPlan | Answer]
-PLANNERS: dict[WindowName, Planner] = {"morning": plan_morning}
+PLANNERS: dict[WindowName, Planner] = {"morning": plan_morning, "evening": plan_evening}
 
 
 def answer(query: Query, tiles: Sequence[Tile]) -> Answer:

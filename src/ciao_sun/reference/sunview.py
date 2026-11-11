@@ -40,6 +40,17 @@ def sun_in_view(
     return in_view
 
 
+def last_sun(profile_codes: npt.NDArray[np.uint8], track: SunTrack) -> int | None:
+    """One Candidate's Last sun: the last minute of the track's day with the sun in view.
+
+    It is looked for over the whole day, not only a window, so it can fall
+    after Nominal sunset where the Horizon profile is below 0 degrees. None
+    when the sun is never in view.
+    """
+    minutes = np.flatnonzero(sun_in_view(profile_codes[np.newaxis, :], track, 0, len(track.times)))
+    return int(minutes[-1]) if minutes.size else None
+
+
 def low_sun(track: SunTrack, start: int, end: int) -> npt.NDArray[np.bool_]:
     """Whether the sun's apparent elevation is 0-30 degrees (both included), per minute."""
     elevation = track.apparent_elevation[start:end]

@@ -133,3 +133,8 @@ def morning(**changes: Any) -> Query:
         "sky": "clear",
     }
     return Query(**{**fields, **changes})
+
+
+def evening(**changes: Any) -> Query:
+    """A clear midwinter Evening query from the origin; override any field."""
+    return morning(**{"window": "evening", **changes})

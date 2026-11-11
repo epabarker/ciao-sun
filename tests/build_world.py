@@ -25,6 +25,10 @@ boundary between the 1 km squares ST5773 and ST5873 (easting 358000):
 `tidal_river=True` adds a river north of the street whose first return stands
 5 m above the ground, as tidal water does in the EA composite.
 
+`dock=True` adds a dock in the same place instead (`water=harbour`), and
+`boat=True` moors a 3 m boat in it, 35 m north of the street, whose first and
+last returns agree, as a hull's do.
+
 `streets` and `box` make the wider world the committed golden fixtures are
 built from (`tests/synthetic_fixtures.py`): the street's three edges become
 three streets with their own names, and the coverage takes in the whole street,
@@ -153,7 +157,9 @@ def _terrain50_zip() -> bytes:
     return _zip(members)
 
 
-def _osm_extract(path: Path, tidal_river: bool, streets: tuple[str, ...]) -> bytes:
+def _osm_extract(
+    path: Path, tidal_river: bool, streets: tuple[str, ...], dock: bool = False
+) -> bytes:
     nodes: dict[int, tuple[float, float]] = {
         1: (357850, STREET_Y), 2: (357950, STREET_Y), 3: (358050, STREET_Y), 4: (358150, STREET_Y),
         # the pond
@@ -174,6 +180,11 @@ def _osm_extract(path: Path, tidal_river: bool, streets: tuple[str, ...]) -> byt
             21: (357800, 173530), 22: (358200, 173530), 23: (358200, 173560), 24: (357800, 173560),
         }  # fmt: skip
         ways.append((102, [21, 22, 23, 24, 21], {"natural": "water", "water": "river"}))
+    if dock:
+        nodes |= {
+            21: (357800, 173530), 22: (358200, 173530), 23: (358200, 173560), 24: (357800, 173560),
+        }  # fmt: skip
+        ways.append((102, [21, 22, 23, 24, 21], {"natural": "water", "water": "harbour"}))
     header = osmium.io.Header()
     header.set("osmosis_replication_timestamp", OSM_TIMESTAMP)
     writer = osmium.SimpleWriter(str(path), header=header, overwrite=True)
@@ -210,6 +221,8 @@ def fetch_inputs(
     root: Path,
     *,
     tidal_river: bool = False,
+    dock: bool = False,
+    boat: bool = False,
     streets: tuple[str, ...] = STREET,
     box: tuple[float, float, float, float] = COVERAGE_BOX,
 ) -> Lockfile:
@@ -225,11 +238,14 @@ def fetch_inputs(
     _cells(first, 357948, 357953, 173558, 173563, TREE_TOP)
     if tidal_river:
         _cells(first, 357800, 358200, 173530, 173560, GROUND + 5.0)
+    if boat:
+        for returns in (last, first):
+            _cells(returns, 357930, 357970, 173533, 173537, GROUND + 3.0)
 
     scratch = root / "scratch"
     scratch.mkdir(exist_ok=True)
     survey = _survey_metadata(scratch)
-    osm = _osm_extract(scratch / "extract.osm.pbf", tidal_river, streets)
+    osm = _osm_extract(scratch / "extract.osm.pbf", tidal_river, streets, dock)
     bodies = {
         f"/lidar_composite_last_return_dsm/2022/1/{EA_TILE}": _zip(
             {f"{EA_TILE}_LAST_RETURN_DSM_1m.tif": _geotiff(last),

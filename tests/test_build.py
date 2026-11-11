@@ -240,7 +240,11 @@ def test_the_manifest_records_the_tolerances_the_build_checks_passed_at(built: B
     assert checks["profile"]["storageHalfStepDeg"] == {"upTo10Deg": 0.05, "above10Deg": 0.25}
     assert checks["profile"]["fractionWithin"] == 0.99
     assert checks["profile"]["candidatesChecked"] == 32  # 16 in each tile
-    assert checks["waterGuard"] == {"candidatesAllowed": 0, "candidatesFound": 0}
+    assert checks["waterGuard"] == {
+        "candidatesAllowed": 0,
+        "candidatesFound": 0,
+        "riverCandidatesToReview": 0,
+    }
 
 
 # --- The basemap --------------------------------------------------------------
@@ -382,15 +386,59 @@ def test_profiles_turned_from_true_north_to_grid_north_fail_the_direct_ray_check
         check_profiles(copy, built.inputs)
 
 
-def test_a_water_cell_on_the_horizon_fails_the_build(tmp_path: Path):
-    # A tidal river whose first return stands 5 m proud, as in the EA composite.
-    lock = world.fetch_inputs(tmp_path, tidal_river=True)
+def _tiles_bytes(build_dir: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in sorted((build_dir / "tiles").glob("*.bin"))}
 
-    with pytest.raises(BuildCheckError, match="Water guard: 57 Candidates"):
+
+def test_a_boat_moored_in_a_dock_sets_no_horizon(tmp_path: Path):
+    # #60: boats move, so the dock is as if the boat were not there.
+    empty = world.fetch_inputs(tmp_path / "empty", dock=True)
+    moored = world.fetch_inputs(tmp_path / "moored", dock=True, boat=True)
+
+    without = build(world.coverage(), empty.root, tmp_path / "empty-builds", today=TODAY)
+    with_boat = build(world.coverage(), moored.root, tmp_path / "moored-builds", today=TODAY)
+
+    assert _tiles_bytes(with_boat) == _tiles_bytes(without)
+    guard = json.loads((with_boat / "manifest.json").read_text())["buildChecks"]["waterGuard"]
+    assert guard["candidatesFound"] == 0
+
+
+def test_a_moored_boat_left_standing_fails_the_water_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # The guard catches a mask that stops lowering what it marks.
+    import ciao_sun.build as build_module
+
+    lower = build_module.lower_moored_boats
+
+    def leave_standing(surface, *args, **kwargs):
+        lowered = lower(surface, *args, **kwargs)
+        return replace(lowered, surface=surface)
+
+    monkeypatch.setattr(build_module, "lower_moored_boats", leave_standing)
+    lock = world.fetch_inputs(tmp_path, dock=True, boat=True)
+
+    with pytest.raises(BuildCheckError, match=r"Water guard: \d+ Candidates"):
         build(world.coverage(), lock.root, tmp_path / "builds", today=TODAY)
 
     assert not (tmp_path / "builds" / "f1" / "20261111a").exists()
     assert not list((tmp_path / "builds").rglob("manifest.json"))
+
+
+def test_a_river_standing_proud_is_kept_and_reported_for_review(tmp_path: Path):
+    # A tidal river whose first return stands 5 m proud, as in the EA composite:
+    # over a river LIDAR cannot tell this from trees, so it stays and is reported.
+    lock = world.fetch_inputs(tmp_path, tidal_river=True)
+    reported: list[str] = []
+
+    build_dir = build(
+        world.coverage(), lock.root, tmp_path / "builds", today=TODAY, report=reported.append
+    )
+
+    guard = json.loads((build_dir / "manifest.json").read_text())["buildChecks"]["waterGuard"]
+    assert guard["candidatesFound"] == 0
+    assert guard["riverCandidatesToReview"] == 57
+    assert any(line.startswith("River and pond review: 57 Candidates") for line in reported)
 
 
 def test_a_coverage_beyond_the_fetched_one_is_refused(built: Built, tmp_path: Path):

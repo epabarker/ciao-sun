@@ -21,10 +21,16 @@ does, so the near field agrees exactly. A profile cast along grid north instead
 of true north is turned by about 0.5 deg in Bristol (two samples), and fails
 wherever the Horizon profile has more than a handful of edges.
 
-**Water guard.** There is no water mask (ADR 0003). Instead the build counts
-the Candidates whose merged horizon is set, at any azimuth, by a cell inside an
-OSM water area, and fails above zero. The count comes from the precompute
+**Water guard.** Boats moored in docks and harbours are lowered to the ground
+(ADR 0003, amended by #60; `surface.lower_moored_boats`). The build counts the
+Candidates whose merged horizon is set, at any azimuth, by a cell the mask
+lowered that still stands more than 1 m above the DTM, and fails above zero: it
+catches a mask that has stopped working. The count comes from the precompute
 itself (`horizon_precompute.cast_tile`), so it covers every Candidate.
+
+Raised cells over rivers and ponds are kept, and the Candidates whose horizon
+one sets are reported for review (`riverCandidatesToReview` in the manifest);
+they do not fail the build.
 """
 
 from __future__ import annotations
@@ -74,7 +80,7 @@ class Tolerances:
     profile_fraction_within: float = 0.99
     fine_half_step_deg: float = 0.05
     coarse_half_step_deg: float = 0.25
-    # Water guard: Candidates whose horizon a water cell may set.
+    # Water guard: Candidates whose horizon a lowered mooring cell may still set.
     water_candidates_allowed: int = 0
 
     def as_manifest(self) -> dict[str, dict[str, Any]]:

@@ -4,17 +4,26 @@ Vegetation is where the first-return DSM stands more than 2 m above the DTM,
 outside OSM building footprints buffered by 1.5 m. On vegetation cells the
 surface is the larger of the last-return and first-return DSM, whatever season
 the cell was surveyed in; everywhere else it is the last-return DSM. Trees are
-therefore opaque all year, clutter under 2 m is ignored, and there is no water
-mask (the build's water guard replaces it).
+therefore opaque all year, and clutter under 2 m is ignored.
 
-Building footprints come from a dated `.osm.pbf`, never live Overpass. Read
-them once per build with `read_building_footprints`, then call
-`crown_envelope_surface` per tile with that tile's three mosaics.
+Over water (ADR 0003, amended by #60): moored boats are not obstructions, since
+they move. `lower_moored_boats` sets every cell in mooring water (docks,
+harbours, marinas, locks, basins) to the DTM unless something stands there for
+good: a building footprint, a bridge within 20 m, or a tree, told from a hull
+by its returns lying more than 1 m apart. Over rivers and ponds everything is
+kept, because LIDAR cannot tell a dense tree from a boat there; raised cells
+that are neither building nor bridge are marked for the build to report, since
+some may be tidal water standing proud in the first return.
+
+Footprints, water and bridges come from a dated `.osm.pbf`, never live
+Overpass. Read them once per build, then call `crown_envelope_surface` and
+`lower_moored_boats` per tile with that tile's three mosaics.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +40,15 @@ VEGETATION_MIN_HEIGHT_M = 2.0
 # ADR 0003: first returns spill about a cell past walls and eaves, so cells this
 # close to a building footprint are never vegetation.
 BUILDING_BUFFER_M = 1.5
+# #60: a cell this close to an OSM bridge line is the bridge; decks are wide.
+BRIDGE_REACH_M = 20.0
+# #60: first and last returns further apart than this mean the laser went into
+# something it could pass through: a tree, not a hull.
+TREE_RETURN_SPREAD_M = 1.0
+# #60: a water cell more than this above the DTM is standing on the water.
+RAISED_ON_WATER_M = 1.0
+# Water where boats moor: their cells are lowered to the DTM (#60).
+_MOORING_WATER = frozenset({"harbour", "marina", "lock", "basin", "dock"})
 
 Bounds = tuple[float, float, float, float]
 
@@ -99,6 +117,53 @@ def read_water_areas(pbf_path: Path, crs: CRS, bounds: Bounds | None = None) -> 
         tuple(_WATER_TAGS),
         lambda tags: any(tags.get(key) in values for key, values in _WATER_TAGS.items()),
     )
+
+
+def read_mooring_water(
+    pbf_path: Path, crs: CRS, bounds: Bounds | None = None
+) -> BuildingFootprints:
+    """Every area of an OSM extract where boats moor: docks, harbours, marinas, locks, basins."""
+    return _read_areas(
+        pbf_path,
+        crs,
+        bounds,
+        ("waterway", "water", "leisure"),
+        lambda tags: (
+            tags.get("waterway") == "dock"
+            or tags.get("water") in _MOORING_WATER
+            or tags.get("leisure") == "marina"
+        ),
+    )
+
+
+def read_bridges(pbf_path: Path, crs: CRS, bounds: Bounds | None = None) -> BuildingFootprints:
+    """Every bridge in an OSM extract as a line: ways tagged `bridge=*` (not `no`) and
+    `man_made=bridge` outlines. Use `buffered_mask(grid, BRIDGE_REACH_M)` for the deck."""
+    import osmium
+
+    box = None if bounds is None else lonlat_box(bounds, crs)
+    to_crs = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    lines = []
+    processor = (
+        osmium.FileProcessor(str(pbf_path), osmium.osm.NODE | osmium.osm.WAY)
+        .with_locations()
+        .with_filter(osmium.filter.KeyFilter("bridge", "man_made"))
+    )
+    for way in processor:
+        if not isinstance(way, osmium.osm.Way):
+            continue
+        if way.tags.get("bridge", "no") == "no" and way.tags.get("man_made") != "bridge":
+            continue
+        points = [(n.lon, n.lat) for n in way.nodes if n.location.valid()]
+        if len(points) < 2:
+            continue
+        if box is not None:
+            lons, lats = [p[0] for p in points], [p[1] for p in points]
+            if min(lons) > box[2] or max(lons) < box[0] or min(lats) > box[3] or max(lats) < box[1]:
+                continue
+        x, y = to_crs.transform([p[0] for p in points], [p[1] for p in points])
+        lines.append(shapely.LineString(np.column_stack([x, y])))
+    return BuildingFootprints(lines, crs)
 
 
 def _read_areas(
@@ -174,3 +239,45 @@ def crown_envelope_surface(
     # fmax: where the last return has no data, the first return still stands.
     data[vegetation] = np.fmax(last_return.data[vegetation], first_return.data[vegetation])
     return RasterGrid(data=data, transform=last_return.transform, crs=last_return.crs)
+
+
+@dataclass(frozen=True, eq=False)
+class OpenWater:
+    """A tile's obstruction surface with moored boats lowered, and what the build checks over water.
+
+    `flattened` is True on the mooring-water cells lowered to the DTM;
+    `raised_river` on cells of other water standing more than 1 m above the DTM
+    that are neither building nor bridge (trees, or tidal water standing proud).
+    """
+
+    surface: RasterGrid
+    flattened: np.ndarray
+    raised_river: np.ndarray
+
+
+def lower_moored_boats(
+    surface: RasterGrid,
+    first_return: RasterGrid,
+    last_return: RasterGrid,
+    dtm: RasterGrid,
+    *,
+    moorings: BuildingFootprints,
+    water: BuildingFootprints,
+    buildings: BuildingFootprints,
+    bridges: BuildingFootprints,
+) -> OpenWater:
+    """`surface` with every cell of mooring water lowered to the DTM unless something stands
+    there for good: a building, a bridge within `BRIDGE_REACH_M`, or a tree."""
+    for grid in (first_return, last_return, dtm):
+        assert_aligned(surface, grid)
+    on_water = water.buffered_mask(surface, 0.0)
+    lasting = buildings.buffered_mask(surface, 0.0) | bridges.buffered_mask(surface, BRIDGE_REACH_M)
+    with np.errstate(invalid="ignore"):
+        tree = (first_return.data - last_return.data) > TREE_RETURN_SPREAD_M
+        raised = (surface.data - dtm.data) > RAISED_ON_WATER_M
+    flattened = on_water & moorings.buffered_mask(surface, 0.0) & ~lasting & ~tree
+    data = surface.data.astype("float32", copy=True)
+    data[flattened] = dtm.data[flattened]
+    lowered = RasterGrid(data=data, transform=surface.transform, crs=surface.crs)
+    raised_river = on_water & ~moorings.buffered_mask(surface, 0.0) & raised & ~lasting
+    return OpenWater(lowered, flattened, raised_river)

@@ -130,8 +130,10 @@ and correct the doc named if it is wrong.
 - [ ] **The build-check tolerances on steep far ridges.** The direct-ray
       profile check passes without being loosened where the far ridge is
       steep (`ciao_sun.build_checks`).
-- [ ] **The water guard over open water.** The Avon and the docks set no
-      Candidate's horizon, and the guard does not fail on them.
+- [ ] **Water.** Boats in the Floating Harbour set no Candidate's horizon,
+      the water guard passes, and the "River and pond review" line in the
+      build report lists trees and bridges over the Avon, not tidal water
+      (#60; check a few of its tiles against aerial imagery).
 - [ ] **The real R2 client and CORS.** `publish` against real buckets; the
       `curl` checks in `docs/publishing.md`; the app on `localhost` and on
       `https://edbarker.dev` fetching the manifest cross-origin.

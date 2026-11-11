@@ -72,8 +72,9 @@ class TileWorld:
     `dtm` the bare earth the Candidates stand on; both must reach 3 km beyond
     the Candidates. `terrain50` is OS Terrain 50 in metres. `x`, `y` are the
     Candidates' eastings and northings. `water`, if given, is above 0.5 on
-    every water cell; it is only read by `cast_tile`, for the build's water
-    guard.
+    every water cell that must not obstruct (the build's water guard); `review`,
+    if given, on every cell whose horizons the build reports for review. Both
+    are only read by `cast_tile`.
     """
 
     surface: RasterGrid
@@ -82,6 +83,7 @@ class TileWorld:
     x: npt.NDArray[np.float64]
     y: npt.NDArray[np.float64]
     water: RasterGrid | None = None
+    review: RasterGrid | None = None
 
 
 def _eye_elevations(world: TileWorld) -> npt.NDArray[np.float64]:
@@ -93,11 +95,12 @@ def _eye_elevations(world: TileWorld) -> npt.NDArray[np.float64]:
 
 def _near_field(
     world: TileWorld, eye: npt.NDArray[np.float64], convergence: float
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """The near horizon per Candidate and sample, and whether a water cell sets it."""
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """The near horizon per Candidate and sample, and whether a water or review cell sets it."""
     ray_d = ray_samples(NEAR_REACH_M)
     out = np.empty((len(world.x), PROFILE_SAMPLES), dtype=np.float64)
     on_water = np.zeros(out.shape, dtype=bool)
+    on_review = np.zeros(out.shape, dtype=bool)
     for start in range(0, len(world.x), _CHUNK):
         rows = slice(start, start + _CHUNK)
         for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG):
@@ -112,12 +115,14 @@ def _near_field(
             )
             if world.water is not None:
                 on_water[rows, i] = sample(world.water, ridge_x, ridge_y) > 0.5
+            if world.review is not None:
+                on_review[rows, i] = sample(world.review, ridge_x, ridge_y) > 0.5
     if np.isnan(out).any():
         raise ValueError(
             "a near-field ray found no surface data at all; the obstruction surface "
             "must cover every Candidate"
         )
-    return out, on_water
+    return out, on_water, on_review
 
 
 def _far_distances(reach: float) -> npt.NDArray[np.float64]:
@@ -176,21 +181,27 @@ def _far_field(
 
 def _cast(
     world: TileWorld, far_reach_m: float
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """Merged profiles in degrees, and which Candidates have a water cell on their horizon."""
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """Merged profiles in degrees, and which Candidates a water or a review cell sets."""
     if not NEAR_REACH_M < far_reach_m <= FAR_REACH_CAP_M:
         raise ValueError(
             f"far_reach_m must be above {NEAR_REACH_M:.0f} m and at most "
             f"{FAR_REACH_CAP_M:.0f} m, got {far_reach_m}"
         )
     if len(world.x) == 0:
-        return np.empty((0, PROFILE_SAMPLES), dtype=np.float64), np.empty(0, dtype=bool)
+        none = np.empty(0, dtype=bool)
+        return np.empty((0, PROFILE_SAMPLES), dtype=np.float64), none, none
     eye = _eye_elevations(world)
     # One convergence per tile: it varies by ~0.01 deg across a 1 km square.
     convergence = meridian_convergence(float(world.x.mean()), float(world.y.mean()))
-    near, on_water = _near_field(world, eye, convergence)
+    near, on_water, on_review = _near_field(world, eye, convergence)
     far = _far_field(world, eye, convergence, far_reach_m)
-    return np.maximum(near, far), (on_water & (near >= far)).any(axis=1)
+    near_sets = near >= far
+    return (
+        np.maximum(near, far),
+        (on_water & near_sets).any(axis=1),
+        (on_review & near_sets).any(axis=1),
+    )
 
 
 def horizon_profile_degrees(
@@ -217,17 +228,21 @@ class TileHorizons:
     """A tile's Horizon profiles as storage codes, with the water guard's finding.
 
     `set_by_water[k]` is True when, at some azimuth, the cell that sets
-    Candidate k's merged horizon is a water cell of `TileWorld.water`.
+    Candidate k's merged horizon is a water cell of `TileWorld.water`;
+    `set_by_review[k]` likewise for a cell of `TileWorld.review`.
     """
 
     codes: npt.NDArray[np.uint8]
     set_by_water: npt.NDArray[np.bool_]
+    set_by_review: npt.NDArray[np.bool_]
 
 
 def cast_tile(world: TileWorld, *, far_reach_m: float = FAR_REACH_M) -> TileHorizons:
-    """`horizon_profile_codes`, plus which Candidates' horizons a water cell sets."""
-    degrees, set_by_water = _cast(world, far_reach_m)
-    return TileHorizons(codes=degrees_to_codes(degrees), set_by_water=set_by_water)
+    """`horizon_profile_codes`, plus which Candidates' horizons a water or review cell sets."""
+    degrees, set_by_water, set_by_review = _cast(world, far_reach_m)
+    return TileHorizons(
+        codes=degrees_to_codes(degrees), set_by_water=set_by_water, set_by_review=set_by_review
+    )
 
 
 def precompute_tiles(

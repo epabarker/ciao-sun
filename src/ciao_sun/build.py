@@ -13,9 +13,11 @@ Candidate or a walk edge. Tile by tile, on `workers` processes:
    their zips, over the square plus the 3 km near reach;
 2. Candidates and walk graph (`candidates.build_tile`), Candidates only from
    inside the coverage;
-3. the crown-envelope surface (`surface.crown_envelope_surface`);
+3. the crown-envelope surface (`surface.crown_envelope_surface`), with boats
+   moored in docks and harbours lowered to the ground (`surface.lower_moored_boats`);
 4. Horizon profiles (`horizon_precompute.cast_tile`), which also counts the
-   Candidates the water guard is looking for;
+   Candidates the water guard is looking for, and those whose horizon a raised
+   river or pond cell sets, for the report;
 5. write the tile, read it back through the codec and run the direct-ray
    profile check on it (`build_checks.check_tile_profiles`).
 
@@ -81,9 +83,14 @@ from ciao_sun.raster import RasterGrid, load_mosaic
 from ciao_sun.reference.fixtures import SetQuery, write_fixtures
 from ciao_sun.report import silent
 from ciao_sun.surface import (
+    RAISED_ON_WATER_M,
     BuildingFootprints,
+    OpenWater,
     crown_envelope_surface,
+    lower_moored_boats,
+    read_bridges,
     read_building_footprints,
+    read_mooring_water,
     read_water_areas,
 )
 from ciao_sun.terrain50 import load_terrain50
@@ -149,6 +156,14 @@ class _Inputs:
     @functools.cached_property
     def water(self) -> BuildingFootprints:
         return read_water_areas(self.job.osm_pbf, _BNG, self._near_bounds)
+
+    @functools.cached_property
+    def moorings(self) -> BuildingFootprints:
+        return read_mooring_water(self.job.osm_pbf, _BNG, self._near_bounds)
+
+    @functools.cached_property
+    def bridges(self) -> BuildingFootprints:
+        return read_bridges(self.job.osm_pbf, _BNG, self._near_bounds)
 
     @functools.cached_property
     def terrain50(self) -> RasterGrid:
@@ -253,10 +268,19 @@ def _tile_rasters(inputs: _Inputs, grid_ref: str) -> _TileRasters:
     return _TileRasters(mosaic("dsm"), mosaic("first_return_dsm"), mosaic("dtm"))
 
 
-def _surface(inputs: _Inputs, rasters: _TileRasters) -> RasterGrid:
-    return crown_envelope_surface(
+def _surface(inputs: _Inputs, rasters: _TileRasters) -> OpenWater:
+    crown = crown_envelope_surface(
         rasters.last_return, rasters.first_return, rasters.dtm, inputs.footprints
     )
+    return lower_moored_boats(
+        crown, rasters.first_return, rasters.last_return, rasters.dtm,
+        moorings=inputs.moorings, water=inputs.water, buildings=inputs.footprints,
+        bridges=inputs.bridges,
+    )  # fmt: skip
+
+
+def _flags(mask: np.ndarray, like: RasterGrid) -> RasterGrid:
+    return RasterGrid(data=mask.astype("float32"), transform=like.transform, crs=like.crs)
 
 
 @dataclass(frozen=True)
@@ -265,6 +289,7 @@ class _TileReport:
 
     candidates: int | None = None
     water_candidates: int = 0
+    review_candidates: int = 0
     candidates_checked: int = 0
     profile_failures: tuple[str, ...] = ()
 
@@ -277,15 +302,15 @@ def _build_one(job: _Job, grid_ref: str) -> _TileReport:
     )
     if outline is None:
         return _TileReport()
-    surface = _surface(inputs, rasters)
-    water = RasterGrid(
-        data=inputs.water.buffered_mask(surface, 0.0).astype("float32"),
-        transform=surface.transform,
-        crs=surface.crs,
-    )
+    open_water = _surface(inputs, rasters)
+    surface = open_water.surface
+    with np.errstate(invalid="ignore"):
+        # The guard: a cell the mask lowered that still stands proud of the ground.
+        left_standing = open_water.flattened & (surface.data - rasters.dtm.data > RAISED_ON_WATER_M)
     world = TileWorld(
         surface=surface, dtm=rasters.dtm, terrain50=inputs.terrain50,
-        x=outline.easting, y=outline.northing, water=water,
+        x=outline.easting, y=outline.northing, water=_flags(left_standing, surface),
+        review=_flags(open_water.raised_river, surface),
     )  # fmt: skip
     horizons = cast_tile(world, far_reach_m=job.far_reach_m)
     path = write_tile(outline.with_profiles(horizons.codes), job.tiles_dir)
@@ -296,6 +321,7 @@ def _build_one(job: _Job, grid_ref: str) -> _TileReport:
     return _TileReport(
         candidates=len(outline.easting),
         water_candidates=int(horizons.set_by_water.sum()),
+        review_candidates=int(horizons.set_by_review.sum()),
         candidates_checked=check.candidates_checked,
         profile_failures=check.failures,
     )
@@ -305,8 +331,8 @@ def _check_one(job: _Job, grid_ref: str) -> _TileReport:
     inputs = _inputs(job)
     rasters = _tile_rasters(inputs, grid_ref)
     check = check_tile_profiles(
-        read_tile(job.tiles_dir / f"{grid_ref}.bin"), _surface(inputs, rasters), rasters.dtm,
-        inputs.terrain50, far_reach_m=job.far_reach_m, tolerances=job.tolerances,
+        read_tile(job.tiles_dir / f"{grid_ref}.bin"), _surface(inputs, rasters).surface,
+        rasters.dtm, inputs.terrain50, far_reach_m=job.far_reach_m, tolerances=job.tolerances,
     )  # fmt: skip
     return _TileReport(candidates_checked=check.candidates_checked, profile_failures=check.failures)
 
@@ -412,14 +438,26 @@ def _duration(seconds: float) -> str:
     return f"{minutes // 60} h {minutes % 60:02d} min"
 
 
+def _report_review(reports: dict[str, _TileReport], report: Callable[[str], None]) -> None:
+    review = {ref: r.review_candidates for ref, r in reports.items() if r.review_candidates}
+    if review:
+        where = ", ".join(f"{ref} ({count})" for ref, count in sorted(review.items()))
+        report(
+            f"River and pond review: {sum(review.values())} Candidates have a horizon set by "
+            "a raised river or pond cell that is neither building nor bridge: trees, or tidal "
+            f"water standing proud. They are kept. Tiles: {where}."
+        )
+
+
 def _raise_on_failures(reports: dict[str, _TileReport], tolerances: Tolerances) -> None:
     problems: list[str] = []
     water = {ref: r.water_candidates for ref, r in reports.items() if r.water_candidates}
     if sum(water.values()) > tolerances.water_candidates_allowed:
         where = ", ".join(f"{ref} ({count})" for ref, count in sorted(water.items()))
         problems.append(
-            f"Water guard: {sum(water.values())} Candidates have a horizon set by a water "
-            f"cell; {tolerances.water_candidates_allowed} allowed. Tiles: {where}."
+            f"Water guard: {sum(water.values())} Candidates have a horizon set by a cell of "
+            "mooring water that should have been lowered to the ground; "
+            f"{tolerances.water_candidates_allowed} allowed. Tiles: {where}."
         )
     failures = [line for ref in sorted(reports) for line in reports[ref].profile_failures]
     if failures:
@@ -497,6 +535,7 @@ def build(
             on_done=_progress(len(grid_refs), report, clock),
         )
     _raise_on_failures(reports, tolerances)
+    _report_review(reports, report)
     try:
         exploded = basemap.explode(
             lock.path_of(protomaps[0]), coverage, partial / basemap.DIRECTORY
@@ -516,6 +555,9 @@ def build(
     checks = tolerances.as_manifest()
     checks["profile"]["candidatesChecked"] = sum(r.candidates_checked for r in reports.values())
     checks["waterGuard"]["candidatesFound"] = sum(r.water_candidates for r in reports.values())
+    checks["waterGuard"]["riverCandidatesToReview"] = sum(
+        r.review_candidates for r in reports.values()
+    )
     (osm,) = [entry for entry in lock.inputs if entry.kind == "osm"]
     write_manifest(
         partial,

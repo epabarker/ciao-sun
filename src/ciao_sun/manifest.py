@@ -30,7 +30,7 @@ not read is a format bump.
       "buildChecks": {
         "profile": {"candidatesPerTile", "toleranceDeg", "storageHalfStepDeg",
                     "fractionWithin", "candidatesChecked"},
-        "waterGuard": {"candidatesAllowed", "candidatesFound"}
+        "waterGuard": {"candidatesAllowed", "candidatesFound", "riverCandidatesToReview"}
       }
     }
 

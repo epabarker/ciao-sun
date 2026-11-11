@@ -179,7 +179,10 @@ def build(
     Two checks fail the build, and a failed build leaves no build directory:
       - tile Horizon profiles are compared with direct ray casting at a sample
         of Candidates;
-      - no Candidate's horizon may be set by a water cell (the water guard).
+      - no Candidate's horizon may be set by a moored boat the build should
+        have lowered (the water guard).
+    Candidates whose horizon a raised river or pond cell sets are reported
+    for review; they do not fail the build.
 
     The manifest records the attribution, the licence, the LIDAR survey years,
     every input's version and SHA-256, the coverage, the tile index and the

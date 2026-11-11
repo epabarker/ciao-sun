@@ -144,6 +144,22 @@ describe("ranked answer", () => {
   });
 });
 
+describe("highlighted spot", () => {
+  it("shows the highlighted spot's sun intervals as clock ranges, and no other row's", () => {
+    const root = document.createElement("div");
+    root.append(renderAnswer(ranked, "ST5773/40"));
+    const times = [...root.querySelectorAll("[data-spot]")].map((row) => row.querySelector("[data-field=sun-times]")?.textContent);
+    expect(times).toEqual([undefined, "Sun in view 07:45–07:54, 08:24–10:00 · low sun 08:24–08:42"]);
+    expect(root.querySelector("[aria-current=true]")?.getAttribute("data-spot")).toBe("ST5773/40");
+  });
+
+  it("says when the highlighted spot has no sun in view", () => {
+    const root = document.createElement("div");
+    root.append(renderAnswer({ ...ranked, spots: [spot({ sunIntervals: [], lowSunIntervals: [] })] }, "ST5873/1"));
+    expect(root.querySelector("[data-field=sun-times]")?.textContent).toBe("No sun in view");
+  });
+});
+
 describe("not covered", () => {
   it('says "not covered here" and lists nothing', () => {
     const root = render({ status: "not-covered", spots: [] });

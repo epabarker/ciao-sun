@@ -41,6 +41,8 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // MapLibre (with the basemap style) is one lazily loaded chunk of about 1.1 MB.
+    chunkSizeWarningLimit: 1200,
   },
   test: {
     // Node by default; a rendering test opts into happy-dom with

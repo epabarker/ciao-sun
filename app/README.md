@@ -6,9 +6,10 @@ pipeline and the reference. Terms follow `GLOSSARY.md`; the spec is #27.
 
 ## Stack
 
-TypeScript (strict), Vite for the bundle, Vitest for tests, npm. No framework
-and no runtime dependencies yet; views are plain DOM built with `src/ui/dom.ts`'s
-`h()`. happy-dom (dev only) is the DOM for rendering tests. Node is pinned in `.nvmrc`, and every
+TypeScript (strict), Vite for the bundle, Vitest for tests, npm. No framework;
+views are plain DOM built with `src/ui/dom.ts`'s `h()`. The runtime
+dependencies are the map's: `maplibre-gl` and `@protomaps/basemaps` (its
+style), loaded as their own chunk (see "The map"). happy-dom (dev only) is the DOM for rendering tests. Node is pinned in `.nvmrc`, and every
 dependency is pinned exactly in `package.json` with `package-lock.json`
 committed.
 
@@ -41,6 +42,7 @@ src/settings/store.ts   settings store: Wake time, max walk, saved places; brows
 src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
 src/query/origin.ts     the typed origin "lat, lon"
 src/ui/                 the answer screen (below)
+src/map/                the map under the sheet (below): its interface, MapLibre adapter and basemap style
 src/about/about.ts      the About sheet's content: credits, survey years, licence from the manifest; the fixed caveats
 src/contract.ts         the Query and Answer types, as fixture JSON holds them
 src/tile/decode.ts      tile decoder: f1 bytes -> Tile (docs/tile-format-f1.md)
@@ -86,17 +88,18 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 
 | File | Does | Extended by |
 |---|---|---|
-| `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer |
+| `ui/screen.ts` | the frame: the persistent `.map`, then `header.top` (sentence) and `main.sheet` (result, then `footer.foot`) over it, and the About sheet while open; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #48 puts tabs in the header and safety copy in the footer |
+| `ui/sheet.ts` | the bottom sheet: stops `peek`/`half`/`full` (heights in `style.css`'s `--sheet-h`), drag and tap on its handle | |
 | `ui/about-view.ts` | the footer's "About the data" link (in the frame, so on both tabs) and the sheet. Every credit, year and licence is from the loaded manifest's `attribution`, `lidarSurveyYears` and `licence`, rendered in order with none named in code; only `CAVEATS` in `about/about.ts` is fixed copy. Open is app state (`aboutOpen`), so a re-render keeps it open | |
 | `ui/sentence.ts` | the sentence editor; its words per window in `WORDING`; the origin slot (`OriginSlot`: locating, GPS, typed or a saved place) | #48 Evening wording |
 | `ui/sky-slot.ts` | where the sky slot's value came from (`SkySource`, on the select as `data-sky-source`); the line under the sentence with the fetch time and `SKY_CREDIT`, shown only when the forecast filled the slot | |
 | `ui/places.ts` | saved places: the toggle under the sentence, rename, delete, save the origin in use | |
-| `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
+| `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS`; a row's head (`data-action="select-spot"`) highlights it, and the highlighted row (`aria-current`) shows its sun times | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice |
 | `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |
 | `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
 
 `AppDeps` (in `app.ts`) is every outside dependency: the pin, `fetch`, the
-storage accessor, the clock and GPS. `test/app/` runs the whole screen through
+storage accessor, the clock, GPS and the map. `test/app/` runs the whole screen through
 it over the synthetic build. The scorer is called in one place, `score()` in
 `app.ts`, with the manifest's coverage polygon: the scorer decides
 `not-covered` (`scorer/coverage.ts`, which the loader also uses to skip
@@ -125,6 +128,38 @@ place's position or name. The origin in use is `state.origin`, an `OriginSlot`, 
 position from the origin in use (GPS or typed). Once a place is saved the
 origin slot is a select of "here", each place and "a position…", so a denied
 GPS offers them. `test/app/saved-places.test.ts` covers it through `AppDeps`.
+
+## The map
+
+The screen talks to the map through `MapSurface` (`src/map/map.ts`):
+`show(markers)` puts the origin and the numbered spots on it and frames them,
+`highlight(id)` marks one and brings it into view, and the factory's
+`onSelect` reports a tap on a marker. `AppDeps.map` is the factory: `main.ts`
+passes the MapLibre one (`src/map/maplibre.ts`, imported on demand, so it is a
+separate chunk), tests pass a fake (`test/app/map.test.ts`), and without one
+the screen is the list alone. `src/map/link.ts` asks the map to change only
+what changed on each draw; the map is made once, when the build opens, and a
+factory that fails (no WebGL) leaves the list working.
+
+- **Basemap:** `basemapOf` (`src/map/manifest.ts`) reads the manifest's
+  `basemap` section into `<build>/basemap/{z}/{x}/{y}.mvt`, bounds and zooms;
+  `basemapStyle` (`src/map/style.ts`) is Protomaps' v4 `light` flavour over it,
+  with the source's `bounds`, `minzoom` and `maxzoom` set so no tile outside
+  them is requested. The style has no label or icon layers, so it needs no
+  glyphs or sprite, and the map fetches nothing but the build's tiles (itself,
+  from its worker, not through `AppDeps.fetch`). The
+  camera is kept at or above `minZoom` and within the bounds plus a margin
+  (`cameraBounds`). A tile that fails to load or parse is logged once and the
+  map shows its plain ground under the markers (the synthetic build's tiles
+  are text placeholders, so `npm run dev` looks like that).
+- **Markers** are HTML (`.marker-spot`, `.marker-origin`), so the numbers need
+  no glyphs.
+- **Credits:** the corner ⓘ is MapLibre's compact attribution, carrying the
+  manifest's `attribution` text for the sources in `MAP_CREDIT_SOURCES`
+  (OpenStreetMap, Protomaps); it rides on the sheet's top edge.
+- **Worker:** MapLibre's worker is its own file
+  (`assets/maplibre-gl-worker-<hash>.mjs`), set with `setWorkerUrl`; the shell
+  includes it.
 
 ## Conventions
 

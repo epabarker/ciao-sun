@@ -57,10 +57,164 @@ select {
   color: var(--mute);
 }
 
+/* Map-first (#47): the map fills the page; the sentence floats over its top
+   and the result sits in a bottom sheet (ui/sheet.ts). Only those two take
+   touches, so the map stays usable between them. */
+:root {
+  /* The sheet's stops; ui/sheet.ts `stopHeight` mirrors them for the drag. */
+  --sheet-h: 50dvh;
+  --map-ground: #e9e7e1;
+}
+
+:root:has(.sheet[data-sheet="peek"]) {
+  --sheet-h: 176px;
+}
+
+:root:has(.sheet[data-sheet="full"]) {
+  --sheet-h: calc(100dvh - 64px);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+/* Specific enough to win over maplibre-gl.css's `.maplibregl-map`, which loads later. */
+#app > .map {
+  position: absolute;
+  inset: 0;
+  background: var(--map-ground);
+}
+
 .screen {
+  position: absolute;
+  inset: 0;
+  z-index: 3; /* over MapLibre's controls */
+  pointer-events: none;
+}
+
+.top,
+.sheet {
+  pointer-events: auto;
+  background: var(--card);
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.18);
+}
+
+/* The About sheet covers the map, the sentence and the bottom sheet. */
+.screen > .about {
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.top {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
   max-width: 560px;
   margin: 0 auto;
-  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  padding: 2px 14px 4px;
+  border-radius: 14px;
+}
+
+.top .sentence {
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  height: var(--sheet-h);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px 18px 0 0;
+  transition: height 0.2s ease-out;
+}
+
+/* While a drag sets --sheet-h inline, the sheet follows the finger at once. */
+:root[style*="--sheet-h"] .sheet,
+:root[style*="--sheet-h"] #app .maplibregl-ctrl-bottom-right {
+  transition: none;
+}
+
+.sheet-handle {
+  flex: 0 0 auto;
+  height: 28px;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.sheet-grip {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--mute);
+  opacity: 0.5;
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+}
+
+/* The corner ⓘ rides on the sheet's top edge, in the map's visible corner. */
+#app .maplibregl-ctrl-bottom-right {
+  bottom: var(--sheet-h);
+  transition: bottom 0.2s ease-out;
+}
+
+.marker-spot {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--sun);
+  color: #000;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 26px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+}
+
+.marker-spot.is-selected {
+  width: 38px;
+  height: 38px;
+  line-height: 34px;
+  font-size: 17px;
+  background: var(--low-sun);
+  color: #fff;
+}
+
+.marker-origin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #2f6fde;
+  box-shadow: 0 0 0 6px rgb(47 111 222 / 0.25);
 }
 
 /* The sentence */
@@ -220,6 +374,30 @@ select {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  /* A button: a tap highlights the spot on the map. */
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spot[aria-current="true"] {
+  margin: 0 -16px;
+  padding-inline: 16px;
+  background: color-mix(in srgb, var(--sun) 14%, var(--card));
+}
+
+.spot[aria-current="true"] .rank {
+  background: var(--low-sun);
+  color: #fff;
+}
+
+.spot-sun {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .rank {

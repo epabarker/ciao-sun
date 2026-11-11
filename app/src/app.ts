@@ -12,6 +12,8 @@ import type { Answer, Query, Sky, WindowName } from "./contract";
 import { forecastCoordinate, forecastSky } from "./forecast/forecast";
 import { cloudSpan } from "./forecast/span";
 import { type Build, DataUnavailableError, openBuild } from "./loader/loader";
+import { type MapLink, linkMap } from "./map/link";
+import type { MapFactory } from "./map/map";
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
@@ -20,8 +22,9 @@ import { type Tile, UnsupportedFormatError } from "./tile/decode";
 import { renderAbout } from "./ui/about-view";
 import { h } from "./ui/dom";
 import { renderPlaces } from "./ui/places";
-import { type Result, renderScreen } from "./ui/screen";
+import { type Result, mapContainer, renderScreen, screenInsets } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
+import type { SheetStop } from "./ui/sheet";
 
 export interface AppDeps {
   config: ReleaseConfig;
@@ -40,6 +43,8 @@ export interface AppDeps {
   now: () => number;
   /** The GPS position; rejects when it is denied or unavailable. */
   locate: () => Promise<{ lat: number; lon: number }>;
+  /** The map under the sheet (MapLibre in the browser); without one, the screen is the list alone. */
+  map?: MapFactory;
 }
 
 export interface App {
@@ -92,6 +97,11 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     return undefined;
   };
 
+  let map: MapLink | undefined;
+  /** The highlighted spot's candidateId, linking its row and its marker. */
+  let selected: string | undefined;
+  let sheet: SheetStop = "half";
+
   const draw = () => {
     const places = renderPlaces(
       {
@@ -109,7 +119,12 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       result,
       onAbout: () => setAbout(true),
       about: aboutOpen ? renderAbout(readAbout(build?.manifest), () => setAbout(false)) : undefined,
+      selected,
+      onSelect: events.selectSpot,
+      sheet,
+      onSheet: events.sheet,
     });
+    map?.update({ origin: origin(), result, selected });
   };
 
   const setAbout = (open: boolean) => {
@@ -141,6 +156,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     }
     if (ticket === asked) {
       result = next;
+      // A highlight lasts only while its spot is still in the list.
+      if (next.kind !== "answer" || !next.answer.spots.some((spot) => spot.candidateId === selected)) selected = undefined;
     }
   };
 
@@ -249,6 +266,18 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       locate();
       refresh();
     },
+    /** A tap on a spot's row or its marker. */
+    selectSpot(id: string) {
+      selected = id;
+      // Half way, so both the highlighted row and its marker are in view.
+      sheet = "half";
+      draw();
+      root.querySelector(`[data-spot="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    },
+    sheet(stop: SheetStop) {
+      sheet = stop;
+      draw();
+    },
     usePlace(id: string) {
       const place = state.places.find((p) => p.id === id);
       if (place) setOrigin({ kind: "place", place });
@@ -302,6 +331,10 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     openBuild(deps.config, { fetch: deps.fetch, baseUrl: deps.baseUrl }).then(
       (opened) => {
         build = opened;
+        if (deps.map) {
+          map = linkMap(deps.map, mapContainer(root), opened, { onSelect: events.selectSpot, insets: () => screenInsets(root) });
+          track(map.ready);
+        }
         refresh();
       },
       (error: unknown) => {

@@ -8,7 +8,7 @@
 
 import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
-import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./data/loader";
+import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";

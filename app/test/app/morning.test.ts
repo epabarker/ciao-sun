@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { type AppDeps, startApp } from "../../src/app";
 import type { Answer, Query } from "../../src/contract";
-import type { FetchLike } from "../../src/data/loader";
+import type { FetchLike } from "../../src/loader/loader";
 import { answer } from "../../src/scorer/answer";
 import { SETTINGS_KEY } from "../../src/settings/store";
 import { decodeTile } from "../../src/tile/decode";

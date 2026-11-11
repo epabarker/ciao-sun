@@ -34,9 +34,9 @@ release.json            the pin: {dataBase, format, build} (below)
 src/main.ts             entry: the browser's dependencies, handed to startApp
 src/app.ts              the app: release config + data loader + settings + GPS + scorer -> screen
 src/config/release.ts   the release config, read from release.json at build time
-src/data/loader.ts      data loader: openBuild(pin) checks the manifest format; Build.area(origin) -> tiles
-src/data/grid.ts        WGS84 -> National Grid, and the 1 km tiles in reach of an origin
-src/data/coverage.ts    whether an origin is inside the manifest's coverage polygon
+src/loader/loader.ts    data loader: openBuild(pin) checks the manifest format; Build.area(origin) -> tiles
+src/loader/grid.ts      WGS84 -> National Grid, and the 1 km tiles in reach of an origin
+src/loader/coverage.ts  whether an origin is inside the manifest's coverage polygon
 src/settings/store.ts   settings store: Wake time, max walk; browser storage with a memory fallback
 src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
 src/query/origin.ts     the typed origin "lat, lon"
@@ -54,7 +54,8 @@ test/parity/            the golden-fixture harness (below)
 ```
 
 A module is a directory under `src/` named for the spec's module (data
-loader, router, scorer, forecast adapter, settings store, ...). Static files
+loader, router, scorer, forecast adapter, settings store, ...). Never name one
+`data/`: the repo's `.gitignore` ignores every `data/` directory. Static files
 that must keep their name, such as `sw.js`, go in `public/`.
 
 ## The release config

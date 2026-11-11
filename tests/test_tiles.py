@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ciao_sun.tiles import bng_to_tile_code, tile_codes_for_aoi
+from ciao_sun.tiles import bng_to_tile_code, tile_codes_near_polygon
 
 
 def test_bng_origin_is_grid_square_sv():
@@ -36,20 +36,44 @@ def test_tile_code_within_square_is_5km_aligned():
     assert code == "ST5570"
 
 
-def test_tile_codes_for_bristol_aoi_match_downloaded_tiles():
-    """Cross-checked against the four EA tile directories actually downloaded
-    for this project's area of interest: ST57ne, ST57se, ST67nw, ST67sw. In
-    the EA quadrant naming, a 10km square's NE/SE/NW/SW quadrant is exactly
-    one 5km tile, e.g. ST57 NE = the tile this project's format calls ST5575.
-    """
-    codes = tile_codes_for_aoi(51.4720, -2.6040, radius_m=1000)
-    downloaded_as_5km_codes = {"ST5575", "ST5570", "ST6070", "ST6075"}
-    assert downloaded_as_5km_codes & set(codes), (
-        f"expected overlap with downloaded tiles, got {codes}"
-    )
+def _square(cx: float, cy: float, half: float) -> list[tuple[float, float]]:
+    return [(cx - half, cy - half), (cx + half, cy - half), (cx + half, cy + half),
+            (cx - half, cy + half)]
 
 
-def test_tile_codes_are_sorted_and_unique():
-    codes = tile_codes_for_aoi(51.4720, -2.6040, radius_m=1500)
-    assert codes == sorted(set(codes))
-    assert len(codes) > 0
+# The centre of ST5570, whose edges are 2.5 km away and corners 3.5 km away.
+_ST5570_CENTRE = (357_500.0, 172_500.0)
+
+
+def test_polygon_inside_one_tile_needs_only_that_tile_without_a_margin():
+    rings = [_square(*_ST5570_CENTRE, 50.0)]
+    assert tile_codes_near_polygon(rings, 0.0) == ["ST5570"]
+
+
+def test_3km_margin_reaches_edge_neighbours_but_not_diagonal_ones():
+    # 50 m square at the tile centre: edge neighbours are 2450 m away,
+    # diagonal neighbours 2450 * sqrt(2) = 3465 m away.
+    rings = [_square(*_ST5570_CENTRE, 50.0)]
+    assert tile_codes_near_polygon(rings, 3000.0) == [
+        "ST5070", "ST5565", "ST5570", "ST5575", "ST6070",
+    ]
+    assert len(tile_codes_near_polygon(rings, 3500.0)) == 9
+
+
+def test_tile_wholly_inside_the_polygon_is_included():
+    # A 14 km square around the tile: no polygon vertex or edge touches ST5570.
+    rings = [_square(*_ST5570_CENTRE, 7000.0)]
+    codes = tile_codes_near_polygon(rings, 0.0)
+    assert "ST5570" in codes
+    assert len(codes) == 9
+
+
+def test_thin_polygon_crossing_a_tile_with_no_vertex_in_it_is_included():
+    sliver = [(352_000.0, 172_400.0), (363_000.0, 172_400.0), (363_000.0, 172_600.0),
+              (352_000.0, 172_600.0)]
+    assert tile_codes_near_polygon([sliver], 0.0) == ["ST5070", "ST5570", "ST6070"]
+
+
+def test_every_part_of_a_multi_part_coverage_is_served():
+    rings = [_square(*_ST5570_CENTRE, 50.0), _square(377_500.0, 172_500.0, 50.0)]
+    assert tile_codes_near_polygon(rings, 0.0) == ["ST5570", "ST7570"]

@@ -6,6 +6,7 @@ start and, for the spot beyond the limit, the window's own Leave-by rule.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from dataclasses import replace
 
@@ -31,20 +32,29 @@ def rank_by_walk(world: World, scored: Scored, among: Iterable[int]) -> list[int
     )
 
 
+def stay_minutes(target_min: int, walk_min: float) -> int:
+    """The fallback "stay N min": the Duration target less the walk, never below 0.
+
+    Rounded up to a whole minute, as the Sun minutes an evening Leave-by still
+    needs are, so that walk + stay always reaches the target.
+    """
+    return max(math.ceil(target_min - walk_min), 0)
+
+
 def fallback_spots(
     world: World, track: SunTrack, plan: WindowPlan, scored: Scored, target_min: int
 ) -> tuple[Spot, ...]:
     """The nearest reachable spots that pass openness, de-duped, whatever their sun.
 
-    Each is left for at the start of the window and says to stay for the
-    Duration target: the walk counts towards it, so the stay is the target.
+    Each is left for at the start of the window and says how long to stay:
+    the walk counts towards the Duration target, so the stay is `stay_minutes`.
     Its sun fields are still the geometry's, as on a ranked spot.
     """
     nearest = rank_by_walk(world, scored, np.flatnonzero(scored.reachable))
     return tuple(
         replace(
             build_spot(world, track, plan, scored, j, plan.start, target_min),
-            stay_min=target_min,
+            stay_min=stay_minutes(target_min, walk_minutes(scored, j)),
         )
         for j in dedupe(world, scored, nearest)
     )

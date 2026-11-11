@@ -1,5 +1,10 @@
 # Handoff: `ciao-sun` — nearest unobstructed sunrise viewpoint finder
 
+> **Historical.** This is the original brief for the laptop tool. `find`, `compare`,
+> walking-distance routing and the GeoJSON, map and GeoTIFF outputs it describes
+> were removed in #29; the package is now the offline build pipeline plus a scoring
+> reference (ADR 0001, spec #27). Kept for the maths and the gotchas.
+
 You are implementing a small, well-tested Python tool. A working prototype exists at
 `prototype/find_sunrise_spots.py`. Treat it as a reference for the maths, **not** as
 code to keep — it is a single-file sketch with no tests, no CLI, and no caching.

@@ -1,33 +1,31 @@
 # Ciao Sun
 
-Find the nearest places you can stand and see the sun during the first hour
-after sunrise, with nothing (terrain, buildings, trees) blocking the line of
-sight, using Environment Agency LIDAR for England.
+Find places you can stand and see the sun with nothing (terrain, buildings,
+trees) blocking the line of sight, using Environment Agency LIDAR for England.
+
+This Python package is the **offline build pipeline plus a scoring reference**
+(see `docs/adr/0001-static-precompute-client-evaluation.md`); the phone app
+evaluates the precomputed Horizon profiles itself. Terms follow `GLOSSARY.md`.
+
+The package is mid-way to that shape. The earlier laptop tool's `find` and
+`compare` commands, walking-distance routing and GeoJSON / map / GeoTIFF
+exports have been removed. What the CLI exposes today is:
+
+- `profile-only` -- dump the Horizon profile at one coordinate, for cross-checking
+  against heywhatsthat by hand.
+- `tiles` -- a placeholder that prints the LIDAR tile codes to download, until
+  `fetch` replaces it.
 
 ## How it works
 
-For each candidate standing position and each time step across the hour after
-sunrise, Ciao Sun computes the sun's azimuth and apparent elevation, casts a ray
-from the observer's eye along that azimuth across a Digital Surface Model, and
-compares the ray's maximum obstruction angle to the sun's elevation. That gives
-every candidate a clear/blocked pattern across the hour.
+For a standing position and a true azimuth, Ciao Sun casts a ray from the
+observer's eye across a Digital Surface Model and takes the ray's maximum
+obstruction angle: the horizon angle on that bearing. Doing this for every
+azimuth gives the position's Horizon profile. The sun is in view at a given
+moment when its apparent elevation is above the horizon angle on its azimuth.
 
-`ciao-sun find` then looks for an **unbroken run of clear time steps** at least
-`min_clear_minutes` long (default 5) -- not just an overall fraction of the
-hour clear, which says nothing about whether the clear moments are contiguous
-or scattered across the hour. A candidate that's clear for six separate
-one-minute slivers is not useful for standing and watching a sunrise; one
-clear for fifteen minutes straight is. The nearest passing positions are
-reported, along with the actual clock time of their longest clear window.
-
-(`ciao-sun compare`, which looks for spots clear across several dates at once,
-still uses the older `pass_fraction` -- overall fraction of the hour clear --
-rather than the contiguous-window logic. That's a known inconsistency, not a
-design decision; `find` is where the window-based logic actually lives.)
-
-See `HANDOFF.md` for the full original design brief, including the maths and
-gotchas below (some details, like the passing criterion above, have moved on
-since it was written).
+`HANDOFF.md` is the original design brief for the laptop tool. It is kept for
+the maths and gotchas; its CLI and outputs sections are historical.
 
 ## Sunrise definition
 
@@ -35,9 +33,8 @@ Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
 elevation exceeds -0.833 degrees at the home coordinate -- the standard
 flat-horizon definition used by almanacs. **This is not the actual local
 sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. Ciao Sun answers "where can I see the sun during the hour
-after nominal sunrise", not "when does the sun first appear at this exact
-spot".
+angle is above zero. The track across the hour after Nominal sunrise is what `profile-only`
+overlays on its plot; it stays only until the Stage 1 solar model replaces it.
 
 ## Data
 
@@ -74,19 +71,16 @@ tiles you need:
    `data/dtm/lidar_composite_dtm-2022-1-ST57ne/ST57ne_DTM_1m.tif`) are fine as
    they are.
 
-`ciao-sun find` will fail with a clear message (not a traceback) if tiles are
-missing or don't cover the requested area.
+`ciao-sun profile-only` fails with a clear message (not a traceback) if tiles
+are missing.
 
 ### Licence and attribution
 
 Environment Agency LIDAR is released under the Open Government Licence.
-Any exported map or report using this data must carry:
+Anything published from this data must carry:
 
 > © Environment Agency copyright and/or database right 2022. All rights
 > reserved.
-
-`--map`'s basemap tiles are Esri's (see [Map output](#map-output-map) below)
-and carry their own attribution, shown automatically in the map's corner.
 
 ## Installation
 
@@ -96,104 +90,40 @@ Requires Python >=3.11 and [uv](https://docs.astral.sh/uv/).
 uv sync
 ```
 
-`--walk` and `--map` need their own extras (see below):
-
-```
-uv sync --extra routing --extra map
-# or: uv sync --all-extras
-```
-
 ## CLI
 
 ```
-ciao-sun tiles   --centre 51.4720,-2.6040 --radius 1500
-ciao-sun find    --config ciao-sun.toml
-ciao-sun find    --centre 51.4720,-2.6040 --date 2026-12-21 --radius 1500 --min-clear-minutes 10
-ciao-sun find    --centre 51.4720,-2.6040 --date 2026-12-21 --walk --map
-ciao-sun compare --centre 51.4720,-2.6040 --dates 2026-12-21,2027-03-20,2027-06-21
+ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
 
-`compare` intersects the passing sets across dates and reports the
-year-round spots. `profile-only` is a debug command that dumps the full
-horizon profile (obstruction angle vs true azimuth, 1 degree steps, 0-360,
-clockwise from true north) for one point as `horizon_profile.csv`, plus
-`horizon_profile.png` with the sun track overlaid. This is the main manual sanity check: compare the plot against
+`profile-only` dumps the full Horizon profile (obstruction angle vs true
+azimuth, 1 degree steps, 0-360, clockwise from true north) for one point as
+`horizon_profile.csv`, plus `horizon_profile.png` with the sun track overlaid.
+This is the main manual sanity check: compare the plot against
 [heywhatsthat.com](https://www.heywhatsthat.com/) for the same coordinate,
-which computes the same thing from independent terrain data.
+which computes the same thing (also from true north) from independent terrain
+data. Flags: `--max-ray`, `--eye-height`, `--curvature/--no-curvature`,
+`--output-dir`.
 
 ### Configuration
 
-Most parameters can be set via `--config ciao-sun.toml` (CLI flags, where they
-exist, override the file). The ones most worth knowing about:
+`profile-only --config ciao-sun.toml` reads these keys (unknown keys are
+rejected):
 
 | Key | Default | Meaning |
 |---|---|---|
-| `min_clear_minutes` | `5.0` | `find`'s passing bar: minimum unbroken clear window, in minutes |
-| `pass_fraction` | `0.5` | `compare`'s passing bar: minimum fraction of the hour clear (see the note above) |
-| `radius` | `1500.0` | Search radius around home, metres |
-| `spacing` | `10.0` | Candidate grid spacing, metres |
-| `step_minutes` | `5.0` | Sun-track sampling interval. **Also the resolution of reported clear windows** -- if you care about a 5-10 minute window, a 5-minute step is too coarse to resolve it reliably; try `2.0` or `1.0` |
-| `window_minutes` | `60.0` | How far past nominal sunrise to track the sun |
-| `max_ray` | `3000.0` | Furthest obstruction considered, metres (see Limitations) |
-| `eye_height` | `1.6` | Observer eye height above bare earth, metres |
-| `curvature` | `true` | Earth curvature + standard refraction in the horizon calculation |
+| `dsm_dir` | `data/dsm` | Where the DSM tiles are |
+| `dtm_dir` | `data/dtm` | Where the DTM tiles are |
+| `cache_dir` | `data/cache` | Mosaic cache |
+| `date` | `2026-12-21` | Date of the overlaid sun track (`--date` overrides) |
+| `max_ray` | `3000.0` | Furthest obstruction considered, metres (`--max-ray` overrides) |
+| `tz` | `Europe/London` | Time zone of the overlaid sun track |
+| `step_minutes` | `5.0` | Sun-track sampling interval |
+| `window_minutes` | `60.0` | How far past Nominal sunrise to track the sun |
 
-A minimal `ciao-sun.toml`:
-
-```toml
-home_lat = 51.4720
-home_lon = -2.6040
-date = "2026-09-20"
-min_clear_minutes = 5.0
-step_minutes = 2.0
-```
-
-### Outputs of `find` / `compare`
-
-- Ranked table to stdout: distance, walking distance and estimated walking
-  time (with `--walk`), the clock time of the longest clear window and its
-  length in minutes, lat/lon, and overall fraction of the hour clear.
-  (Walking time is a rough estimate -- distance divided by an assumed 80 m/min
-  pace -- not a routed travel time.)
-- `clear_spots.geojson` -- all passing candidates, with `metres_from_home`,
-  `walk_metres` (with `--walk`), `fraction_clear`, and (for `find`)
-  `sun_visible_from`, `sun_visible_until` and `clear_window_minutes`
-  properties.
-- `horizon_angle.tif` -- per-candidate worst obstruction angle, EPSG:27700,
-  for QGIS.
-- `map.html` -- see below (with `--map`).
-
-### Map output (`--map`)
-
-A self-contained Leaflet map (`map.html`, one file, nothing else to keep
-track of):
-
-- A **heatmap** over the whole search grid: transparent wherever a candidate
-  never sees the sun at all, coloured (pale yellow through to deep red) and
-  more opaque the longer its longest unbroken clear window is, up to
-  `window_minutes` (fully opaque = clear for the entire tracked hour). This
-  is the fast way to see *where* to look before reading distances.
-- A blue home marker, and the top 5 candidates by walking distance (or
-  straight-line distance without `--walk`) as numbered red pins with a
-  popup giving the clear-window time and distance.
-- A layer toggle (top right) to hide/show the "Spots" pins independently of
-  the heatmap, and a colour-scale legend (bottom left).
-
-The basemap tiles are Esri's free World Street Map service. (folium's own
-default OpenStreetMap tiles get blocked by OSM's automated-use policy for
-this kind of thing, and CartoDB's named tiles now require an API key -- Esri's
-don't, for this level of use.)
-
-### Walking distance (optional)
-
-`--walk` ranks candidates by walking-network distance instead of straight
-line, using `osmnx`/`networkx` (install with `uv sync --extra routing`). This
-also implicitly filters out points in private gardens, which straight-line
-ranking cannot do. If osmnx/networkx aren't installed, Ciao Sun warns and falls
-back to straight-line distance rather than failing. osmnx's own street-network
-cache is redirected to `data/cache/osmnx/` (its default is a `cache/`
-directory wherever you happen to run the command from).
+The point comes from the command's argument, not the file. `--eye-height` and
+`--curvature/--no-curvature` are flags only.
 
 ## Limitations
 
@@ -216,10 +146,6 @@ directory wherever you happen to run the command from).
 - **DTM, not DSM, for observer height.** The observer always stands on bare
   earth. Using the DSM for standing height would place candidates on rooftops
   and in tree canopies.
-- **Clear windows are resolved to `step_minutes`, not continuously.** A
-  candidate's reported window spans its first-to-last *clear sample*
-  timestamp, so it's a lower bound at the sampling resolution -- see
-  `step_minutes` above.
 - **England only.** LIDAR coverage and the OS National Grid tile-code scheme
   used by `ciao-sun tiles` don't extend elsewhere.
 
@@ -230,3 +156,5 @@ uv run pytest
 uv run ruff check .
 uv run mypy src
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same three on every push.

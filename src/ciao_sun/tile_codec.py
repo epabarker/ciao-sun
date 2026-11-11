@@ -22,12 +22,14 @@ import numpy.typing as npt
 #   codes   0-120: -2.0 deg to 10.0 deg in 0.1 deg steps
 #   codes 121-227: 10.5 deg to 63.5 deg in 0.5 deg steps
 CODE_COUNT = 228
-_FINE_MIN_DEG = -2.0
+STORAGE_MIN_DEG = -2.0
 _FINE_STEP_DEG = 0.1
 _FINE_TOP_CODE = 120
-_FINE_TOP_DEG = 10.0
+FINE_TOP_DEG = 10.0
 _COARSE_STEP_DEG = 0.5
 _TOP_CODE = CODE_COUNT - 1
+# The top code's angle; profiles clamp to STORAGE_MIN_DEG..STORAGE_MAX_DEG.
+STORAGE_MAX_DEG = FINE_TOP_DEG + _COARSE_STEP_DEG * (_TOP_CODE - _FINE_TOP_CODE)
 # Halfway between the last fine angle (10.0) and the first coarse one (10.5).
 _FINE_COARSE_SPLIT_DEG = 10.25
 
@@ -41,8 +43,8 @@ def degrees_to_codes(degrees: npt.ArrayLike) -> npt.NDArray[np.uint8]:
     deg = np.asarray(degrees, dtype=np.float64)
     if np.isnan(deg).any():
         raise ValueError("Horizon profile angles must not be NaN")
-    fine = np.floor((deg - _FINE_MIN_DEG) / _FINE_STEP_DEG + 0.5)
-    coarse = _FINE_TOP_CODE + np.floor((deg - _FINE_TOP_DEG) / _COARSE_STEP_DEG + 0.5)
+    fine = np.floor((deg - STORAGE_MIN_DEG) / _FINE_STEP_DEG + 0.5)
+    coarse = _FINE_TOP_CODE + np.floor((deg - FINE_TOP_DEG) / _COARSE_STEP_DEG + 0.5)
     codes = np.where(deg < _FINE_COARSE_SPLIT_DEG, np.minimum(fine, _FINE_TOP_CODE), coarse)
     return np.clip(codes, 0, _TOP_CODE).astype(np.uint8)
 
@@ -52,8 +54,8 @@ def codes_to_degrees(codes: npt.ArrayLike) -> npt.NDArray[np.float64]:
     c = np.asarray(codes, dtype=np.int64)
     if ((c < 0) | (c > _TOP_CODE)).any():
         raise ValueError(f"storage codes must be 0-{_TOP_CODE}; there are only {CODE_COUNT} codes")
-    fine = _FINE_MIN_DEG + _FINE_STEP_DEG * c
-    coarse = _FINE_TOP_DEG + _COARSE_STEP_DEG * (c - _FINE_TOP_CODE)
+    fine = STORAGE_MIN_DEG + _FINE_STEP_DEG * c
+    coarse = FINE_TOP_DEG + _COARSE_STEP_DEG * (c - _FINE_TOP_CODE)
     return np.where(c <= _FINE_TOP_CODE, fine, coarse)
 
 

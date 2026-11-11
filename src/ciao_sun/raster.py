@@ -7,6 +7,7 @@ area actually needed (home +/- radius +/- max_ray), never a full 5 km tile.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,10 +66,12 @@ def find_tiles(tile_dir: Path) -> list[Path]:
 
 
 def load_mosaic(
-    paths: list[Path],
+    paths: Sequence[Path | str],
     bounds: tuple[float, float, float, float] | None = None,
 ) -> RasterGrid:
     """Merge tiles into one raster, masking nodata to NaN.
+
+    A path may be anything GDAL opens, such as a `/vsizip/` path into a zip.
 
     `bounds` (minx, miny, maxx, maxy), when given, restricts the merge to that
     window via rasterio's windowed reads, so full 5 km tiles are never fully
@@ -132,6 +135,35 @@ def sample(grid: RasterGrid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     ok = (row_i >= 0) & (row_i < rows) & (col_i >= 0) & (col_i < cols)
     out = np.full(x.shape, np.nan, dtype="float32")
     out[ok] = grid.data[row_i[ok], col_i[ok]]
+    return out
+
+
+def sample_bilinear(grid: RasterGrid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Bilinear sample of `grid` at projected coordinates `x`, `y`.
+
+    Cell values are heights at cell centres, as in OS Terrain 50. A point is
+    interpolated between the four centres around it; it returns NaN when any of
+    the four is off the grid or has no data.
+    """
+    x = np.asarray(x, dtype="float64")
+    y = np.asarray(y, dtype="float64")
+    inv = ~grid.transform
+    col_f = inv.a * x + inv.b * y + inv.c - 0.5
+    row_f = inv.d * x + inv.e * y + inv.f - 0.5
+    col_i = np.floor(col_f).astype(np.int64)
+    row_i = np.floor(row_f).astype(np.int64)
+    rows, cols = grid.shape
+    ok = (row_i >= 0) & (row_i < rows - 1) & (col_i >= 0) & (col_i < cols - 1)
+    r, c = row_i[ok], col_i[ok]
+    fx, fy = col_f[ok] - c, row_f[ok] - r
+    data = grid.data
+    out = np.full(x.shape, np.nan, dtype="float64")
+    out[ok] = (
+        data[r, c] * (1 - fx) * (1 - fy)
+        + data[r, c + 1] * fx * (1 - fy)
+        + data[r + 1, c] * (1 - fx) * fy
+        + data[r + 1, c + 1] * fx * fy
+    )
     return out
 
 

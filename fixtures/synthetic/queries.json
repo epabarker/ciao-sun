@@ -1,0 +1,80 @@
+{
+  "about": "The synthetic query set: run over the synthetic build of tests/build_world.py by `uv run python -m tests.synthetic_fixtures`. Origins: P is the Candidate 180 m due true west of the wall, on Ridge Road; the west end and the middle of the street are the other two. See docs/fixtures.md.",
+  "queries": [
+    {
+      "id": "morning-winter-solstice",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-12-21", "wakeTime": "07:30", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-summer-solstice",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-06-21", "wakeTime": "06:00", "origin": {"lat": 51.4589017, "lon": -2.6072034}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "morning-march-equinox",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-03-20", "wakeTime": "06:30", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 2, "sky": "clear"}
+    },
+    {
+      "id": "morning-september-equinox-now",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2026-09-23", "wakeTime": "07:00", "now": "2026-09-23T07:42:30+01:00", "origin": {"lat": 51.4589084, "lon": -2.6059081}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "morning-deep-winter-lamp",
+      "expect": "ranked",
+      "query": {"window": "morning", "date": "2027-01-15", "wakeTime": "06:30", "origin": {"lat": 51.4589084, "lon": -2.6059081}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-overcast-fallback",
+      "expect": "fallback",
+      "query": {"window": "morning", "date": "2026-09-23", "wakeTime": "07:00", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 15, "sky": "overcast"}
+    },
+    {
+      "id": "morning-no-sun-in-reach",
+      "expect": "fallback",
+      "query": {"window": "morning", "date": "2026-03-20", "wakeTime": "03:20", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 0.1, "sky": "clear"}
+    },
+    {
+      "id": "morning-lamp-only",
+      "expect": "lamp-only",
+      "query": {"window": "morning", "date": "2026-12-21", "wakeTime": "04:00", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "morning-not-covered",
+      "expect": "not-covered",
+      "query": {"window": "morning", "date": "2026-06-21", "wakeTime": "07:00", "origin": {"lat": 51.4589233, "lon": -2.6030296}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-winter-solstice",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-12-21", "wakeTime": "07:30", "origin": {"lat": 51.4589084, "lon": -2.6059081}, "maxWalkMin": 15, "sky": "partly"}
+    },
+    {
+      "id": "evening-summer-solstice",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-06-21", "wakeTime": "06:00", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 20, "sky": "clear"}
+    },
+    {
+      "id": "evening-march-equinox-now",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-03-20", "wakeTime": "07:00", "now": "2026-03-20T17:05:00Z", "origin": {"lat": 51.4589017, "lon": -2.6072034}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-september-equinox",
+      "expect": "ranked",
+      "query": {"window": "evening", "date": "2026-09-23", "wakeTime": "07:00", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 15, "sky": "clear"}
+    },
+    {
+      "id": "evening-deep-winter-overcast",
+      "expect": "fallback",
+      "query": {"window": "evening", "date": "2027-01-15", "wakeTime": "08:00", "origin": {"lat": 51.4589084, "lon": -2.6059081}, "maxWalkMin": 15, "sky": "overcast"}
+    },
+    {
+      "id": "evening-no-window",
+      "expect": "no-evening-window",
+      "query": {"window": "evening", "date": "2026-12-21", "wakeTime": "11:00", "origin": {"lat": 51.4589122, "lon": -2.6051884}, "maxWalkMin": 15, "sky": "clear"}
+    }
+  ]
+}

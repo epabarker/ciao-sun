@@ -13,11 +13,11 @@ The late-day light exposure before sunset that the tool exists to help someone g
 _Avoid_: sunset hit, golden hour
 
 **Nominal sunrise**:
-The first minute the sun's geometric centre reaches -0.833° at a location, which is when its upper limb would appear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually appears at a Candidate, which can be later behind obstructions or slightly earlier from a high spot above a falling horizon.
+The whole minute nearest the moment the sun's geometric centre rises through -0.833° at a location, as an almanac rounds it, which is when its upper limb would appear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually appears at a Candidate, which can be later behind obstructions or slightly earlier from a high spot above a falling horizon.
 _Avoid_: local sunrise, actual sunrise
 
 **Nominal sunset**:
-The last minute the sun's geometric centre is at or above -0.833° at a location, which is when its upper limb would disappear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually disappears at a Candidate, which is its Last sun.
+The whole minute nearest the moment the sun's geometric centre falls through -0.833° at a location, as an almanac rounds it, which is when its upper limb would disappear on a flat horizon under standard refraction. It depends only on place and date, not on when the sun actually disappears at a Candidate, which is its Last sun.
 _Avoid_: local sunset, actual sunset
 
 **Last sun**:
@@ -60,9 +60,21 @@ _Avoid_: sky view, exposure
 The outdoor minutes to aim for in a Morning window or Evening window, set by how cloudy it is in that window; a target to show, not a physiological threshold.
 _Avoid_: minimum, threshold, dose
 
+**Low-sun minutes**:
+The Sun minutes during which the sun is low, between 0° and 30° above the horizontal as seen through the atmosphere. In the Morning window each minute counts by that window's weighting; in the Evening window every minute counts the same.
+_Avoid_: golden-hour minutes, quality minutes
+
 **Protocols factor**:
-A labelled bonus for Sun minutes when the sun is low and the sky is clear, at either end of the day, from *Protocols*' claim about low-sun light quality; untested in humans.
-_Avoid_: sunrise quality, golden-hour bonus
+The reason spots are ranked by Low-sun minutes, most first, when the sky is not overcast: *Protocols*' claim about low-sun light quality, at either end of the day. It is the ranking key, not a bonus added to another score, and is always labelled as untested in humans.
+_Avoid_: sunrise quality, golden-hour bonus, low-sun bonus
+
+**Spot name**:
+What a Candidate's place is called, taken from OpenStreetMap: the named green space that contains it, else its street, else a path, lane or steps "off" the nearest named street. Many Candidates share one Spot name, and an answer shows a Spot name once.
+_Avoid_: label, place name, address
+
+**Leave-by**:
+The time to set off from the origin for a spot. In the morning it is timed to arrive as the sun first comes into view there; in the evening it is the latest departure that still meets the Duration target before the spot's Last sun. It is never before Wake time or the present moment.
+_Avoid_: departure time, go time
 
 **Stage**:
 One step of the planned rollout: just me in Bristol, then just me in England then the UK, then anyone in the UK.

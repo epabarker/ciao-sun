@@ -7,14 +7,23 @@ This Python package is the **offline build pipeline plus a scoring reference**
 (see `docs/adr/0001-static-precompute-client-evaluation.md`); the phone app
 evaluates the precomputed Horizon profiles itself. Terms follow `GLOSSARY.md`.
 
+The phone app itself is in `app/`: TypeScript, with its own tests and CI job.
+`app/README.md` has its layout, commands and conventions.
+
 The package is mid-way to that shape. The earlier laptop tool's `find` and
 `compare` commands, walking-distance routing and GeoJSON / map / GeoTIFF
 exports have been removed. What the CLI exposes today is:
 
 - `profile-only` -- dump the Horizon profile at one coordinate, for cross-checking
   against heywhatsthat by hand.
-- `tiles` -- a placeholder that prints the LIDAR tile codes to download, until
-  `fetch` replaces it.
+- `fetch` -- download every build input for a coverage polygon and lock it by
+  hash.
+- `build` -- turn the fetched inputs into one build directory of tiles, a
+  manifest and golden fixtures.
+- `reference` -- print the golden fixture for one Query over a build: the
+  reference scorer's Answer, for debugging a JS mismatch on one case.
+- `publish` -- upload a build directory to the R2 data bucket and archive its
+  inputs.
 
 The build's output is one binary file per 1 km square, in tile format `f1`.
 `docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
@@ -31,20 +40,23 @@ moment when its apparent elevation is above the horizon angle on its azimuth.
 `HANDOFF.md` is the original design brief for the laptop tool. It is kept for
 the maths and gotchas; its CLI and outputs sections are historical.
 
-## Sunrise definition
+## Solar model
 
-Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
-elevation exceeds -0.833 degrees at the home coordinate -- the standard
-flat-horizon definition used by almanacs. **This is not the actual local
-sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. The track across the hour after Nominal sunrise is what `profile-only`
-overlays on its plot; it stays only until the Stage 1 solar model replaces it.
+The sun track is one local day at 1 min steps: true azimuth from NREL SPA and
+the apparent elevation of the disc centre, which is the SPA geometric
+elevation plus one refraction model that stays continuous below 0 degrees.
+Nominal sunrise and Nominal sunset are when the geometric centre crosses
+-0.833 degrees, the flat-horizon definition almanacs use; they are **not**
+when the sun appears or disappears at an obstructed site. Solar noon is the
+upper transit. `docs/solar-model.md` specifies all of it for the JS port,
+which must agree within 0.01 degrees. `profile-only` overlays the day's track,
+from Nominal sunrise to Nominal sunset, on its plot.
 
 ## Data
 
 **Source:** Environment Agency, via <https://environment.data.gov.uk/>.
 
-Two products are required, both delivered as GeoTIFF in 5 km tiles on the OS
+The DSM and DTM are both delivered as GeoTIFF in 5 km tiles on the OS
 National Grid (EPSG:27700), values in metres above Ordnance Survey Newlyn
 datum, +/-15 cm vertical RMSE:
 
@@ -53,30 +65,102 @@ datum, +/-15 cm vertical RMSE:
 | LIDAR Composite DSM -- 1 m | Obstacles: last-return surface including buildings and vegetation |
 | LIDAR Composite DTM -- 1 m | Bare earth, for observer standing height |
 
-### Downloading tiles (manual step)
+### Fetching the build inputs
 
-The portal is an interactive ESRI widget and cannot be scripted. To get the
-tiles you need:
+```
+uv run ciao-sun fetch --coverage bristol.geojson --osm-date 261110
+```
 
-1. Work out which 5 km tiles cover your area of interest:
+`--coverage` is a GeoJSON Polygon or MultiPolygon in WGS84 longitude/latitude.
+`fetch` downloads, into `data/inputs/` (`--out`):
 
-   ```
-   uv run ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
-   ```
+| Input | Where it lands |
+|---|---|
+| EA LIDAR Composite 1 m last-return DSM, DTM and first-return DSM, every 5 km tile within 3 km of the coverage | `ea/<product>/<year>/<tile>.zip` |
+| OS Terrain 50 for Great Britain | `terrain50/<version>/terr50_gagg_gb.zip` |
+| The Geofabrik `.osm.pbf` extract of that date | `osm/<region>-<yymmdd>.osm.pbf` |
+| The basemap: Protomaps vector tiles over the coverage's bounding box, zooms 10 to 15 | `basemap/<build date>/z10-15_x<columns>_y<rows>.pmtiles` |
 
-2. Go to <https://environment.data.gov.uk/>, search "LIDAR", open "Download
-   the Survey Data", and draw an area of interest that covers those tiles (or
-   larger -- the tool only uses what's in each tile's bounding box).
-3. Download **LIDAR Composite DSM - 1m** for that area, and separately
-   **LIDAR Composite DTM - 1m** for the same area.
-4. Unzip both downloads into `data/dsm/` and `data/dtm/` respectively.
-   Ciao Sun searches those directories recursively for `.tif` files, so the
-   per-tile subdirectories the portal creates (e.g.
-   `data/dtm/lidar_composite_dtm-2022-1-ST57ne/ST57ne_DTM_1m.tif`) are fine as
-   they are.
+The basemap is cut from a pinned Protomaps daily build (`--protomaps-build`,
+a date as `YYYYMMDD`) by byte range: about 30 requests and 18 MB for Bristol,
+out of a 140 GB planet archive. Protomaps keeps a daily build for a week and
+then only the last build of each basemap patch version, so `fetch` refuses any
+build that is not the last of a version Protomaps has finished with, and names
+the one to pin.
+
+It also writes `fetch.lock.json` there: every input's source, version, URL,
+SHA-256, size, retrieval time and path relative to the lockfile, plus the
+coverage and margin. `ciao_sun.fetch.read_lockfile` reads it back.
+
+Requests are about a second apart and back off on HTTP 403. A dropped download
+resumes on the next run, and a run with everything cached makes no requests.
+No upstream publishes a SHA-256, so the first fetch records each hash and any
+later cached or re-downloaded file that differs is refused. EA tiles the
+server does not publish (404, e.g. open sea) are recorded as `absent`.
+
+### Building
+
+```
+uv run ciao-sun build --coverage bristol.geojson
+```
+
+`build` reads `data/inputs/` (`--inputs`) through its lockfile and writes
+`data/builds/f1/<build id>/` (`--out`): `tiles/<grid ref>.bin` for every 1 km
+square the coverage touches, `basemap/{z}/{x}/{y}.mvt` and `manifest.json`. The
+build id is the UTC date plus a letter, e.g. `20261110a`. Tiles are built in parallel (`--workers`), and
+the same inputs give byte-identical tiles.
+
+Two checks fail a build, which then leaves no build directory: tile Horizon
+profiles are compared with direct ray casting at a sample of Candidates, and no
+Candidate's horizon may be set by a cell inside an OSM water area.
+`ciao_sun.build_checks` gives the tolerances and `ciao_sun.manifest` the
+manifest's schema.
+
+The basemap is one uncompressed Mapbox Vector Tile per file, for every tile the
+coverage's bounding box touches at zooms 10 to 15 (685 tiles and 29 MB for
+Bristol). No PMTiles archive is written, because the site serves no Range
+requests (ADR 0002). The manifest's `basemap` section gives the Protomaps build
+date, the basemap version, the zooms and the bounds; `ciao_sun.basemap` says why
+those zooms.
+
+`build` also runs a query set through the reference scorer and writes one
+golden fixture per query into the build's `fixtures/`, with an `index.json`.
+The default query set is the committed Bristol one,
+`src/ciao_sun/reference/bristol_queries.json`; `--queries` names another.
+`docs/fixtures.md` specifies the fixtures, the query set file and the parity
+tolerances the JS scorer is held to.
+
+`profile-only` does not read this cache yet: it still wants unzipped GeoTIFFs
+under `data/dsm/` and `data/dtm/` (searched recursively).
 
 `ciao-sun profile-only` fails with a clear message (not a traceback) if tiles
 are missing.
+
+### Publishing
+
+```
+uv run ciao-sun publish data/builds/f1/20261110a
+```
+
+`publish` uploads every file of a build directory to the R2 data bucket at
+`f<format>/<build id>/…`, each with `Cache-Control: public, max-age=31536000,
+immutable`, and archives the build's OSM extract and Terrain 50 zip in a second,
+private bucket. A published build is never rewritten and nothing is deleted
+(ADR 0002): if the build's prefix already holds anything, nothing is uploaded.
+`docs/publishing.md` has the one-time bucket, CORS and credentials setup.
+
+### Releasing
+
+An app release pins one published build in `app/release.json` and is made by
+pushing a `ciao-sun-v<x.y.z>` tag. CI runs the JS against every golden fixture
+of that build, and attaches the bundle tarball and its SHA-256 to the GitHub
+release only if all of them pass.
+
+- [`docs/data-refresh.md`](docs/data-refresh.md) is the runbook: when to
+  refresh, and the steps fetch → build → publish → pin → tag.
+- [`docs/site-contract.md`](docs/site-contract.md) is what the website
+  consumes: the tarball, headers, service worker scope, data origin and
+  version rules.
 
 ### Licence and attribution
 
@@ -97,9 +181,17 @@ uv sync
 ## CLI
 
 ```
-ciao-sun tiles --centre 51.4720,-2.6040 --radius 1500
+ciao-sun fetch --coverage bristol.geojson --osm-date 261110
+ciao-sun build --coverage bristol.geojson
+ciao-sun reference query.json --build data/builds/f1/20261110a
+ciao-sun publish data/builds/f1/20261110a
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
+
+`reference` prints exactly the JSON a golden fixture holds for one Query over a
+build directory: the Query, the tiles it touches, the Answer, the day's sun
+track and the near-boundary minutes. The Query is a JSON file or the JSON
+itself (`docs/fixtures.md`).
 
 `profile-only` dumps the full Horizon profile (obstruction angle vs true
 azimuth, 1 degree steps, 0-360, clockwise from true north) for one point as
@@ -123,8 +215,6 @@ rejected):
 | `date` | `2026-12-21` | Date of the overlaid sun track (`--date` overrides) |
 | `max_ray` | `3000.0` | Furthest obstruction considered, metres (`--max-ray` overrides) |
 | `tz` | `Europe/London` | Time zone of the overlaid sun track |
-| `step_minutes` | `5.0` | Sun-track sampling interval |
-| `window_minutes` | `60.0` | How far past Nominal sunrise to track the sun |
 
 The point comes from the command's argument, not the file. `--eye-height` and
 `--curvature/--no-curvature` are flags only.
@@ -151,7 +241,7 @@ The point comes from the command's argument, not the file. `--eye-height` and
   earth. Using the DSM for standing height would place candidates on rooftops
   and in tree canopies.
 - **England only.** LIDAR coverage and the OS National Grid tile-code scheme
-  used by `ciao-sun tiles` don't extend elsewhere.
+  used by `ciao-sun fetch` don't extend elsewhere.
 
 ## Development
 
@@ -162,3 +252,11 @@ uv run mypy src
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same three on every push.
+
+`fixtures/synthetic/` is a small committed build with its golden fixtures, for
+the JS tests. After changing the build, the tile format, the reference or the
+synthetic query set, regenerate it and commit the result:
+
+```
+uv run python -m tests.synthetic_fixtures
+```

@@ -1,0 +1,132 @@
+{
+  "format": 1,
+  "build": "20261111a",
+  "fixtures": [
+    {
+      "id": "morning-winter-solstice",
+      "file": "morning-winter-solstice.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-summer-solstice",
+      "file": "morning-summer-solstice.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-march-equinox",
+      "file": "morning-march-equinox.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-september-equinox-now",
+      "file": "morning-september-equinox-now.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-deep-winter-lamp",
+      "file": "morning-deep-winter-lamp.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-overcast-fallback",
+      "file": "morning-overcast-fallback.json",
+      "status": "fallback",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-no-sun-in-reach",
+      "file": "morning-no-sun-in-reach.json",
+      "status": "fallback",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "morning-lamp-only",
+      "file": "morning-lamp-only.json",
+      "status": "lamp-only",
+      "tiles": []
+    },
+    {
+      "id": "morning-not-covered",
+      "file": "morning-not-covered.json",
+      "status": "not-covered",
+      "tiles": []
+    },
+    {
+      "id": "evening-winter-solstice",
+      "file": "evening-winter-solstice.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "evening-summer-solstice",
+      "file": "evening-summer-solstice.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "evening-march-equinox-now",
+      "file": "evening-march-equinox-now.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "evening-september-equinox",
+      "file": "evening-september-equinox.json",
+      "status": "ranked",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "evening-deep-winter-overcast",
+      "file": "evening-deep-winter-overcast.json",
+      "status": "fallback",
+      "tiles": [
+        "ST5773",
+        "ST5873"
+      ]
+    },
+    {
+      "id": "evening-no-window",
+      "file": "evening-no-window.json",
+      "status": "no-evening-window",
+      "tiles": []
+    }
+  ]
+}

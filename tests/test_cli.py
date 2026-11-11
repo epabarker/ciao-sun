@@ -1,7 +1,8 @@
-"""CLI tests: the Stage 1 command surface, `ciao-sun tiles` for Bristol, console script."""
+"""CLI tests: the Stage 1 command surface, `ciao-sun fetch`, console script."""
 
 from __future__ import annotations
 
+import re
 from importlib.metadata import entry_points
 
 import typer
@@ -11,18 +12,46 @@ from ciao_sun.cli import app
 
 runner = CliRunner()
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
-def test_tiles_command_prints_codes_for_bristol():
-    result = runner.invoke(app, ["tiles", "--centre", "51.4720,-2.6040", "--radius", "1500"])
+
+def _plain(output: str) -> str:
+    """Help text without styling. Rich colours its output on GitHub Actions,
+    which splits option names such as `--coverage` with escape codes."""
+    return " ".join(_ANSI.sub("", output).split())
+
+
+def test_fetch_help_explains_every_input_and_the_coverage_argument():
+    result = runner.invoke(app, ["fetch", "--help"], terminal_width=200)
     assert result.exit_code == 0, result.output
-    codes = [c.strip() for c in result.output.strip().split(",")]
-    assert len(codes) > 0
-    assert all(len(c) == 6 and c[:2].isalpha() for c in codes)
+    text = _plain(result.output)
+    for phrase in [
+        "Environment Agency", "DSM", "DTM", "first-return", "Terrain 50", "Geofabrik",
+        "--coverage", "GeoJSON", "WGS84", "3 km",
+        "fetch.lock.json", "SHA-256", "--osm-date",
+    ]:
+        assert phrase in text, f"`fetch --help` does not mention {phrase!r}"
+    for phrase in ["--protomaps-build", "YYYYMMDD", "Protomaps", "byte range", "zooms 10 to 15"]:
+        assert phrase in text, f"`fetch --help` does not mention {phrase!r}"
 
 
-def test_tiles_command_rejects_bad_centre():
-    result = runner.invoke(app, ["tiles", "--centre", "not-a-coord", "--radius", "1500"])
+def test_fetch_refuses_a_coverage_that_is_not_a_polygon_without_a_traceback(tmp_path):
+    coverage = tmp_path / "point.geojson"
+    coverage.write_text('{"type": "Point", "coordinates": [-2.6, 51.47]}')
+    result = runner.invoke(
+        app,
+        ["fetch", "--coverage", str(coverage), "--osm-date", "261110",
+         "--out", str(tmp_path / "inputs")],
+    )
+    assert result.exit_code == 1
+    assert "Polygon" in result.output
+    assert not (tmp_path / "inputs").exists()
+
+
+def test_tiles_command_is_gone():
+    result = runner.invoke(app, ["tiles", "--help"])
     assert result.exit_code != 0
+    assert "No such command" in result.output
 
 
 def test_ciao_sun_console_script_runs_the_cli():
@@ -32,12 +61,12 @@ def test_ciao_sun_console_script_runs_the_cli():
 
     result = runner.invoke(script.load(), ["--help"])
     assert result.exit_code == 0, result.output
-    assert "tiles" in result.output
+    assert "fetch" in result.output
 
 
-def test_cli_exposes_only_profile_only_and_the_tiles_placeholder():
+def test_cli_exposes_fetch_and_profile_only():
     group = typer.main.get_command(app)
-    assert sorted(group.commands) == ["profile-only", "tiles"]
+    assert {"fetch", "profile-only"} <= set(group.commands)
 
 
 def test_find_and_compare_are_no_longer_commands():

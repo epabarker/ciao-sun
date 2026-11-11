@@ -21,19 +21,19 @@ and the horizon angle for that azimuth is max(angle) over all sampled d.
 
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
-from pyproj import Proj, Transformer
+from pyproj import Proj
 
+from ciao_sun.crs import BNG_TO_WGS84
 from ciao_sun.raster import RasterGrid, sample
 
 _BNG = Proj("EPSG:27700")
-_BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
-EARTH_RADIUS_M = 6371000.0
+# The Earth radius the rays' curvature drop uses (with refraction, R_EFF); not the
+# lat/lon distances' DISTANCE_EARTH_RADIUS_M (`ciao_sun.reference.world`).
+CURVATURE_EARTH_RADIUS_M = 6371000.0
 STANDARD_REFRACTION_COEFF = 1.13
-R_EFF = EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
+R_EFF = CURVATURE_EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
 
 # Variable-density ray sampling: dense near the observer where parallax matters
 # most. Uniform 1 m sampling all the way to max_ray is ~14x the work for no
@@ -80,7 +80,7 @@ def meridian_convergence(x: float, y: float) -> float:
     the two differ by ~0.001 deg; the WGS84 value matches the grid bearing of
     a WGS84 meridian to ~0.0002 deg.
     """
-    lon, lat = _BNG_TO_WGS84.transform(x, y)
+    lon, lat = BNG_TO_WGS84.transform(x, y)
     return float(_BNG.get_factors(lon, lat).meridian_convergence)
 
 
@@ -111,6 +111,29 @@ def horizon_angle(
     Returns one angle per observer point; NaN where the whole ray falls off the
     DSM grid (treated as a fail by callers, since nothing is confirmed clear).
     """
+    return horizon_ridge(
+        dsm, px, py, pz, true_azimuth_deg, ray_d,
+        convergence_deg=convergence_deg, curvature=curvature,
+    )[0]  # fmt: skip
+
+
+def horizon_ridge(
+    dsm: RasterGrid,
+    px: np.ndarray,
+    py: np.ndarray,
+    pz: np.ndarray,
+    true_azimuth_deg: float,
+    ray_d: np.ndarray,
+    *,
+    convergence_deg: float,
+    curvature: bool = True,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """`horizon_angle`, plus where the cell that sets each angle is.
+
+    Returns (angle, ridge easting, ridge northing), one of each per observer
+    point. The ridge is the first sample along the ray at the maximum angle;
+    all three are NaN where the whole ray falls off the grid.
+    """
     theta = np.radians(grid_azimuth(true_azimuth_deg, convergence_deg))
     xs = px[:, None] + ray_d[None, :] * np.sin(theta)
     ys = py[:, None] + ray_d[None, :] * np.cos(theta)
@@ -118,6 +141,12 @@ def horizon_angle(
     drop = curvature_drop(ray_d, curvature)
     rise = zs - pz[:, None] - drop[None, :]
     angle = np.degrees(np.arctan2(rise, ray_d[None, :]))
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="All-NaN (slice|axis) encountered")
-        return np.nanmax(angle, axis=1)
+    ridge = np.where(np.isnan(angle), -np.inf, angle).argmax(axis=1)
+    rows = np.arange(len(px))
+    best = angle[rows, ridge]
+    no_data = np.isnan(best)
+    return (
+        best,
+        np.where(no_data, np.nan, xs[rows, ridge]),
+        np.where(no_data, np.nan, ys[rows, ridge]),
+    )

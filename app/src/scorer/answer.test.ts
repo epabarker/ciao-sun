@@ -102,6 +102,39 @@ describe("evening Leave-by", () => {
   });
 });
 
+describe('the fallback "stay N min"', () => {
+  // One Candidate at node P, so its walk is the O-P edge: `metres` / 80 m/min.
+  // `code` is its Horizon profile all round.
+  const farTile = (metres: number, code = OPEN): Tile => {
+    const base = tile("ST5873", [0]);
+    base.candidates.nodeIndex[0] = 1;
+    base.candidates.profileCodes.fill(code);
+    base.walkGraph.edgeLengthCm[0] = metres * 100;
+    return base;
+  };
+  const stays = (q: Query, metres: number, code?: number) =>
+    answer(q, [farTile(metres, code)]).spots.map((spot) => [spot.walkMin, spot.stayMin]);
+
+  it("is the Duration target less the walk, since the walk counts towards it", () => {
+    // Overcast: 30 min. Ed's worked example (#27): an 8 min walk, stay 22.
+    expect(stays({ ...query, sky: "overcast" }, 640)).toEqual([[8, 22]]);
+  });
+
+  it("rounds a fractional remainder up to the whole minute, so walk + stay reaches the target", () => {
+    // 600 m is 7.5 min: 22.5 min more, so 23.
+    expect(stays({ ...query, sky: "overcast" }, 600)).toEqual([[7.5, 23]]);
+  });
+
+  it("is never below 0", () => {
+    // Midwinter, behind a 20 degree horizon the sun never clears (code 140):
+    // a clear sky's 10 min target, met by the 11.25 min walk alone.
+    const midwinter: Query = { ...query, date: "2026-12-21", wakeTime: "07:00", sky: "clear" };
+    const result = answer(midwinter, [farTile(900, 140)]);
+    expect(result.status).toBe("fallback");
+    expect(result.spots.map((spot) => [spot.walkMin, spot.stayMin])).toEqual([[11.25, 0]]);
+  });
+});
+
 describe("lamp-only, once now is past the Morning window", () => {
   // What `ciao_sun.reference.scorer.answer` gives for the same Queries.
   const late = (now: string): Query => ({ ...query, date: now.slice(0, 10), wakeTime: "07:00", now });

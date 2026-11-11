@@ -348,7 +348,7 @@ def test_an_overcast_evening_lists_fallback_spots_left_for_at_the_start_of_the_w
     assert result.lamp is None  # there is no evening lamp
     [spot] = result.spots
     assert spot.leave_by == at("13:00")
-    assert spot.stay_min == 30
+    assert spot.stay_min == 25  # 30 less the 5 min walk
     assert spot.last_sun == at("15:28")
 
 

@@ -3,26 +3,27 @@
 //
 //   <div class="map">          the map (MapLibre); made once, never redrawn
 //   <div class="screen" data-window="morning">
-//     <header class="top">     the sentence editor (and, from #48, the tabs)
+//     <header class="top">     the Morning/Evening tabs and the sentence editor
 //     <main class="sheet">     the bottom sheet (ui/sheet.ts): handle, then
 //       <div class="sheet-body">
 //         the result: the answer view or a message
-//         <footer class="foot">  fixed copy (#48 safety copy) and the About link
+//         <footer class="foot">  fixed copy (ui/tabs.ts: safety, dim the lights) and the About link
 //     <section class="about">  the About the data sheet, while it is open
 //
 // `renderScreen` replaces everything but the map on every state change; views
 // are pure functions of state, and controls report through callbacks.
 
-import type { Answer, WindowName } from "../contract";
+import type { Answer, Query, WindowName } from "../contract";
 import { aboutLink } from "./about-view";
-import { renderAnswer, message } from "./answer-view";
+import { type AnswerContext, renderAnswer, message } from "./answer-view";
 import { h } from "./dom";
 import { type SheetStop, bottomSheet } from "./sheet";
 
 export type Result =
   | { kind: "loading" }
   | { kind: "need-origin" }
-  | { kind: "answer"; answer: Answer }
+  /** `query` is the Query the Answer answers; the view reads its date and `now`. */
+  | { kind: "answer"; answer: Answer; query?: Query }
   /** The manifest or a tile is in a format this version can't read. */
   | { kind: "unreadable"; format: number }
   /** The data host could not be reached. */
@@ -32,15 +33,15 @@ export type Result =
 
 export const UNREADABLE_TITLE = "This version can't read this data.";
 
-/** `selected` is the highlighted spot's candidateId. */
-export function renderResult(result: Result, selected?: string): Node {
+/** `context.selected` is the highlighted spot's candidateId. */
+export function renderResult(result: Result, context?: AnswerContext): Node {
   switch (result.kind) {
     case "loading":
       return message("loading", "Finding spots…");
     case "need-origin":
       return message("need-origin", "Where from?", "Location isn't available. Type a position as latitude, longitude.");
     case "answer":
-      return renderAnswer(result.answer, selected);
+      return renderAnswer(result.answer, { ...context, query: result.query ?? context?.query });
     case "unreadable":
       return message(
         "unreadable",
@@ -58,8 +59,12 @@ export function renderResult(result: Result, selected?: string): Node {
 
 export interface ScreenParts {
   window: WindowName;
+  /** The Morning and Evening tabs, above the sentence. */
+  tabs?: Node;
   sentence: Node;
   result: Result;
+  /** What an answer's messages can lead to (its `selected` comes from `selected` below). */
+  answerContext?: AnswerContext;
   footer?: Node[];
   /** Opens the About sheet; the link is in the footer whatever the window. */
   onAbout: () => void;
@@ -97,11 +102,11 @@ export function renderScreen(root: HTMLElement, parts: ScreenParts): void {
   const next = h(
     "div",
     { class: "screen", "data-window": parts.window },
-    h("header", { class: "top" }, parts.sentence),
+    h("header", { class: "top" }, parts.tabs, parts.sentence),
     bottomSheet(
       parts.sheet ?? "half",
       (stop) => parts.onSheet?.(stop),
-      renderResult(parts.result, parts.selected),
+      renderResult(parts.result, { ...parts.answerContext, selected: parts.selected }),
       h("footer", { class: "foot" }, ...(parts.footer ?? []), aboutLink(parts.onAbout)),
     ),
     parts.about,

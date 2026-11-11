@@ -106,12 +106,13 @@ describe("the sky slot with a forecast", () => {
   });
 
   it("shows the fetch time on the Europe/London clock", async () => {
-    const summer = Date.parse("2026-06-20T20:00:00Z"); // 21:00 BST
+    // 22:00 BST: after Nominal sunset, so the app opens on tomorrow's Morning.
+    const summer = Date.parse("2026-06-20T21:00:00Z");
     const first = Date.parse("2026-06-21T00:00:00Z") / 1000;
     const time = Array.from({ length: 24 }, (_, i) => first + i * 3600);
     const forecast: Forecast = async () => new Response(JSON.stringify({ hourly: { time, cloud_cover: time.map(() => 10) } }));
     const { root } = await mount(deps(host(forecast).fetch, { now: () => summer }));
-    expect(credit(root)?.querySelector("[data-field=fetched-at]")?.textContent).toBe("Forecast fetched 21:00");
+    expect(credit(root)?.querySelector("[data-field=fetched-at]")?.textContent).toBe("Forecast fetched 22:00");
   });
 
   it("is overridden by hand: the Duration target follows and the credit goes", async () => {

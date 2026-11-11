@@ -4,10 +4,12 @@
 //   walk      hatched, leave-by to leave-by + walkMin
 //   sun       each of sunIntervals
 //   low-sun   each of lowSunIntervals, a band along the bottom
+//   stay      a fallback spot's "stay N min": arrival to arrival + stayMin
 //   leave-by  a line at leaveBy
 //
-// Positions are percentages of axisStart..axisEnd, clipped to it. #48 adds the
-// fallback "stay N min" block as another segment kind here.
+// Positions are percentages of axisStart..axisEnd, clipped to it. The Evening
+// axis is the last 3 h before Nominal sunset, so a leave-by can fall before
+// it: the line then sits at the axis start marked data-off-axis="before".
 
 import type { AnswerWindow, Interval, Spot } from "../contract";
 import { TIME_ZONE, toLocalIso } from "../solar/local-day";
@@ -20,16 +22,16 @@ const round = (x: number) => Math.round(x * 10_000) / 10_000;
 
 /** Maps instants onto the axis, as percentages. */
 export class Axis {
-  private readonly start: number;
+  readonly startMs: number;
   private readonly span: number;
 
   constructor(window: Pick<AnswerWindow, "axisStart" | "axisEnd">) {
-    this.start = Date.parse(window.axisStart);
-    this.span = Date.parse(window.axisEnd) - this.start;
+    this.startMs = Date.parse(window.axisStart);
+    this.span = Date.parse(window.axisEnd) - this.startMs;
   }
 
   at(ms: number): number {
-    return Math.min(100, Math.max(0, ((ms - this.start) / this.span) * 100));
+    return Math.min(100, Math.max(0, ((ms - this.startMs) / this.span) * 100));
   }
 
   /** The [left, width] of a span of instants, clipped; undefined if it is off the axis. */
@@ -53,19 +55,27 @@ function intervals(kind: SegmentKind, axis: Axis, list: readonly Interval[]): (H
 export function timelineBar(spot: Spot, window: AnswerWindow): HTMLElement {
   const axis = new Axis(window);
   const leave = Date.parse(spot.leaveBy);
+  const arrive = leave + spot.walkMin * 60_000;
   return h(
     "div",
     { class: "timeline", role: "img", "aria-label": timelineDescription(spot) },
     ...intervals("sun", axis, spot.sunIntervals),
     ...intervals("low-sun", axis, spot.lowSunIntervals),
-    segment("walk", axis.place(leave, leave + spot.walkMin * 60_000)),
-    h("span", { class: "seg seg-leave-by", "data-segment": "leave-by", style: `left:${round(axis.at(leave))}%` }),
+    segment("walk", axis.place(leave, arrive)),
+    spot.stayMin ? segment("stay", axis.place(arrive, arrive + spot.stayMin * 60_000)) : null,
+    h("span", {
+      class: "seg seg-leave-by",
+      "data-segment": "leave-by",
+      "data-off-axis": leave < axis.startMs ? "before" : undefined,
+      style: `left:${round(axis.at(leave))}%`,
+    }),
   );
 }
 
 function timelineDescription(spot: Spot): string {
   const sun = spot.sunIntervals.map((iv) => `${clockOf(iv.start)} to ${clockOf(iv.end)}`).join(", ");
-  return `Leave ${clockOf(spot.leaveBy)}; sun in view ${sun || "never"}`;
+  const stay = spot.stayMin ? `; stay ${spot.stayMin} min` : "";
+  return `Leave ${clockOf(spot.leaveBy)}${stay}; sun in view ${sun || "never"}`;
 }
 
 /** The shared axis above the bars: its start, end and the whole hours between. */

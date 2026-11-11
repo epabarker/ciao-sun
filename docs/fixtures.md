@@ -75,7 +75,7 @@ What the set exercises:
 | `morning-winter-solstice`, `morning-summer-solstice`, `morning-march-equinox` | ranked Morning answers; BST and GMT |
 | `morning-september-equinox-now`, `evening-march-equinox-now` | `now` clips the window |
 | `morning-deep-winter-lamp` | ranked, with the lamp message; two spots with different Low-sun minutes |
-| `morning-overcast-fallback`, `evening-deep-winter-overcast` | overcast fallback, "stay 30 min" |
+| `morning-overcast-fallback`, `evening-deep-winter-overcast` | overcast fallback, "stay N min" (the 30 min target less each walk) |
 | `morning-no-sun-in-reach` | no-sun fallback with `nearestSunBeyondLimit`; a near-boundary minute inside the window |
 | `morning-lamp-only` | lamp-only, with `nextOutdoorLight` |
 | `morning-not-covered` | origin outside the coverage polygon |
@@ -213,8 +213,8 @@ tolerances and no others:
 
 | Fields | Tolerance |
 |---|---|
-| Strings, booleans, integers, every time, the order of `spots` and of intervals | Exact |
-| `lat`, `lon`, `walkMin`, `lowSunMinutes`, `stayMin` | 1e-9: each is an integer divided by a constant (1e7, 80 m/min, 100) |
+| Strings, booleans, integers (`stayMin` among them), every time, the order of `spots` and of intervals | Exact |
+| `lat`, `lon`, `walkMin`, `lowSunMinutes` | 1e-9: each is an integer divided by a constant (1e7, 80 m/min, 100) |
 | `skyOpenness` | 0.001: it is rounded half up to 3 decimal places |
 | A member absent from one Answer | Must be absent from the other |
 

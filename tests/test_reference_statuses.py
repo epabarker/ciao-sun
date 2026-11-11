@@ -53,15 +53,41 @@ def test_an_overcast_sky_lists_the_nearest_open_spots_by_walk_whatever_their_sun
     assert result.nearest_sun_beyond_limit is None
 
 
-def test_a_fallback_spot_says_to_stay_for_the_duration_target(tmp_path: Path) -> None:
+def test_a_fallback_spot_says_to_stay_for_the_duration_target_less_the_walk(
+    tmp_path: Path,
+) -> None:
     tiles = street(tmp_path, [Stand(400, "Plain Street")])
 
     result = answer(morning(wake_time="07:00", sky="overcast"), tiles)
 
     assert result.duration_target_min == 30
     [spot] = result.spots
-    # The walk counts towards the target, so the stay is the target itself.
-    assert spot.stay_min == 30
+    # The walk counts towards the target: 400 m is 5 min, so stay 25.
+    assert spot.walk_min == 5.0
+    assert spot.stay_min == 25
+
+
+def test_a_fractional_walk_leaves_a_stay_rounded_up_to_the_whole_minute(tmp_path: Path) -> None:
+    tiles = street(tmp_path, [Stand(-600, "Far Street")])
+
+    result = answer(morning(wake_time="07:00", sky="overcast"), tiles)
+
+    # 600 m is 7.5 min; 22.5 min more is rounded up, so walk + stay is never short.
+    [spot] = result.spots
+    assert spot.walk_min == 7.5
+    assert spot.stay_min == 23
+
+
+def test_a_walk_as_long_as_the_target_leaves_a_stay_of_zero(tmp_path: Path) -> None:
+    tiles = street(tmp_path, [Stand(900, "Long Walk", NO_SUN)])
+
+    result = answer(morning(wake_time="07:00", sky="clear"), tiles)
+
+    # A clear sky's target is 10 min; the 11.25 min walk alone meets it.
+    assert result.status == "fallback"
+    [spot] = result.spots
+    assert spot.walk_min == 11.25
+    assert spot.stay_min == 0
 
 
 def test_a_fallback_spot_is_left_for_at_the_start_of_the_window(tmp_path: Path) -> None:
@@ -115,7 +141,8 @@ def test_a_clear_sky_with_no_sun_in_reach_falls_back_to_the_nearest_open_spots(
     assert result.status == "fallback"
     assert [spot.name for spot in result.spots] == ["Near Shade", "Far Shade"]
     assert [spot.sun_minutes for spot in result.spots] == [0, 0]
-    assert [spot.stay_min for spot in result.spots] == [10, 10]
+    # Target 10: 400 m is 5 min, so stay 5; 600 m is 7.5 min, so stay 3 (2.5 rounded up).
+    assert [spot.stay_min for spot in result.spots] == [5, 3]
     assert [spot.leave_by for spot in result.spots] == [at("08:13"), at("08:13")]
     # No spot with sun anywhere within the 20 min cap.
     assert result.nearest_sun_beyond_limit is None

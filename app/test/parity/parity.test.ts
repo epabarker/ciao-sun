@@ -54,7 +54,7 @@ describe("Answer parity", () => {
     ]);
   });
 
-  it("allows 1e-9 on positions, walk minutes, Low-sun minutes and stay minutes", () => {
+  it("allows 1e-9 on positions, walk minutes and Low-sun minutes", () => {
     expect(answerDifferences(withSpot({ lat: spot.lat + 5e-10, walkMin: 2 + 5e-10 }), answer)).toEqual([]);
     expect(answerDifferences(withSpot({ lat: spot.lat + 1e-7 }), answer)).toHaveLength(1);
     expect(answerDifferences(withSpot({ lowSunMinutes: 142.01 }), answer)).toHaveLength(1);
@@ -63,6 +63,7 @@ describe("Answer parity", () => {
   it("holds integers, strings, booleans and times exactly", () => {
     expect(answerDifferences(withSpot({ sunMinutes: 143 }), answer)).toHaveLength(1);
     expect(answerDifferences(withSpot({ walkMetres: 161 }), answer)).toHaveLength(1);
+    expect(answerDifferences(withSpot({ stayMin: 22 + 5e-10 }), withSpot({ stayMin: 22 }))).toHaveLength(1);
     expect(answerDifferences(withSpot({ targetMet: false }), answer)).toHaveLength(1);
     expect(answerDifferences(withSpot({ leaveBy: "2026-12-21T15:34:00+00:00" }), answer)).toEqual([
       'spots[0].leaveBy: "2026-12-21T15:34:00+00:00", the reference has "2026-12-21T15:33:00+00:00"',

@@ -6,7 +6,7 @@
 //
 // Each slot is a native control (time, date, select) so a phone shows its own
 // picker, and reports on `change`. The words around the slots come from
-// WORDING by window: #48 adds the Evening tab's wording there. The sky slot is
+// WORDING by window, Morning or Evening. The sky slot is
 // pre-filled from the forecast; `sky-slot.ts` has where its value came from
 // and the credit under it (#50).
 //
@@ -61,12 +61,22 @@ interface Wording {
   end: string;
 }
 
-export const WORDING: Partial<Record<WindowName, Wording>> = {
+export const WORDING: Record<WindowName, Wording> = {
   morning: {
     wake: "I wake at",
     on: "on",
     sky: ", the sky looks",
     walk: ", and I'll walk up to",
+    from: "min from",
+    end: ".",
+  },
+  // "I woke at 07:00 on 21 Dec, the evening sky looks clear, and before
+  // sunset I'll walk up to 15 min from here."
+  evening: {
+    wake: "I woke at",
+    on: "on",
+    sky: ", the evening sky looks",
+    walk: ", and before sunset I'll walk up to",
     from: "min from",
     end: ".",
   },
@@ -154,7 +164,7 @@ function skySlot(state: SentenceState, events: SentenceEvents): HTMLSelectElemen
 }
 
 export function renderSentence(state: SentenceState, events: SentenceEvents): HTMLElement {
-  const words = WORDING[state.window] ?? WORDING.morning!;
+  const words = WORDING[state.window];
   const overridden = state.wakeTime !== state.savedWakeTime;
   const save = overridden
     ? h(

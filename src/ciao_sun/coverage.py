@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import shapely
 from pyproj import Transformer
 
 _WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
@@ -64,6 +65,13 @@ class Coverage:
             [_WGS84_TO_BNG.transform(lon, lat) for lon, lat in ring]
             for ring in self._outer_rings_wgs84()
         ]
+
+    def polygon_bng(self) -> Any:
+        """The coverage as one shapely geometry in British National Grid metres.
+
+        Holes are dropped, as in `rings_bng` and `contains`.
+        """
+        return shapely.union_all([shapely.Polygon(ring) for ring in self.rings_bng()])
 
     def contains(self, lat: float, lon: float) -> bool:
         """Whether a WGS84 position is inside the coverage: inside any outer ring.

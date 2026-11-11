@@ -15,6 +15,8 @@ exports have been removed. What the CLI exposes today is:
   against heywhatsthat by hand.
 - `fetch` -- download every build input for a coverage polygon and lock it by
   hash.
+- `build` -- turn the fetched inputs into one build directory of tiles and a
+  manifest.
 
 The build's output is one binary file per 1 km square, in tile format `f1`.
 `docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
@@ -81,6 +83,24 @@ No upstream publishes a SHA-256, so the first fetch records each hash and any
 later cached or re-downloaded file that differs is refused. EA tiles the
 server does not publish (404, e.g. open sea) are recorded as `absent`.
 
+### Building
+
+```
+uv run ciao-sun build --coverage bristol.geojson
+```
+
+`build` reads `data/inputs/` (`--inputs`) through its lockfile and writes
+`data/builds/f1/<build id>/` (`--out`): `tiles/<grid ref>.bin` for every 1 km
+square the coverage touches, and `manifest.json`. The build id is the UTC date
+plus a letter, e.g. `20261110a`. Tiles are built in parallel (`--workers`), and
+the same inputs give byte-identical tiles.
+
+Two checks fail a build, which then leaves no build directory: tile Horizon
+profiles are compared with direct ray casting at a sample of Candidates, and no
+Candidate's horizon may be set by a cell inside an OSM water area.
+`ciao_sun.build_checks` gives the tolerances and `ciao_sun.manifest` the
+manifest's schema.
+
 `profile-only` does not read this cache yet: it still wants unzipped GeoTIFFs
 under `data/dsm/` and `data/dtm/` (searched recursively).
 
@@ -107,6 +127,7 @@ uv sync
 
 ```
 ciao-sun fetch --coverage bristol.geojson --osm-date 261110
+ciao-sun build --coverage bristol.geojson
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
 

@@ -14,6 +14,7 @@ them once per build with `read_building_footprints`, then call
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +74,39 @@ def read_building_footprints(
     (minx, miny, maxx, maxy) in `crs`, when given, keeps only the footprints
     whose bounding box touches it; pass the coverage plus the ray length.
     """
+    return _read_areas(pbf_path, crs, bounds, ("building",), lambda tags: True)
+
+
+# Tags that make an OSM area open water: rivers, docks, lakes, reservoirs.
+_WATER_TAGS = {
+    "natural": frozenset({"water"}),
+    "waterway": frozenset({"riverbank", "dock"}),
+    "landuse": frozenset({"reservoir", "basin"}),
+}
+
+
+def read_water_areas(pbf_path: Path, crs: CRS, bounds: Bounds | None = None) -> BuildingFootprints:
+    """Every open-water area in an OSM extract, projected into `crs`.
+
+    The result has the shape of building footprints: `buffered_mask(grid, 0.0)`
+    is True on the grid's water cells.
+    """
+    return _read_areas(
+        pbf_path,
+        crs,
+        bounds,
+        tuple(_WATER_TAGS),
+        lambda tags: any(tags.get(key) in values for key, values in _WATER_TAGS.items()),
+    )
+
+
+def _read_areas(
+    pbf_path: Path,
+    crs: CRS,
+    bounds: Bounds | None,
+    keys: tuple[str, ...],
+    wanted: Callable[[Any], bool],
+) -> BuildingFootprints:
     import osmium
 
     pbf_path = Path(pbf_path)
@@ -82,12 +116,10 @@ def read_building_footprints(
     wkb_factory = osmium.geom.WKBFactory()
     wkbs: list[str] = []
     processor = (
-        osmium.FileProcessor(str(pbf_path))
-        .with_areas()
-        .with_filter(osmium.filter.KeyFilter("building"))
+        osmium.FileProcessor(str(pbf_path)).with_areas().with_filter(osmium.filter.KeyFilter(*keys))
     )
     for obj in processor:
-        if not isinstance(obj, osmium.osm.Area):
+        if not isinstance(obj, osmium.osm.Area) or not wanted(obj.tags):
             continue
         try:
             wkbs.append(wkb_factory.create_multipolygon(obj))

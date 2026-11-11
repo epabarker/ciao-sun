@@ -19,6 +19,10 @@ function locate(): Promise<{ lat: number; lon: number }> {
   });
 }
 
+// MapLibre is its own chunk, fetched while the manifest is: the list doesn't wait for it.
+const maplibre = import("./map/maplibre");
+maplibre.catch(() => {}); // a failed load is reported by the factory, and the list carries on
+
 const root = document.querySelector<HTMLDivElement>("#app");
 if (root) {
   startApp(root, {
@@ -28,5 +32,6 @@ if (root) {
     storage: () => window.localStorage,
     now: () => Date.now(),
     locate,
+    map: async (container, options) => (await maplibre).createMapLibre(container, options),
   });
 }

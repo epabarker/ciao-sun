@@ -3,11 +3,15 @@
 //
 // Each status has a view in STATUS_VIEWS (#46, #48). A view gets the Answer
 // and an AnswerContext: the Query it answers, read only for its date and
-// `now`, and the actions a message offers. #47 moves the list into the map's
-// bottom sheet and links rows to markers through `data-spot` (the candidateId).
+// `now`; the actions a message offers; and the highlighted spot.
+// Rows link to the map's markers through `data-spot` (the candidateId): a tap
+// on a row's head (`data-action="select-spot"`) highlights the spot, and the
+// highlighted row (`aria-current`) shows its sun times (#47). Ranked and
+// fallback rows both link; the spot beyond max walk has no marker, so its row
+// does not.
 
 import { PROTOCOLS_FACTOR } from "../about/about";
-import type { Answer, Query, Spot, Status } from "../contract";
+import type { Answer, Interval, Query, Spot, Status } from "../contract";
 import { morningWindowOver } from "../query/query";
 import { h } from "./dom";
 import { clockOf, dateLabel, walkLabel } from "./format";
@@ -31,6 +35,8 @@ export interface AnswerContext {
   /** The Query the Answer answers. */
   query?: Query;
   actions?: AnswerActions;
+  /** The highlighted spot's candidateId. */
+  selected?: string;
 }
 
 export type StatusView = (answer: Answer, context: AnswerContext) => Node;
@@ -45,6 +51,19 @@ export function stayLabel(stayMin: number): string {
   return stayMin > 0 ? `Stay ${stayMin} min` : "The walk alone meets the target";
 }
 
+/** "08:16–10:30, 11:00–11:20": runs of minutes as clock ranges. */
+function clockRanges(intervals: readonly Interval[]): string {
+  return intervals.map((run) => `${clockOf(run.start)}–${clockOf(run.end)}`).join(", ");
+}
+
+/** The highlighted spot's sun times, from its Answer intervals. */
+function sunTimes(spot: Spot): HTMLElement {
+  const parts = [spot.sunIntervals.length ? `Sun in view ${clockRanges(spot.sunIntervals)}` : "No sun in view"];
+  if (spot.lowSunIntervals.length) parts.push(`low sun ${clockRanges(spot.lowSunIntervals)}`);
+  if (spot.lastSun) parts.push(`last sun ${clockOf(spot.lastSun)}`);
+  return h("p", { class: "spot-sun", "data-field": "sun-times" }, parts.join(" · "));
+}
+
 function targetBadge(spot: Spot, target: number | undefined): HTMLElement {
   return h(
     "span",
@@ -54,31 +73,50 @@ function targetBadge(spot: Spot, target: number | undefined): HTMLElement {
 }
 
 /**
- * One spot. A fallback spot (one with `stayMin`) says how long to stay where
- * a spot with sun says whether it meets the target.
+ * One spot. A numbered row (`rank`) has a marker on the map, and a tap on its
+ * head highlights it there; `selected` is whether it is the highlighted one.
+ * A fallback spot (one with `stayMin`) says how long to stay where a spot
+ * with sun says whether it meets the target.
  */
-function spotRow(spot: Spot, rank: number | null, answer: Answer): HTMLElement {
+function spotRow(spot: Spot, rank: number | null, answer: Answer, selected: boolean): HTMLElement {
   const foot =
     spot.stayMin === undefined
       ? [targetBadge(spot, answer.durationTargetMin), h("span", { class: "mute" }, `${spot.sunMinutes} min sun`)]
       : [h("span", { class: "badge stay", "data-field": "stay" }, stayLabel(spot.stayMin))];
+  const where = [
+    h(
+      "span",
+      { class: "spot-where" },
+      h("span", { class: "spot-name", "data-field": "name" }, spot.name),
+      h("span", { class: "spot-walk", "data-field": "walk" }, walkLabel(spot.walkMin)),
+    ),
+    h("span", { class: "spot-leave", "data-field": "leave-by" }, `Leave ${clockOf(spot.leaveBy)}`),
+  ];
+  const head =
+    rank === null
+      ? h("div", { class: "spot-head" }, ...where)
+      : h(
+          // A tap on the head highlights the spot, here and on the map (#47).
+          "button",
+          { type: "button", class: "spot-head", "data-action": "select-spot", "aria-expanded": String(selected) },
+          h("span", { class: "rank", "data-field": "rank" }, String(rank)),
+          ...where,
+        );
   return h(
     "li",
-    { class: "spot", "data-spot": spot.candidateId },
-    h(
-      "div",
-      { class: "spot-head" },
-      rank === null ? null : h("span", { class: "rank", "data-field": "rank" }, String(rank)),
-      h(
-        "div",
-        { class: "spot-where" },
-        h("span", { class: "spot-name", "data-field": "name" }, spot.name),
-        h("span", { class: "spot-walk", "data-field": "walk" }, walkLabel(spot.walkMin)),
-      ),
-      h("span", { class: "spot-leave", "data-field": "leave-by" }, `Leave ${clockOf(spot.leaveBy)}`),
-    ),
+    { class: "spot", "data-spot": spot.candidateId, "aria-current": selected ? "true" : undefined },
+    head,
     answer.window ? timelineBar(spot, answer.window) : null,
     h("div", { class: "spot-foot" }, ...foot),
+    selected ? sunTimes(spot) : null,
+  );
+}
+
+function numberedRows(answer: Answer, selected: string | undefined): HTMLElement {
+  return h(
+    "ol",
+    { class: "spots" },
+    ...answer.spots.map((spot, i) => spotRow(spot, i + 1, answer, spot.candidateId === selected)),
   );
 }
 
@@ -104,13 +142,13 @@ function key(withStay: boolean): HTMLElement {
   );
 }
 
-function rankedView(answer: Answer): Node {
+function rankedView(answer: Answer, { selected }: AnswerContext): Node {
   return h(
     "section",
     { class: "answer answer-ranked", "data-status": answer.status },
     lampNotice(answer),
     answer.window ? axisScale(answer.window) : null,
-    h("ol", { class: "spots" }, ...answer.spots.map((spot, i) => spotRow(spot, i + 1, answer))),
+    numberedRows(answer, selected),
     key(false),
     h("p", { class: "reason mute" }, RANKING_REASON),
   );
@@ -120,7 +158,7 @@ function rankedView(answer: Answer): Node {
  * The fallback: the nearest open spots, each with "stay N min", and the
  * nearest spot with sun beyond max walk when the Answer names one.
  */
-function fallbackView(answer: Answer): Node {
+function fallbackView(answer: Answer, { selected }: AnswerContext): Node {
   const beyond = answer.nearestSunBeyondLimit;
   return h(
     "section",
@@ -128,13 +166,13 @@ function fallbackView(answer: Answer): Node {
     lampNotice(answer),
     h("p", { class: "message-title", "data-field": "fallback" }, fallbackLine(answer.durationTargetMin)),
     answer.window ? axisScale(answer.window) : null,
-    h("ol", { class: "spots" }, ...answer.spots.map((spot, i) => spotRow(spot, i + 1, answer))),
+    numberedRows(answer, selected),
     beyond
       ? h(
           "div",
           { class: "beyond", "data-field": "beyond" },
           h("p", { class: "beyond-title" }, "Sun beyond your max walk"),
-          h("ul", { class: "spots" }, spotRow(beyond, null, answer)),
+          h("ul", { class: "spots" }, spotRow(beyond, null, answer, false)),
         )
       : null,
     key(true),
@@ -220,8 +258,8 @@ function noEveningView(answer: Answer, { query, actions }: AnswerContext): Node 
     h(
       "p",
       { class: "mute" },
-      answer.nominalSunset
-        ? `Sunset is at ${clockOf(answer.nominalSunset)}, before your Evening window would start: 6 h after you wake, and not before solar noon.`
+      sunset
+        ? `Sunset is at ${clockOf(sunset)}, before your Evening window would start: 6 h after you wake, and not before solar noon.`
         : "The sun does not set on this day.",
     ),
   );

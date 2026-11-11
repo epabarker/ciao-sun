@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pyproj import Transformer
 
-from ciao_sun.tiles import _WGS84_TO_BNG
+from ciao_sun.coverage import _WGS84_TO_BNG
 
 SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "ciao_sun"
 

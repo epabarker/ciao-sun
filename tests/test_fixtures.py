@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import shutil
 from pathlib import Path
@@ -272,7 +273,10 @@ def test_the_synthetic_set_has_each_status_case_of_the_spec(generated: Generated
     overcast = answer_of("morning-overcast-fallback")
     assert overcast["status"] == "fallback" and overcast["durationTargetMin"] == 30
     assert "nearestSunBeyondLimit" not in overcast
-    assert all(spot["stayMin"] == 30 for spot in overcast["spots"])
+    # The walk counts towards the target: stay the rest, in whole minutes rounded up.
+    assert overcast["spots"]
+    for spot in overcast["spots"]:
+        assert spot["stayMin"] == max(math.ceil(30 - spot["walkMin"]), 0)
 
     no_sun = answer_of("morning-no-sun-in-reach")
     assert no_sun["status"] == "fallback"

@@ -15,7 +15,7 @@ import { type Build, DataUnavailableError, openBuild } from "./loader/loader";
 import { type MapLink, linkMap } from "./map/link";
 import type { MapFactory } from "./map/map";
 import { parseOrigin } from "./query/origin";
-import { buildQuery, nextMorningDate } from "./query/query";
+import { buildQuery, chooseWindow, nextWindowDate } from "./query/query";
 import { answer } from "./scorer/answer";
 import { type SavedPlace, type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
@@ -25,6 +25,7 @@ import { renderPlaces } from "./ui/places";
 import { type Result, mapContainer, renderScreen, screenInsets } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
 import type { SheetStop } from "./ui/sheet";
+import { fixedCopy, renderTabs } from "./ui/tabs";
 
 export interface AppDeps {
   config: ReleaseConfig;
@@ -63,13 +64,14 @@ function score(query: Query, tiles: readonly Tile[], build: Build): Answer {
 export function startApp(root: HTMLElement, deps: AppDeps): App {
   const settings: SettingsStore = openSettings(deps.storage);
   const saved = settings.read();
-  const window: WindowName = "morning";
+  // The app opens on whichever window comes next.
+  const opening = chooseWindow(deps.now(), saved.wakeTime);
 
   const state: SentenceState & { dateEdited: boolean; placesOpen: boolean; placeDraft: string } = {
-    window,
+    window: opening.window,
     wakeTime: saved.wakeTime,
     savedWakeTime: saved.wakeTime,
-    date: nextMorningDate(deps.now(), saved.wakeTime),
+    date: opening.date,
     dateEdited: false,
     sky: "clear",
     skySource: { kind: "unfilled" },
@@ -114,9 +116,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       placeEvents,
     );
     renderScreen(root, {
-      window,
+      window: state.window,
+      tabs: renderTabs(state.window, showWindow),
       sentence: h("div", { class: "ask" }, renderSentence(state, events), places),
       result,
+      answerContext: {
+        actions: { planTomorrowMorning: () => showWindow("morning"), showEvening: () => showWindow("evening") },
+      },
+      footer: fixedCopy(state.window),
       onAbout: () => setAbout(true),
       about: aboutOpen ? renderAbout(readAbout(build?.manifest), () => setAbout(false)) : undefined,
       selected,
@@ -143,14 +150,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       result = state.origin.kind === "locating" ? { kind: "loading" } : { kind: "need-origin" };
       return;
     }
-    const query = buildQuery({ ...state, origin: at }, deps.now(), window);
+    const query = buildQuery({ ...state, origin: at }, deps.now(), state.window);
     result = { kind: "loading" };
     draw();
     let next: Result;
     try {
       const area = await build.area(query.origin);
       // An origin outside the coverage needs no tiles: the scorer answers not-covered.
-      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build) };
+      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build), query };
     } catch (error) {
       next = failure(error);
     }
@@ -172,14 +179,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     const at = origin();
     if (!at) return;
     const place = `${forecastCoordinate(at.lat)},${forecastCoordinate(at.lon)}`;
-    if (state.skySource.kind === "manual" && manualFor?.window === window && manualFor.date === state.date) {
+    if (state.skySource.kind === "manual" && manualFor?.window === state.window && manualFor.date === state.date) {
       manualFor.place ??= place;
       if (manualFor.place === place) return;
     }
-    const key = `${window}|${state.date}|${state.wakeTime}|${place}`;
+    const key = `${state.window}|${state.date}|${state.wakeTime}|${place}`;
     if (key === forecastKey) return;
     forecastKey = key;
-    const span = cloudSpan(buildQuery({ ...state, origin: at }, deps.now(), window));
+    const span = cloudSpan(buildQuery({ ...state, origin: at }, deps.now(), state.window));
     if (!span) {
       state.skySource = { kind: "unfilled" };
       return;
@@ -212,6 +219,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     refresh();
   };
 
+  /** A tab, planning its next window: the date follows it again. */
+  const showWindow = (window: WindowName) => {
+    state.window = window;
+    state.date = nextWindowDate(window, deps.now(), state.wakeTime);
+    state.dateEdited = false;
+    refresh();
+  };
+
   let locating = 0;
   const locate = () => {
     state.origin = { kind: "locating" };
@@ -237,7 +252,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   const events = {
     wakeTime(value: string) {
       state.wakeTime = value;
-      if (!state.dateEdited) state.date = nextMorningDate(deps.now(), value);
+      if (!state.dateEdited) state.date = nextWindowDate(state.window, deps.now(), value);
       refresh();
     },
     saveWakeTime() {
@@ -252,7 +267,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     sky(value: Sky) {
       state.sky = value;
       state.skySource = { kind: "manual" };
-      manualFor = { window, date: state.date };
+      manualFor = { window: state.window, date: state.date };
       refresh();
     },
     maxWalkMin(value: number) {

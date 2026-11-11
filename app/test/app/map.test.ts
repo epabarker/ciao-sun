@@ -259,3 +259,63 @@ describe("Map-first screen", () => {
     expect(rowIds(root)).toEqual(WINTER.answer.spots.map((s) => s.candidateId));
   });
 });
+
+describe("the map across tabs and statuses (#48)", () => {
+  const markerIds = (markers: MapMarkers | undefined) => markers?.spots.map((spot) => spot.id);
+
+  it("keeps the one map when the tab changes, and moves its markers to the new tab's spots", async () => {
+    // 12:00 BST on 23 Sep opens on today's Evening: the evening-september-equinox Query.
+    const EVENING = fixture("evening-september-equinox");
+    const map = fakeMap();
+    const { root, app } = await mount(
+      deps({ map: map.factory, now: () => Date.parse("2026-09-23T12:00:00+01:00"), locate: async () => EVENING.query.origin }),
+    );
+    expect(root.querySelector("[role=tab][aria-selected=true]")?.getAttribute("data-tab")).toBe("evening");
+    const container = root.querySelector(":scope > .map");
+    const eveningIds = EVENING.answer.spots.map((s) => s.candidateId);
+    expect(markerIds(map.last())).toEqual(eveningIds);
+
+    (root.querySelector("[data-tab=morning]") as HTMLButtonElement).click();
+    await app.idle();
+    // Tomorrow's Morning; its spots happen to be the same two, so its markers
+    // are shown again from the new Answer, which the leave-by times tell apart.
+    expect(root.querySelector("[role=tab][aria-selected=true]")?.getAttribute("data-tab")).toBe("morning");
+    expect(map.made).toHaveLength(1);
+    expect(root.querySelector(":scope > .map")).toBe(container);
+    expect(markerIds(map.last())).toEqual(rowIds(root));
+    const leaves = [...root.querySelectorAll("[data-spot] [data-field=leave-by]")].map((el) => el.textContent);
+    expect(leaves.every((text) => text! < "Leave 12:00")).toBe(true);
+
+    // And to an Answer with no spots: the markers go.
+    const date = root.querySelector("[name=date]") as HTMLInputElement;
+    date.value = "2026-09-23"; // today's Morning, already over at 12:00
+    date.dispatchEvent(new Event("change", { bubbles: true }));
+    await app.idle();
+    expect(root.querySelector("[data-field=window-over]")).not.toBeNull();
+    expect(map.made).toHaveLength(1);
+    expect(markerIds(map.last())).toEqual([]);
+  });
+
+  it("numbers a fallback Answer's spots on the map and links its markers and rows both ways", async () => {
+    const map = fakeMap();
+    const { root, app } = await mount(deps({ map: map.factory }));
+    const sky = root.querySelector("[name=sky]") as HTMLSelectElement;
+    sky.value = "overcast";
+    sky.dispatchEvent(new Event("change", { bubbles: true }));
+    await app.idle();
+
+    expect(root.querySelector("[data-status]")?.getAttribute("data-status")).toBe("fallback");
+    const ids = rowIds(root) as string[];
+    expect(ids.length).toBeGreaterThan(1);
+    expect(map.last()?.spots.map((spot) => [spot.id, spot.rank])).toEqual(ids.map((id, i) => [id, i + 1]));
+
+    tapRow(root, ids[1]!);
+    expect(selectedIds(root)).toEqual([ids[1]]);
+    expect(map.highlighted.at(-1)).toBe(ids[1]);
+
+    map.tap(ids[0]!);
+    expect(selectedIds(root)).toEqual([ids[0]]);
+    expect(map.highlighted.at(-1)).toBe(ids[0]);
+    expect(row(root, ids[0]!)?.querySelector("[data-field=stay]")?.textContent).toMatch(/^Stay \d+ min$|walk alone/);
+  });
+});

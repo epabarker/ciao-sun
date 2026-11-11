@@ -71,7 +71,7 @@ export function sunEvents(
 }
 
 // Each is an integer divided by a constant (1e7, 80 m/min, 100).
-const NEAR_EXACT = new Set(["lat", "lon", "walkMin", "lowSunMinutes", "stayMin"]);
+const NEAR_EXACT = new Set(["lat", "lon", "walkMin", "lowSunMinutes"]);
 const TOLERANCE: Record<string, number> = { skyOpenness: 0.001 };
 
 function differences(actual: unknown, expected: unknown, path: string, key: string, out: string[]): void {

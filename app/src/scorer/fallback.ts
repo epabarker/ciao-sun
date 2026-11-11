@@ -14,17 +14,26 @@ export function rankByWalk(world: World, among: readonly Scored[]): Scored[] {
 }
 
 /**
+ * The fallback "stay N min": the Duration target less the walk, never below 0.
+ * Rounded up to a whole minute, as the Sun minutes an evening Leave-by still
+ * needs are, so that walk + stay always reaches the target.
+ */
+export function stayMinutes(targetMin: number, walkMin: number): number {
+  return Math.max(Math.ceil(targetMin - walkMin), 0);
+}
+
+/**
  * The nearest reachable spots that pass openness, de-duped, whatever their sun.
  *
- * Each is left for at the start of the window and says to stay for the
- * Duration target: the walk counts towards it, so the stay is the target.
+ * Each is left for at the start of the window and says how long to stay:
+ * the walk counts towards the Duration target, so the stay is `stayMinutes`.
  * Its sun fields are still the geometry's, as on a ranked spot.
  */
 export function fallbackSpots(scoring: Scoring, targetMin: number): Spot[] {
   const reachable = scoring.scored.filter((candidate) => candidate.reachable);
   return dedupe(scoring.world, rankByWalk(scoring.world, reachable)).map((candidate) => ({
     ...buildSpot(scoring, candidate, scoring.plan.start, targetMin),
-    stayMin: targetMin,
+    stayMin: stayMinutes(targetMin, walkMinutes(candidate)),
   }));
 }
 

@@ -16,7 +16,7 @@ from ciao_sun.coverage import Coverage, CoverageError
 from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
 from ciao_sun.raster import TilesNotFoundError, find_tiles, load_mosaic_cached
 from ciao_sun.raster import sample as raster_sample
-from ciao_sun.solar import sunrise_hour_track
+from ciao_sun.solar import NOMINAL_RISE_SET_ELEVATION_DEG, sun_track
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -186,13 +186,14 @@ def profile_only(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    track = sunrise_hour_track(lat, lon, date, cfg.tz, cfg.step_minutes, cfg.window_minutes)
+    track = sun_track(lat, lon, date, cfg.tz)
+    up = track.elevation >= NOMINAL_RISE_SET_ELEVATION_DEG
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(azimuths, angles, label="Horizon (obstruction) angle", color="tab:gray")
     ax.plot(
-        track.azimuth,
-        track.apparent_elevation,
-        label="Sun track (hour after sunrise)",
+        track.azimuth[up],
+        track.apparent_elevation[up],
+        label="Sun track (Nominal sunrise to Nominal sunset)",
         color="tab:orange",
     )
     ax.axhline(0, color="black", linewidth=0.5)

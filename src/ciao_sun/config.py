@@ -19,8 +19,6 @@ class CiaoSunConfig(BaseSettings):
     date: str = "2026-12-21"
     max_ray: float = 3000.0
     tz: str = "Europe/London"
-    step_minutes: float = 5.0
-    window_minutes: float = 60.0
     dtm_dir: Path = Path("data/dtm")
     dsm_dir: Path = Path("data/dsm")
     cache_dir: Path = Path("data/cache")

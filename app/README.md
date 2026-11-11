@@ -38,7 +38,7 @@ src/loader/loader.ts    data loader: openBuild(pin) checks the manifest format; 
 src/loader/grid.ts      WGS84 -> National Grid, and the 1 km tiles in reach of an origin
 src/scorer/coverage.ts  whether an origin is inside the manifest's coverage polygon (the scorer's not-covered; the loader uses it too)
 src/settings/store.ts   settings store: Wake time, max walk; browser storage with a memory fallback
-src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
+src/query/query.ts      the sentence's inputs -> Query; each window's next date; the tab the app opens on
 src/query/origin.ts     the typed origin "lat, lon"
 src/ui/                 the answer screen (below)
 src/contract.ts         the Query and Answer types, as fixture JSON holds them
@@ -84,11 +84,22 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 
 | File | Does | Extended by |
 |---|---|---|
-| `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer; #51 an About link there |
-| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
-| `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
-| `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |
+| `ui/screen.ts` | the frame: `header.top` (tabs, sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #51 an About link in the footer |
+| `ui/tabs.ts` | the Morning/Evening tabs; the fixed copy per tab (`SAFETY_COPY` on both, `DIM_LIGHTS` on Evening) | |
+| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
+| `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS`, with an `AnswerContext` (the Query, read for its date and `now`; the message actions); the lamp notice | #47 links rows (`data-spot` is the candidateId) to markers |
+| `ui/timeline.ts` | the timeline bar and its axis; the fallback `stay` block; a leave-by before the axis start is marked `data-off-axis="before"` | |
 | `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
+
+The app opens on whichever window comes next (`chooseWindow` in
+`query/query.ts`): today's Morning until Wake time + 3 h, then today's Evening
+until Nominal sunset, then tomorrow's Morning. Nominal sunset for that choice
+and for the Evening tab's date is read at `PLANNING_POINT` (central Bristol),
+so it is made before GPS answers and a late fix never flips the tab. A tab tap
+plans that tab's next window. A `lamp-only` Answer whose Query shows the
+Morning window already over (`morningWindowOver`: `now` on the query date at
+or after Wake time + 3 h) shows "Morning window has ended" with no lamp advice;
+otherwise it is a morning with no daylight, and gets the lamp message.
 
 `AppDeps` (in `app.ts`) is every outside dependency: the pin, `fetch`, the
 storage accessor, the clock and GPS. `test/app/` runs the whole screen through

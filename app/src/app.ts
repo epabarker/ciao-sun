@@ -10,12 +10,13 @@ import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
 import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
 import { parseOrigin } from "./query/origin";
-import { buildQuery, nextMorningDate } from "./query/query";
+import { buildQuery, chooseWindow, nextWindowDate } from "./query/query";
 import { answer } from "./scorer/answer";
 import { type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
 import { type Result, renderScreen } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
+import { fixedCopy, renderTabs } from "./ui/tabs";
 
 export interface AppDeps {
   config: ReleaseConfig;
@@ -46,13 +47,14 @@ function score(query: Query, tiles: readonly Tile[], build: Build): Answer {
 export function startApp(root: HTMLElement, deps: AppDeps): App {
   const settings: SettingsStore = openSettings(deps.storage);
   const saved = settings.read();
-  const window: WindowName = "morning";
+  // The app opens on whichever window comes next.
+  const opening = chooseWindow(deps.now(), saved.wakeTime);
 
   const state: SentenceState & { dateEdited: boolean } = {
-    window,
+    window: opening.window,
     wakeTime: saved.wakeTime,
     savedWakeTime: saved.wakeTime,
-    date: nextMorningDate(deps.now(), saved.wakeTime),
+    date: opening.date,
     dateEdited: false,
     sky: "clear",
     maxWalkMin: saved.maxWalkMin,
@@ -75,7 +77,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   };
 
   const draw = () => {
-    renderScreen(root, { window, sentence: renderSentence(state, events), result });
+    renderScreen(root, {
+      window: state.window,
+      tabs: renderTabs(state.window, showWindow),
+      sentence: renderSentence(state, events),
+      result,
+      answerContext: { actions: { planTomorrowMorning: () => showWindow("morning"), showEvening: () => showWindow("evening") } },
+      footer: fixedCopy(state.window),
+    });
   };
 
   const ask = async () => {
@@ -89,14 +98,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       result = state.origin.kind === "locating" ? { kind: "loading" } : { kind: "need-origin" };
       return;
     }
-    const query = buildQuery({ ...state, origin: at }, deps.now(), window);
+    const query = buildQuery({ ...state, origin: at }, deps.now(), state.window);
     result = { kind: "loading" };
     draw();
     let next: Result;
     try {
       const area = await build.area(query.origin);
       // An origin outside the coverage needs no tiles: the scorer answers not-covered.
-      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build) };
+      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build), query };
     } catch (error) {
       next = failure(error);
     }
@@ -113,6 +122,14 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
 
   const setOrigin = (slot: OriginSlot) => {
     state.origin = slot;
+    refresh();
+  };
+
+  /** A tab, planning its next window: the date follows it again. */
+  const showWindow = (window: WindowName) => {
+    state.window = window;
+    state.date = nextWindowDate(window, deps.now(), state.wakeTime);
+    state.dateEdited = false;
     refresh();
   };
 
@@ -133,7 +150,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   const events = {
     wakeTime(value: string) {
       state.wakeTime = value;
-      if (!state.dateEdited) state.date = nextMorningDate(deps.now(), value);
+      if (!state.dateEdited) state.date = nextWindowDate(state.window, deps.now(), value);
       refresh();
     },
     saveWakeTime() {

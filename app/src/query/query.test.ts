@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { parseOrigin } from "./origin";
-import { buildQuery, nextMorningDate } from "./query";
+import {
+  PLANNING_POINT,
+  buildQuery,
+  chooseWindow,
+  morningWindowOver,
+  nextEveningDate,
+  nextMorningDate,
+} from "./query";
 
 const at = (iso: string) => Date.parse(iso);
 
@@ -19,6 +26,71 @@ describe("the Morning window's date", () => {
   it("reads the clock in Europe/London, whatever the device's zone", () => {
     // 00:30 in London on 1 July is still 30 June in UTC.
     expect(nextMorningDate(at("2026-07-01T00:30:00+01:00"), "07:00")).toBe("2026-07-01");
+  });
+});
+
+// At PLANNING_POINT, from the Python reference's sun_track: Nominal sunset is
+// 19:06 BST on 2026-09-23 and 16:03 GMT on 2026-12-20.
+describe("the Evening window's date", () => {
+  it("is today until Nominal sunset, and tomorrow from then", () => {
+    expect(nextEveningDate(at("2026-09-23T19:05:59+01:00"), PLANNING_POINT)).toBe("2026-09-23");
+    expect(nextEveningDate(at("2026-09-23T19:06:00+01:00"), PLANNING_POINT)).toBe("2026-09-24");
+    expect(nextEveningDate(at("2026-12-20T16:30:00Z"), PLANNING_POINT)).toBe("2026-12-21");
+  });
+});
+
+describe("the tab the app opens on", () => {
+  it("is today's Morning before and during the Morning window", () => {
+    expect(chooseWindow(at("2026-09-23T05:00:00+01:00"), "07:00", PLANNING_POINT)).toEqual({
+      window: "morning",
+      date: "2026-09-23",
+    });
+    expect(chooseWindow(at("2026-09-23T09:59:00+01:00"), "07:00", PLANNING_POINT).window).toBe("morning");
+  });
+
+  it("is today's Evening during the day, from the end of the Morning window until Nominal sunset", () => {
+    // 10:00 is after the Morning window and before the Evening window starts at 13:03.
+    expect(chooseWindow(at("2026-09-23T10:00:00+01:00"), "07:00", PLANNING_POINT)).toEqual({
+      window: "evening",
+      date: "2026-09-23",
+    });
+    expect(chooseWindow(at("2026-09-23T19:05:00+01:00"), "07:00", PLANNING_POINT).window).toBe("evening");
+  });
+
+  it("is tomorrow's Morning after Nominal sunset", () => {
+    expect(chooseWindow(at("2026-09-23T19:06:00+01:00"), "07:00", PLANNING_POINT)).toEqual({
+      window: "morning",
+      date: "2026-09-24",
+    });
+    expect(chooseWindow(at("2026-12-20T21:00:00Z"), "07:30", PLANNING_POINT)).toEqual({
+      window: "morning",
+      date: "2026-12-21",
+    });
+  });
+
+  it("stays on today's Morning while a late Wake time's window runs past Nominal sunset", () => {
+    expect(chooseWindow(at("2026-12-20T16:30:00Z"), "15:00", PLANNING_POINT)).toEqual({
+      window: "morning",
+      date: "2026-12-20",
+    });
+  });
+});
+
+describe("whether a Query's Morning window is over", () => {
+  const q = (now?: string) =>
+    buildQuery(
+      { wakeTime: "07:00", date: "2026-12-21", sky: "clear", maxWalkMin: 15, origin: PLANNING_POINT },
+      at(now ?? "2026-12-20T21:00:00Z"),
+    );
+
+  it("is when now, on the query's date, is at or after Wake time + 3 h", () => {
+    expect(morningWindowOver(q("2026-12-21T09:59:00Z"))).toBe(false);
+    expect(morningWindowOver(q("2026-12-21T10:00:00Z"))).toBe(true);
+    expect(morningWindowOver(q("2026-12-21T17:30:00Z"))).toBe(true);
+  });
+
+  it("is never for a query with no now, which plans another day", () => {
+    expect(morningWindowOver(q())).toBe(false);
   });
 });
 
@@ -54,6 +126,13 @@ describe("the Query the sentence asks", () => {
 
   it("has no now for another day", () => {
     expect(buildQuery(inputs, at("2026-09-22T21:00:00+01:00"))).not.toHaveProperty("now");
+  });
+
+  it("asks for the tab's window", () => {
+    expect(buildQuery(inputs, at("2026-09-23T12:00:00+01:00"), "evening")).toMatchObject({
+      window: "evening",
+      now: "2026-09-23T12:00:00+01:00",
+    });
   });
 
   it("asks for at most the 20 min cap", () => {

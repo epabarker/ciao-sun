@@ -14,6 +14,8 @@
   --ok: #1f6f40;
   --no-bg: #fbe3e1;
   --no: #9b2018;
+  --stay: #7fbf8f;
+  --stay-bg: #e2f1e6;
   color-scheme: light dark;
 }
 
@@ -31,6 +33,8 @@
     --ok: #8fdcae;
     --no-bg: #431a17;
     --no: #f3a39c;
+    --stay: #3f7a50;
+    --stay-bg: #1f3a28;
   }
 }
 
@@ -310,4 +314,80 @@ select {
 .reason {
   font-size: 12px;
   margin: 6px 0 0;
+}
+
+/* The non-ranked statuses and the lamp notice (#48) */
+.answer-fallback {
+  margin-top: 8px;
+}
+
+.notice {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--sun);
+  background: var(--card);
+  font-size: 14px;
+}
+
+.seg-stay {
+  background: var(--stay);
+}
+
+.key-stay {
+  background: var(--stay);
+}
+
+.badge.stay {
+  background: var(--stay-bg);
+  color: var(--ink);
+}
+
+/* A leave-by before the axis start: an arrow at the left edge, not a line. */
+.seg-leave-by[data-off-axis="before"] {
+  width: 0;
+  margin-left: 0;
+  background: none;
+  border-top: 11px solid transparent;
+  border-bottom: 11px solid transparent;
+  border-right: 7px solid var(--ink);
+}
+
+.beyond {
+  margin-top: 14px;
+}
+
+.beyond-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--mute);
+}
+
+/* Tabs and fixed copy */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 6px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--track);
+}
+
+.tab {
+  flex: 1;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: var(--card);
+}
+
+.fixed-copy {
+  font-size: 13px;
+  margin: 14px 0 0;
 }

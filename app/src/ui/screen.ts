@@ -1,22 +1,23 @@
 // The answer screen's frame: the sentence at the top, the result below.
 //
 //   <div class="screen" data-window="morning">
-//     <header class="top">   the sentence editor (and, from #48, the tabs)
+//     <header class="top">   the Morning/Evening tabs and the sentence editor
 //     <main class="sheet">   the result: the answer view or a message
 //                            (#47 makes it a bottom sheet over the map)
-//     <footer class="foot">  fixed copy (#48 safety copy, #51 About link)
+//     <footer class="foot">  fixed copy (ui/tabs.ts: safety, dim the lights; #51 About link)
 //
 // `renderScreen` replaces the root's content on every state change; views are
 // pure functions of state, and controls report through callbacks.
 
-import type { Answer, WindowName } from "../contract";
-import { renderAnswer, message } from "./answer-view";
+import type { Answer, Query, WindowName } from "../contract";
+import { type AnswerContext, renderAnswer, message } from "./answer-view";
 import { h } from "./dom";
 
 export type Result =
   | { kind: "loading" }
   | { kind: "need-origin" }
-  | { kind: "answer"; answer: Answer }
+  /** `query` is the Query the Answer answers; the view reads its date and `now`. */
+  | { kind: "answer"; answer: Answer; query?: Query }
   /** The manifest or a tile is in a format this version can't read. */
   | { kind: "unreadable"; format: number }
   /** The data host could not be reached. */
@@ -26,14 +27,14 @@ export type Result =
 
 export const UNREADABLE_TITLE = "This version can't read this data.";
 
-export function renderResult(result: Result): Node {
+export function renderResult(result: Result, context?: AnswerContext): Node {
   switch (result.kind) {
     case "loading":
       return message("loading", "Finding spots…");
     case "need-origin":
       return message("need-origin", "Where from?", "Location isn't available. Type a position as latitude, longitude.");
     case "answer":
-      return renderAnswer(result.answer);
+      return renderAnswer(result.answer, { ...context, query: result.query ?? context?.query });
     case "unreadable":
       return message(
         "unreadable",
@@ -51,8 +52,12 @@ export function renderResult(result: Result): Node {
 
 export interface ScreenParts {
   window: WindowName;
+  /** The Morning and Evening tabs, above the sentence. */
+  tabs?: Node;
   sentence: Node;
   result: Result;
+  /** What an answer's messages can lead to, and the Query the answer is for. */
+  answerContext?: AnswerContext;
   footer?: Node[];
 }
 
@@ -61,8 +66,8 @@ export function renderScreen(root: HTMLElement, parts: ScreenParts): void {
     h(
       "div",
       { class: "screen", "data-window": parts.window },
-      h("header", { class: "top" }, parts.sentence),
-      h("main", { class: "sheet", "aria-live": "polite" }, renderResult(parts.result)),
+      h("header", { class: "top" }, parts.tabs, parts.sentence),
+      h("main", { class: "sheet", "aria-live": "polite" }, renderResult(parts.result, parts.answerContext)),
       h("footer", { class: "foot" }, ...(parts.footer ?? [])),
     ),
   );

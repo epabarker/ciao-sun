@@ -60,9 +60,21 @@ _Avoid_: sky view, exposure
 The outdoor minutes to aim for in a Morning window or Evening window, set by how cloudy it is in that window; a target to show, not a physiological threshold.
 _Avoid_: minimum, threshold, dose
 
+**Low-sun minutes**:
+The Sun minutes during which the sun is low, between 0° and 30° above the horizontal as seen through the atmosphere. In the Morning window each minute counts by that window's weighting; in the Evening window every minute counts the same.
+_Avoid_: golden-hour minutes, quality minutes
+
 **Protocols factor**:
-A labelled bonus for Sun minutes when the sun is low and the sky is clear, at either end of the day, from *Protocols*' claim about low-sun light quality; untested in humans.
-_Avoid_: sunrise quality, golden-hour bonus
+The reason spots are ranked by Low-sun minutes, most first, when the sky is not overcast: *Protocols*' claim about low-sun light quality, at either end of the day. It is the ranking key, not a bonus added to another score, and is always labelled as untested in humans.
+_Avoid_: sunrise quality, golden-hour bonus, low-sun bonus
+
+**Spot name**:
+What a Candidate's place is called, taken from OpenStreetMap: the named green space that contains it, else its street, else a path, lane or steps "off" the nearest named street. Many Candidates share one Spot name, and an answer shows a Spot name once.
+_Avoid_: label, place name, address
+
+**Leave-by**:
+The time to set off from the origin for a spot. In the morning it is timed to arrive as the sun first comes into view there; in the evening it is the latest departure that still meets the Duration target before the spot's Last sun. It is never before Wake time or the present moment.
+_Avoid_: departure time, go time
 
 **Stage**:
 One step of the planned rollout: just me in Bristol, then just me in England then the UK, then anyone in the UK.

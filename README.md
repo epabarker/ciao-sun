@@ -16,6 +16,10 @@ exports have been removed. What the CLI exposes today is:
 - `tiles` -- a placeholder that prints the LIDAR tile codes to download, until
   `fetch` replaces it.
 
+The build's output is one binary file per 1 km square, in tile format `f1`.
+`docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
+is the Python writer and reader.
+
 ## How it works
 
 For a standing position and a true azimuth, Ciao Sun casts a ray from the

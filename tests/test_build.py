@@ -24,6 +24,7 @@ from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.cli import app
 from ciao_sun.fetch import read_lockfile
 from ciao_sun.tile_codec import Tile, read_tile, write_tile
+from tests import basemap_world as protomaps
 from tests import build_world as world
 from tests.osm_extract import bng_of
 
@@ -170,7 +171,7 @@ def test_the_manifest_records_every_input_with_its_version_and_sha256(built: Bui
             digest = hashlib.sha256(lock.path_of(entry).read_bytes()).hexdigest()
             assert line["sha256"] == digest
     versions = {kind: line["version"] for (kind, tile), line in listed.items() if not tile}
-    assert versions == {"terrain50": "2026-07", "osm": "261110"}
+    assert versions == {"terrain50": "2026-07", "osm": "261110", "basemap": "20260811"}
     assert listed[("dsm", world.EA_TILE)]["version"] == "2022"
     # EA publishes nothing for the other 5 km tiles within 3 km of the coverage.
     assert listed[("dsm", "ST6070")]["absent"] and listed[("dsm", "ST6070")]["sha256"] is None
@@ -206,6 +207,78 @@ def test_the_manifest_records_the_tolerances_the_build_checks_passed_at(built: B
     assert checks["profile"]["fractionWithin"] == 0.99
     assert checks["profile"]["candidatesChecked"] == 32  # 16 in each tile
     assert checks["waterGuard"] == {"candidatesAllowed": 0, "candidatesFound": 0}
+
+
+# --- The basemap --------------------------------------------------------------
+
+
+def _basemap_tree(directory: Path) -> dict[tuple[int, int, int], bytes]:
+    return {
+        (int(path.parts[-3]), int(path.parts[-2]), int(path.stem)): path.read_bytes()
+        for path in (directory / "basemap").rglob("*")
+        if path.is_file()
+    }
+
+
+def test_a_build_holds_the_basemap_tiles_over_the_coverages_bounding_box_at_zooms_10_to_15(
+    built: Built,
+):
+    tree = _basemap_tree(built.directory)
+
+    assert set(tree) == protomaps.tiles_over(world.coverage().bounds_wgs84(), range(10, 16))
+    assert {z for z, _, _ in tree} == {10, 11, 12, 13, 14, 15}
+    for (z, x, y), content in tree.items():
+        assert (built.directory / "basemap" / str(z) / str(x) / f"{y}.mvt").is_file()
+        assert content == protomaps.tile_text(z, x, y)  # the vector tile itself, not gzip
+
+
+def test_the_manifest_describes_the_basemap_and_dates_it_by_its_protomaps_build(built: Built):
+    tree = _basemap_tree(built.directory)
+    west, south, east, north = world.coverage().bounds_wgs84()
+
+    assert built.manifest["basemap"] == {
+        "protomapsBuild": "20260811",
+        "tilesetVersion": "4.15.1",
+        "osmTimestamp": "2026-08-11T04:00:00Z",
+        "minZoom": 10,
+        "maxZoom": 15,
+        "bounds": [west, south, east, north],
+        "tileCount": len(tree),
+        "bytes": sum(len(content) for content in tree.values()),
+    }
+    (line,) = [line for line in built.manifest["inputs"] if line["kind"] == "basemap"]
+    assert line["version"] == "20260811"
+    assert line["url"] == "https://build.protomaps.com/20260811.pmtiles"
+    assert "Protomaps" in line["source"]
+
+
+def test_the_manifest_credits_protomaps_and_openstreetmap_for_the_basemap(built: Built):
+    (credit,) = [line for line in built.manifest["attribution"] if line["source"] == "Protomaps"]
+
+    assert credit["text"] == "Protomaps © OpenStreetMap"
+    assert "ODbL" in credit["licence"]
+    assert credit["licenceUrl"] == "https://opendatacommons.org/licenses/odbl/1-0/"
+
+
+def test_no_pmtiles_archive_is_shipped(built: Built):
+    files = [path for path in built.directory.rglob("*") if path.is_file()]
+    kinds = {(path.relative_to(built.directory).parts[0], path.suffix) for path in files}
+
+    assert kinds == {("manifest.json", ".json"), ("tiles", ".bin"), ("basemap", ".mvt")}
+    for path in files:
+        assert not path.read_bytes().startswith(b"PMTiles"), path
+
+
+def test_inputs_fetched_without_a_basemap_are_refused(built: Built, tmp_path: Path):
+    inputs = Path(shutil.copytree(built.inputs, tmp_path / "inputs"))
+    lockfile = json.loads((inputs / "fetch.lock.json").read_text())
+    lockfile["inputs"] = [line for line in lockfile["inputs"] if line["kind"] != "basemap"]
+    (inputs / "fetch.lock.json").write_text(json.dumps(lockfile))
+
+    with pytest.raises(BuildError, match="basemap.*ciao-sun fetch"):
+        build(world.coverage(), inputs, tmp_path / "builds", today=TODAY)
+
+    assert not (tmp_path / "builds").exists()
 
 
 # --- Reproducibility ----------------------------------------------------------
@@ -328,5 +401,6 @@ def test_build_help_names_what_is_written_and_what_fails_a_build():
     for phrase in [
         "--coverage", "GeoJSON", "--inputs", "fetch.lock.json", "--out", "manifest.json",
         "tiles/<grid ref>.bin", "direct ray casting", "water", "SHA-256", "--workers",
+        "basemap/{z}/{x}/{y}.mvt", "Protomaps",
     ]:  # fmt: skip
         assert phrase in text, f"`build --help` does not mention {phrase!r}"

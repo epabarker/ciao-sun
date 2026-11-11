@@ -390,6 +390,47 @@ def test_node_ids_and_positions_are_the_same_in_every_tile(tiles):
     assert {2, 3} <= set(seen)
 
 
+# --- Reading only what a build needs ------------------------------------------
+
+ST5973 = (359000.0, 173000.0, 360000.0, 174000.0)
+
+
+def test_a_network_bounded_to_a_square_builds_its_tile_as_the_whole_extract_does(tmp_path):
+    extract = write_osm_extract(
+        tmp_path / "synthetic.osm.pbf", NODES, [*PUBLIC_WAYS, PRIVATE_WAY, PARK]
+    )
+    written = []
+    for name, network in (
+        ("whole", load_walk_network(extract)),
+        ("bounded", load_walk_network(extract, within=ST5973)),
+    ):
+        outline = build_tile(network, "ST5973", *_rasters())
+        assert outline is not None
+        flat = np.full((outline.easting.size, PROFILE_SAMPLES), 20, dtype=np.uint8)
+        written.append(write_tile(outline.with_profiles(flat), tmp_path / name).read_bytes())
+    assert written[0] == written[1]
+
+
+def test_a_bounded_network_leaves_out_the_ways_wholly_outside_the_bounds(tmp_path):
+    extract = write_osm_extract(tmp_path / "synthetic.osm.pbf", NODES, PUBLIC_WAYS)
+    outline = build_tile(load_walk_network(extract, within=ST5973), "ST5873", *_rasters())
+    assert outline is not None
+    tile = outline.with_profiles(np.zeros((outline.easting.size, PROFILE_SAMPLES), dtype=np.uint8))
+    edges = _edges(read_tile(write_tile(tile, tmp_path / "tiles")))
+    assert frozenset({2, 3}) in edges  # crosses into ST5973
+    assert frozenset({1, 9}) not in edges and frozenset({2, 5}) not in edges
+
+
+def test_an_edge_crossing_the_bounds_is_kept_though_both_its_ends_are_outside(tmp_path):
+    # A strip between nodes 2 (358950) and 3 (359050), with no node in it.
+    strip = (358960.0, 173400.0, 359040.0, 173700.0)
+    extract = write_osm_extract(tmp_path / "synthetic.osm.pbf", NODES, PUBLIC_WAYS)
+    outline = build_tile(load_walk_network(extract, within=strip), "ST5873", *_rasters())
+    assert outline is not None
+    tile = outline.with_profiles(np.zeros((outline.easting.size, PROFILE_SAMPLES), dtype=np.uint8))
+    assert set(_edges(read_tile(write_tile(tile, tmp_path / "tiles")))) == {frozenset({2, 3})}
+
+
 def test_a_square_with_no_candidates_and_no_walk_edges_has_no_tile(tmp_path):
     extract = write_osm_extract(tmp_path / "synthetic.osm.pbf", NODES, PUBLIC_WAYS)
     network = load_walk_network(extract)

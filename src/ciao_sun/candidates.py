@@ -1,6 +1,7 @@
 """Candidates, the walk graph and Spot names for one 1 km tile, from OSM and LIDAR.
 
-`load_walk_network` reads the dated `.osm.pbf` once. `build_tile` then gives one
+`load_walk_network` reads the dated `.osm.pbf` once, keeping only what reaches
+into the bounds a build gives it. `build_tile` then gives one
 tile's Candidates and walk graph as a `TileOutline`: everything in the tile
 except the Horizon profiles, which the horizon precompute adds with
 `TileOutline.with_profiles`.
@@ -31,7 +32,7 @@ import numpy as np
 import numpy.typing as npt
 import osmium
 
-from ciao_sun.crs import BNG_TO_WGS84, WGS84_TO_BNG
+from ciao_sun.crs import BNG_TO_WGS84, WGS84_TO_BNG, lonlat_box
 from ciao_sun.raster import RasterGrid, sample
 from ciao_sun.tile_codec import Candidates, Tile, WalkGraph
 from ciao_sun.tiles import grid_ref_of, grid_ref_origin
@@ -46,6 +47,7 @@ TILE_M = 1000
 
 
 _Floats = npt.NDArray[np.float64]
+Bounds = tuple[float, float, float, float]
 
 # --- Reading OSM -------------------------------------------------------------
 
@@ -238,23 +240,62 @@ def _nearest_named_street(
     return street
 
 
-def load_walk_network(osm_pbf: Path) -> WalkNetwork:
-    """Read the public walk network and the named green spaces from an OSM extract."""
+def _e7_box(within: Bounds | None) -> tuple[int, int, int, int] | None:
+    """`within` (National Grid metres) as a lon/lat box in OSM's 1e-7 degree units."""
+    if within is None:
+        return None
+    west, south, east, north = lonlat_box(within)
+    return (
+        int(np.floor(west * 1e7)), int(np.floor(south * 1e7)),
+        int(np.ceil(east * 1e7)), int(np.ceil(north * 1e7)),
+    )  # fmt: skip
+
+
+def _reaches(
+    box: tuple[int, int, int, int] | None, lons: Iterable[int], lats: Iterable[int]
+) -> bool:
+    """Whether the bounding box of these points overlaps `box` (always, if there is no box)."""
+    if box is None:
+        return True
+    lons, lats = list(lons), list(lats)
+    return bool(lons) and (
+        min(lons) <= box[2] and max(lons) >= box[0] and min(lats) <= box[3] and max(lats) >= box[1]
+    )
+
+
+def load_walk_network(osm_pbf: Path, within: Bounds | None = None) -> WalkNetwork:
+    """Read the public walk network and the named green spaces from an OSM extract.
+
+    `within` (minx, miny, maxx, maxy) in National Grid metres, when given, keeps
+    only the edges and green spaces whose bounding boxes reach into it; pass
+    the coverage plus a margin wider than any tile. The nearest named street is
+    then found along the kept graph only, so a node near the margin's edge whose
+    nearest named street is reached from outside it may be named off another.
+    """
     node_position: dict[int, tuple[int, int]] = {}  # id -> (lon_e7, lat_e7)
     edges: dict[tuple[int, int], tuple[int, str | None]] = {}  # (id, id) -> (kind, name)
     spaces: list[_GreenSpace] = []
+    box = _e7_box(within)
 
-    for obj in osmium.FileProcessor(str(osm_pbf)).with_locations().with_areas():
+    # Only tagged objects with these keys reach Python, and only green spaces are
+    # assembled into areas: a national extract is hundreds of millions of nodes.
+    processor = (
+        osmium.FileProcessor(str(osm_pbf))
+        .with_locations()
+        .with_areas(osmium.filter.KeyFilter(*_GREEN_TAGS))
+        .with_filter(osmium.filter.KeyFilter("highway", *_GREEN_TAGS))
+    )
+    for obj in processor:
         if isinstance(obj, osmium.osm.Way):
             if not _is_public_walk(obj.tags):
                 continue
-            kind, name = _way_kind(obj.tags["highway"]), obj.tags.get("name") or None
             # A way can run on past the edge of the extract, where its nodes are missing.
-            here = [
-                (n.ref, n.location.x, n.location.y) for n in obj.nodes if n.location.valid()
-            ]
+            here = [(n.ref, n.location.x, n.location.y) for n in obj.nodes if n.location.valid()]
+            if not _reaches(box, (p[1] for p in here), (p[2] for p in here)):
+                continue
+            kind, name = _way_kind(obj.tags["highway"]), obj.tags.get("name") or None
             for (a, a_lon, a_lat), (b, b_lon, b_lat) in zip(here, here[1:], strict=False):
-                if a == b:
+                if a == b or not _reaches(box, (a_lon, b_lon), (a_lat, b_lat)):
                     continue
                 node_position[a], node_position[b] = (a_lon, a_lat), (b_lon, b_lat)
                 key = (min(a, b), max(a, b))
@@ -267,7 +308,8 @@ def load_walk_network(osm_pbf: Path) -> WalkNetwork:
                 rings.append((True, [(n.location.x, n.location.y) for n in outer]))
                 for inner in obj.inner_rings(outer):
                     rings.append((False, [(n.location.x, n.location.y) for n in inner]))
-            if rings:
+            outer_points = [point for is_outer, ring in rings if is_outer for point in ring]
+            if rings and _reaches(box, (p[0] for p in outer_points), (p[1] for p in outer_points)):
                 spaces.append(_green_space(obj.tags["name"], rings))
 
     node_id = np.array(sorted(node_position), dtype=np.uint64)

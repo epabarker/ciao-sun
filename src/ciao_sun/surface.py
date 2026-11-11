@@ -23,6 +23,7 @@ import shapely
 from pyproj import Transformer
 from rasterio.crs import CRS
 
+from ciao_sun.crs import lonlat_box
 from ciao_sun.raster import RasterGrid, assert_aligned
 
 # ADR 0003: first-return height above the DTM that counts as vegetation.
@@ -115,11 +116,16 @@ def _read_areas(
 
     wkb_factory = osmium.geom.WKBFactory()
     wkbs: list[str] = []
+    # A first, cheap cut in lon/lat before anything is built or projected: a
+    # national extract holds millions of buildings, and a build needs a city's.
+    box = None if bounds is None else lonlat_box(bounds, crs)
     processor = (
         osmium.FileProcessor(str(pbf_path)).with_areas().with_filter(osmium.filter.KeyFilter(*keys))
     )
     for obj in processor:
         if not isinstance(obj, osmium.osm.Area) or not wanted(obj.tags):
+            continue
+        if box is not None and not _outer_rings_reach(obj, box):
             continue
         try:
             wkbs.append(wkb_factory.create_multipolygon(obj))
@@ -139,6 +145,15 @@ def _read_areas(
         window = shapely.box(*bounds)
         geometries = [g for g in geometries if shapely.box(*g.bounds).intersects(window)]
     return BuildingFootprints(geometries, crs)
+
+
+def _outer_rings_reach(area: Any, box: Bounds) -> bool:
+    """Whether the bounding box of an area's outer rings overlaps `box` (lon/lat)."""
+    lons = [n.lon for ring in area.outer_rings() for n in ring if n.location.valid()]
+    lats = [n.lat for ring in area.outer_rings() for n in ring if n.location.valid()]
+    return bool(lons) and (
+        min(lons) <= box[2] and max(lons) >= box[0] and min(lats) <= box[3] and max(lats) >= box[1]
+    )
 
 
 def crown_envelope_surface(

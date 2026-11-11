@@ -24,7 +24,7 @@ import { planEvening } from "./evening";
 import { fallbackSpots, nearestSunBeyondLimit } from "./fallback";
 import { planMorning } from "./morning";
 import { dedupe, rankByLowSun } from "./ranking";
-import { buildSpot, score, walkMinutes } from "./scoring";
+import { type SightOverrides, buildSpot, score, walkMinutes } from "./scoring";
 import { type WindowPlan, clock, eventClock } from "./windows";
 
 export const DURATION_TARGET_MIN: Record<Sky, 10 | 20 | 30> = { clear: 10, partly: 20, overcast: 30 };
@@ -52,6 +52,20 @@ function isAnswer(plan: WindowPlan | Answer): plan is Answer {
  * origin is answered.
  */
 export function answer(query: Query, tiles: readonly Tile[], coverage?: CoverageGeometry): Answer {
+  return answerWith(query, tiles, coverage);
+}
+
+/**
+ * `answer`, with sun in view and low sun forced at the given minutes. Only the
+ * parity harness passes `overrides`, to re-run a fixture's Query with the
+ * reference's side of each near-boundary minute (docs/fixtures.md).
+ */
+export function answerWith(
+  query: Query,
+  tiles: readonly Tile[],
+  coverage?: CoverageGeometry,
+  overrides?: SightOverrides,
+): Answer {
   if (coverage !== undefined && !contains(coverage, query.origin.lat, query.origin.lon)) {
     return { status: "not-covered", spots: [] };
   }
@@ -62,7 +76,7 @@ export function answer(query: Query, tiles: readonly Tile[], coverage?: Coverage
   }
 
   const world = joinTiles(tiles);
-  const scoring = score(world, query, track, plan);
+  const scoring = score(world, query, track, plan, overrides);
   const targetMin = DURATION_TARGET_MIN[query.sky];
 
   const sunny = scoring.scored.filter((candidate) => candidate.reachable && candidate.sunMinutes > 0);

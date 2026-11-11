@@ -9,7 +9,6 @@ import { PROFILE_SAMPLES } from "../../src/tile/decode";
 import { FixtureSet, pinFromEnvironment } from "./fixture-set";
 import {
   SOLAR_TOLERANCE_DEG,
-  answerDifferences,
   compareSunTrack,
   nearBoundaryFreedom,
   sunEvents,
@@ -101,21 +100,19 @@ describe(`golden fixtures of build f${set.pin.format}/${set.pin.build}`, () => {
       vi.stubGlobal("fetch", () => {
         throw new Error("the scorer called fetch");
       });
-      let answer;
+      const world = { tiles: fixture.decodedTiles, coverage: fixture.coverage };
+      let unexplained;
       try {
-        answer = await scorer!(fixture.query, {
-          tiles: fixture.decodedTiles,
-          coverage: fixture.coverage,
-        });
+        const answer = await scorer!(fixture.query, world);
+        // Re-run with the reference's side of each near-boundary minute, if it differs.
+        unexplained = await unexplainedDifferences(answer, fixture, (sight) =>
+          scorer!(fixture.query, { ...world, sight }),
+        );
       } finally {
         vi.unstubAllGlobals();
       }
 
-      const differences = answerDifferences(answer, fixture.answer);
-      expect(
-        unexplainedDifferences(differences, fixture),
-        JSON.stringify(nearBoundaryFreedom(fixture)),
-      ).toEqual([]);
+      expect(unexplained, JSON.stringify(nearBoundaryFreedom(fixture))).toEqual([]);
     });
   });
 

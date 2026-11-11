@@ -37,7 +37,7 @@ src/solar/spa.ts        NREL SPA geometric position
 src/solar/spa-tables.ts SPA periodic terms, generated from pvlib; not edited by hand
 src/solar/local-day.ts  local civil days and ISO times in a time zone, via Intl
 src/router/world.ts     router: tiles joined into one walk graph; origin snap and Dijkstra walk
-src/scorer/answer.ts    scorer: (Query, tiles) -> Answer; its rules beside it (see its header)
+src/scorer/answer.ts    scorer: (Query, tiles, coverage) -> Answer; its rules beside it (see its header)
 src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's category or "unavailable" (fixtures/cloud/cases.json)
 test/parity/            the golden-fixture harness (below)
 ```
@@ -71,18 +71,17 @@ holds the JS to the parity rules of `docs/fixtures.md`:
 | The fixture's tiles decode; its spots are Candidates of them | on |
 | Sun track within 0.01° of the reference at every minute | on |
 | Nominal sunrise, Nominal sunset and solar noon on the same minute | on |
-| The Answer equals the reference's | on for Morning `ranked`; the rest skipped as pending #44 |
+| The Answer equals the reference's | on for every fixture and status |
 
 - **The scorer** is plugged in at `test/parity/scorer.ts`. The harness gives
   it the Query, exactly the fixture's tiles and the manifest's coverage
   polygon, and compares with `answerDifferences` (`test/parity/parity.ts`),
-  which applies the stated tolerances. `answerParityPending` there names the
-  fixtures whose Answers are not written yet (#44 deletes it).
-- **Near-boundary minutes:** `unexplainedDifferences` drops only the
-  differences a flip at a listed minute explains (`effectiveFreedom`: in the
-  window, or all day for an Evening window), and only in that Spot's
-  flip-dependent members. A flip that reorders the list or changes the status
-  still fails.
+  which applies the stated tolerances.
+- **Near-boundary minutes** (docs/fixtures.md): when the Answers differ,
+  `unexplainedDifferences` answers the Query again with the reference's side
+  of each listed minute forced (`referenceSight`, through the scorer's
+  internal `answerWith`), and whatever still differs fails. A flip may so
+  reorder the list or change the status, but only as the JS itself would.
 - **Which build:** the committed synthetic one, `fixtures/synthetic` as
   `dataBase` with the pin `{format: 1, build: "20261111a"}`. To run the same
   tests over another build directory in the hosted layout (the release job,

@@ -34,6 +34,29 @@ export interface Scored {
   readonly lowSunHundredths: number;
 }
 
+/**
+ * Sun in view and low sun forced at some minutes (sun-track indexes), over
+ * what the geometry says. The parity harness uses it for near-boundary
+ * minutes; an Answer for a person never has any.
+ */
+export interface SightOverrides {
+  /** Per candidateId, per minute: whether the sun is in view there. */
+  readonly sunInView?: Readonly<Record<string, Readonly<Record<number, boolean>>>>;
+  /** Per minute: whether the sun is at 0-30 degrees. */
+  readonly lowSun?: Readonly<Record<number, boolean>>;
+}
+
+/** `mask`, which holds minutes `start` onwards, with `forced` applied where it falls inside. */
+function applyForced(mask: Uint8Array, start: number, forced: Readonly<Record<number, boolean>> | undefined): Uint8Array {
+  if (forced !== undefined) {
+    for (const [minute, value] of Object.entries(forced)) {
+      const i = Number(minute) - start;
+      if (i >= 0 && i < mask.length) mask[i] = value ? 1 : 0;
+    }
+  }
+  return mask;
+}
+
 /** What every Scored Candidate of one query shares. */
 export interface Scoring {
   readonly world: World;
@@ -43,13 +66,20 @@ export interface Scoring {
   readonly low: Uint8Array;
   /** In World order. */
   readonly scored: readonly Scored[];
+  readonly overrides: SightOverrides | undefined;
 }
 
-export function score(world: World, query: Query, track: SunTrack, plan: WindowPlan): Scoring {
+export function score(
+  world: World,
+  query: Query,
+  track: SunTrack,
+  plan: WindowPlan,
+  overrides?: SightOverrides,
+): Scoring {
   const capM = MAX_WALK_CAP_MIN * WALK_SPEED_M_PER_MIN;
   const walks = walkMetres(world, query.origin.lat, query.origin.lon, capM);
   const sector = opennessSector(track, plan.unclippedStart, plan.end);
-  const low = lowSun(track, plan.start, plan.end);
+  const low = applyForced(lowSun(track, plan.start, plan.end), plan.start, overrides?.lowSun);
   const maxWalkM = query.maxWalkMin * WALK_SPEED_M_PER_MIN;
   const { weightNumerators: weights, weightDenominator: denominator } = plan;
 
@@ -64,7 +94,11 @@ export function score(world: World, query: Query, track: SunTrack, plan: WindowP
     if (!(openness >= OPENNESS_CUTOFF)) {
       continue;
     }
-    const inView = sunInView(codes, track, plan.start, plan.end);
+    const inView = applyForced(
+      sunInView(codes, track, plan.start, plan.end),
+      plan.start,
+      overrides?.sunInView?.[candidateId(world, k)],
+    );
     let sunMinutes = 0;
     let weighted = 0;
     for (let i = 0; i < inView.length; i++) {
@@ -85,7 +119,7 @@ export function score(world: World, query: Query, track: SunTrack, plan: WindowP
       lowSunHundredths: Math.floor((200 * weighted + denominator) / (2 * denominator)),
     });
   }
-  return { world, track, plan, low, scored };
+  return { world, track, plan, low, scored, overrides };
 }
 
 /** A Scored Candidate's walk in minutes: its whole metres at the walking speed. */
@@ -101,7 +135,7 @@ export function walkMinutes(candidate: Scored): number {
  * whole minutes.
  */
 export function buildSpot(scoring: Scoring, candidate: Scored, leave: number, targetMin: number): Spot {
-  const { world, track, plan, low } = scoring;
+  const { world, track, plan, low, overrides } = scoring;
   const { k, inView } = candidate;
   const walkMin = walkMinutes(candidate);
   const arrival = leave + Math.ceil(walkMin);
@@ -129,7 +163,7 @@ export function buildSpot(scoring: Scoring, candidate: Scored, leave: number, ta
     targetMet: walkMin + sunFromArrival >= targetMin,
   };
   if (plan.reportsLastSun) {
-    const last = lastSun(profileCodesOf(world, k), track);
+    const last = lastSun(profileCodesOf(world, k), track, overrides?.sunInView?.[spot.candidateId]);
     if (last !== null) spot.lastSun = clock(track, last);
   }
   return spot;

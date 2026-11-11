@@ -61,7 +61,7 @@ test/parity/            the golden-fixture harness (below)
 A module is a directory under `src/` named for the spec's module (data
 loader, router, scorer, forecast adapter, settings store, ...). Never name one
 `data/`: the repo's `.gitignore` ignores every `data/` directory. Static files
-that must keep their name, such as `sw.js`, go in `public/`.
+that must keep their name go in `public/`; `sw.js` is built (`vite-sw.ts`).
 
 ## The release config
 
@@ -198,7 +198,10 @@ in production builds only.
 - **Not cached:** the forecast (Open-Meteo), another build's files, anything
   outside `/ciao-sun/`.
 - **Headers the site serves** (spec story 73): `/ciao-sun/assets/*` immutable;
-  `/ciao-sun/sw.js` and `/ciao-sun/index.html` no-cache.
+  `/ciao-sun/sw.js` and `/ciao-sun/index.html` no-cache. `/ciao-sun/index.html`
+  is answered with a 200, not a redirect (the worker copes with one, but
+  needn't); `/ciao-sun` redirects to `/ciao-sun/`; no `Service-Worker-Allowed`
+  header. `release.json` is bundled into `sw.js`, so a new pin is a new worker.
 
 ## Conventions
 

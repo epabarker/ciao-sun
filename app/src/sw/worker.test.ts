@@ -30,7 +30,11 @@ class FakeCache {
   constructor(private readonly network: FakeNetwork) {}
   async match(request: Request | string, options?: { ignoreVary?: boolean }): Promise<Response | undefined> {
     void options;
-    return this.entries.get(new Request(request).url)?.clone();
+    const stored = this.entries.get(new Request(request).url);
+    const copy = stored?.clone();
+    // The Cache API keeps a response's redirected flag; Node's clone() drops one set by a test.
+    if (copy && stored?.redirected) Object.defineProperty(copy, "redirected", { value: true });
+    return copy;
   }
   async put(request: Request | string, response: Response): Promise<void> {
     this.entries.set(new Request(request).url, response);
@@ -186,6 +190,22 @@ describe("serving the shell", () => {
     expect(await withQuery?.text()).toBe("<!doctype html><title>Ciao Sun</title>");
     const map = await sw.request("https://edbarker.dev/ciao-sun/assets/maplibre-def456.js");
     expect(await map?.text()).toBe("console.log('map')");
+  });
+
+  // A host that redirects /ciao-sun/index.html to /ciao-sun/ hands install a
+  // redirected response, which a browser refuses as the answer to a navigation.
+  it("opens the app when the host redirected index.html while it was precached", async () => {
+    const sw = worker({
+      "https://edbarker.dev/ciao-sun/index.html": () => {
+        const response = new Response("<!doctype html><title>Ciao Sun</title>");
+        Object.defineProperty(response, "redirected", { value: true });
+        return response;
+      },
+    });
+    await sw.lifecycle("install");
+    const page = await sw.request("https://edbarker.dev/ciao-sun/", { mode: "navigate" });
+    expect(page?.redirected).toBe(false);
+    expect(await page?.text()).toBe("<!doctype html><title>Ciao Sun</title>");
   });
 
   it("leaves the site's other pages to the browser", async () => {

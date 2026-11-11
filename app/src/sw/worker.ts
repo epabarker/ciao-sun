@@ -105,7 +105,13 @@ export function serveCiaoSun(scope: WorkerScope, config: WorkerConfig): void {
 
   async function fromShell(request: Request, url: string): Promise<Response> {
     const cached = await (await scope.caches.open(shellCache)).match(url);
-    return cached ?? scope.fetch(request);
+    if (!cached) return scope.fetch(request);
+    // A host that redirected index.html while it was precached left a response
+    // a browser refuses as a navigation's answer; the same page, unredirected.
+    if (cached.redirected) {
+      return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers: cached.headers });
+    }
+    return cached;
   }
 
   async function fromData(request: Request): Promise<Response> {

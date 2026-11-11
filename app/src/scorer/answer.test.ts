@@ -88,7 +88,8 @@ describe("the scorer", () => {
         const source = readFileSync(new URL(file, directory), "utf8");
         const imports = [...source.matchAll(/from\s+"([^"]+)"/g)].map((match) => match[1]!);
         expect(imports.filter((path) => !path.startsWith(".")), file).toEqual([]);
-        expect(source, file).not.toMatch(/\b(document|window\.|navigator|fetch\(|XMLHttpRequest|localStorage|caches)\b/);
+        expect(source, file).not.toMatch(/\b(document|navigator|XMLHttpRequest|localStorage|caches)\b/);
+        expect(source, file).not.toMatch(/\b(fetch|WebSocket|EventSource)\s*\(|\bwindow\./);
       }
     }
   });

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pyproj import Transformer
 
-from ciao_sun.coverage import _WGS84_TO_BNG
+from ciao_sun.crs import WGS84_TO_BNG
 
 SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "ciao_sun"
 
@@ -24,7 +24,7 @@ ENGLISH_COORDS = [
 @pytest.mark.parametrize("lat,lon", ENGLISH_COORDS)
 def test_wgs84_to_bng_round_trip(lat, lon):
     bng_to_wgs84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
-    x, y = _WGS84_TO_BNG.transform(lon, lat)
+    x, y = WGS84_TO_BNG.transform(lon, lat)
     lon2, lat2 = bng_to_wgs84.transform(x, y)
     assert lat2 == pytest.approx(lat, abs=1e-7)
     assert lon2 == pytest.approx(lon, abs=1e-7)

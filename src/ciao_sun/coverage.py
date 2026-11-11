@@ -13,9 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import shapely
-from pyproj import Transformer
 
-_WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
+from ciao_sun.crs import WGS84_TO_BNG
 
 Point = tuple[float, float]
 
@@ -62,7 +61,7 @@ class Coverage:
         around the coverage.
         """
         return [
-            [_WGS84_TO_BNG.transform(lon, lat) for lon, lat in ring]
+            [WGS84_TO_BNG.transform(lon, lat) for lon, lat in ring]
             for ring in self._outer_rings_wgs84()
         ]
 

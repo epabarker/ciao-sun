@@ -30,8 +30,8 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 import osmium
-from pyproj import Transformer
 
+from ciao_sun.crs import BNG_TO_WGS84, WGS84_TO_BNG
 from ciao_sun.raster import RasterGrid, sample
 from ciao_sun.tile_codec import Candidates, Tile, WalkGraph
 from ciao_sun.tiles import grid_ref_of, grid_ref_origin
@@ -44,8 +44,6 @@ CANDIDATE_SPACING_M = 10
 OPEN_GROUND_MAX_M = 1.0
 TILE_M = 1000
 
-_WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
-_BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
 _Floats = npt.NDArray[np.float64]
 
@@ -182,7 +180,7 @@ class WalkNetwork:
 def _to_bng(lon_e7: Iterable[int], lat_e7: Iterable[int]) -> tuple[_Floats, _Floats]:
     lon = np.asarray(list(lon_e7), dtype=np.float64) / 1e7
     lat = np.asarray(list(lat_e7), dtype=np.float64) / 1e7
-    x, y = _WGS84_TO_BNG.transform(lon, lat)
+    x, y = WGS84_TO_BNG.transform(lon, lat)
     return np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
 
 
@@ -455,7 +453,7 @@ def build_tile(
     names = tuple(sorted(set(spot_names.tolist())))
     name_index = {name: index for index, name in enumerate(names)}
 
-    lon, lat = _BNG_TO_WGS84.transform(x, y)
+    lon, lat = BNG_TO_WGS84.transform(x, y)
     return TileOutline(
         grid_ref=grid_ref,
         easting=x,

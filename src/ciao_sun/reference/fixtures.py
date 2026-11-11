@@ -24,15 +24,16 @@ from pathlib import Path
 from typing import Any, get_args
 
 import numpy as np
-from pyproj import Transformer
 
 from ciao_sun.coverage import Coverage
+from ciao_sun.crs import WGS84_TO_BNG
 from ciao_sun.manifest import read_manifest
 from ciao_sun.reference.contract import MAX_WALK_CAP_MIN, Query, Status
 from ciao_sun.reference.scorer import answer
 from ciao_sun.reference.sunview import LOW_SUN_MAX_DEG, LOW_SUN_MIN_DEG, horizon_at_sun
 from ciao_sun.reference.windows import TIME_ZONE
 from ciao_sun.reference.world import WALK_SPEED_M_PER_MIN, join_tiles, walk_metres
+from ciao_sun.report import silent
 from ciao_sun.solar import SunTrack, sun_track
 from ciao_sun.tile_codec import Tile, read_tile
 from ciao_sun.tiles import KM, grid_ref_origin
@@ -47,7 +48,6 @@ TRACK_DECIMALS = 4
 # A query touches the tiles within the furthest walk any Answer reaches.
 TILE_REACH_M = MAX_WALK_CAP_MIN * WALK_SPEED_M_PER_MIN
 
-_WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
 _ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 _CHUNK = 2000  # Candidates per pass over the day, to bound memory on a real build
 
@@ -113,7 +113,7 @@ def tiles_touched(query: Query, tile_index: Sequence[str]) -> list[str]:
     1,600 m is the 20 min walk cap at the walking speed: no Answer names a spot
     further than that. Distances are on the National Grid.
     """
-    x, y = _WGS84_TO_BNG.transform(query.origin_lon, query.origin_lat)
+    x, y = WGS84_TO_BNG.transform(query.origin_lon, query.origin_lat)
     touched = []
     for grid_ref in sorted(tile_index):
         west, south = grid_ref_origin(grid_ref)
@@ -186,12 +186,8 @@ def fixture_text(document: dict[str, Any]) -> str:
     return json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
-def _silent(message: str) -> None:
-    return None
-
-
 def write_fixtures(
-    build_dir: Path, queries: Sequence[SetQuery], report: Callable[[str], None] = _silent
+    build_dir: Path, queries: Sequence[SetQuery], report: Callable[[str], None] = silent
 ) -> Path:
     """Write `fixtures/` into a build directory: one fixture per query, and the index.
 

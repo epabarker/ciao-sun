@@ -85,9 +85,9 @@ release is [the site contract](site-contract.md).
    ```
 
    It prints `release ready` and the SHA-256, or `release refused: …` with
-   the reason. To rehearse before publishing, add `--mirror data/builds`: the
-   pin must still be https, but its files are read from the local build
-   directory.
+   the reason. To rehearse before publishing, add `--mirror ../data/builds`.
+   The pin must still be https, but its files are read from the local build
+   directory, resolved from `app/`.
 
 7. **Commit** the pin and the version, push, and wait for CI to pass.
 
@@ -108,7 +108,10 @@ release is [the site contract](site-contract.md).
    - build the bundle and check that it carries the pin and the version;
    - create the GitHub release with the tarball and its SHA-256.
 
-   Any refusal fails the job before the release is created.
+   Any refusal fails the job before the release is created. Push the tag and
+   let the job create the release. Don't create one in the GitHub UI: if a
+   release already exists for the tag, `gh release create` fails and no
+   assets are attached.
 
 9. **The site syncs the release.** That happens in the website repo, not this
    one ([the site contract](site-contract.md)).
@@ -132,6 +135,9 @@ and correct the doc named if it is wrong.
 - [ ] **The real R2 client and CORS.** `publish` against real buckets; the
       `curl` checks in `docs/publishing.md`; the app on `localhost` and on
       `https://edbarker.dev` fetching the manifest cross-origin.
+- [ ] **The data host from a GitHub runner.** The release job's download
+      succeeds from Actions, not only from a laptop. Bot Fight Mode or a WAF
+      rule on the data subdomain must not answer the runner with a 403.
 - [ ] **The basemap.** Our v4 style renders against the 4.15.1 tiles: roads,
       water, labels.
 - [ ] **Safari offline.** On an iPhone, open the app once online, then in

@@ -36,6 +36,7 @@ src/solar/sun-track.ts  solar model: sunTrack(), refraction, the three events (d
 src/solar/spa.ts        NREL SPA geometric position
 src/solar/spa-tables.ts SPA periodic terms, generated from pvlib; not edited by hand
 src/solar/local-day.ts  local civil days and ISO times in a time zone, via Intl
+src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's category or "unavailable" (fixtures/cloud/cases.json)
 test/parity/            the golden-fixture harness (below)
 ```
 

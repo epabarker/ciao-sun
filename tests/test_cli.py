@@ -31,6 +31,8 @@ def test_fetch_help_explains_every_input_and_the_coverage_argument():
         "fetch.lock.json", "SHA-256", "--osm-date",
     ]:
         assert phrase in text, f"`fetch --help` does not mention {phrase!r}"
+    for phrase in ["--protomaps-build", "YYYYMMDD", "Protomaps", "byte range", "zooms 10 to 15"]:
+        assert phrase in text, f"`fetch --help` does not mention {phrase!r}"
 
 
 def test_fetch_refuses_a_coverage_that_is_not_a_polygon_without_a_traceback(tmp_path):

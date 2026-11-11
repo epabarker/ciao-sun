@@ -72,6 +72,14 @@ uv run ciao-sun fetch --coverage bristol.geojson --osm-date 261110
 | EA LIDAR Composite 1 m last-return DSM, DTM and first-return DSM, every 5 km tile within 3 km of the coverage | `ea/<product>/<year>/<tile>.zip` |
 | OS Terrain 50 for Great Britain | `terrain50/<version>/terr50_gagg_gb.zip` |
 | The Geofabrik `.osm.pbf` extract of that date | `osm/<region>-<yymmdd>.osm.pbf` |
+| The basemap: Protomaps vector tiles over the coverage's bounding box, zooms 10 to 15 | `basemap/<build date>/z10-15_x<columns>_y<rows>.pmtiles` |
+
+The basemap is cut from a pinned Protomaps daily build (`--protomaps-build`,
+a date as `YYYYMMDD`) by byte range: about 30 requests and 18 MB for Bristol,
+out of a 140 GB planet archive. Protomaps keeps a daily build for a week and
+then only the last build of each basemap patch version, so `fetch` refuses any
+build that is not the last of a version Protomaps has finished with, and names
+the one to pin.
 
 It also writes `fetch.lock.json` there: every input's source, version, URL,
 SHA-256, size, retrieval time and path relative to the lockfile, plus the
@@ -91,8 +99,8 @@ uv run ciao-sun build --coverage bristol.geojson
 
 `build` reads `data/inputs/` (`--inputs`) through its lockfile and writes
 `data/builds/f1/<build id>/` (`--out`): `tiles/<grid ref>.bin` for every 1 km
-square the coverage touches, and `manifest.json`. The build id is the UTC date
-plus a letter, e.g. `20261110a`. Tiles are built in parallel (`--workers`), and
+square the coverage touches, `basemap/{z}/{x}/{y}.mvt` and `manifest.json`. The
+build id is the UTC date plus a letter, e.g. `20261110a`. Tiles are built in parallel (`--workers`), and
 the same inputs give byte-identical tiles.
 
 Two checks fail a build, which then leaves no build directory: tile Horizon
@@ -100,6 +108,13 @@ profiles are compared with direct ray casting at a sample of Candidates, and no
 Candidate's horizon may be set by a cell inside an OSM water area.
 `ciao_sun.build_checks` gives the tolerances and `ciao_sun.manifest` the
 manifest's schema.
+
+The basemap is one uncompressed Mapbox Vector Tile per file, for every tile the
+coverage's bounding box touches at zooms 10 to 15 (685 tiles and 29 MB for
+Bristol). No PMTiles archive is written, because the site serves no Range
+requests (ADR 0002). The manifest's `basemap` section gives the Protomaps build
+date, the basemap version, the zooms and the bounds; `ciao_sun.basemap` says why
+those zooms.
 
 `profile-only` does not read this cache yet: it still wants unzipped GeoTIFFs
 under `data/dsm/` and `data/dtm/` (searched recursively).

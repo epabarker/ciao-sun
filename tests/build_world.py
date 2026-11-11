@@ -19,6 +19,8 @@ boundary between the 1 km squares ST5773 and ST5873 (easting 358000):
 - OS Terrain 50 is flat at 10 m over the 10 km squares ST47, ST57 and ST67,
   except a 310 m ridge along their northern 2 km (y >= 178000), 4.5 km north
   of the street.
+- The Protomaps build is the synthetic one of `tests/basemap_world.py`, over the
+  coverage.
 
 `tidal_river=True` adds a river north of the street whose first return stands
 5 m above the ground, as tidal water does in the EA composite.
@@ -43,6 +45,7 @@ from pyproj import Geod, Transformer
 
 from ciao_sun.coverage import Coverage
 from ciao_sun.fetch import Lockfile, Response, fetch
+from tests import basemap_world as protomaps
 
 _BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 _WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
@@ -182,7 +185,7 @@ class _FakeWeb:
     def get(self, url: str, headers: Mapping[str, str]) -> Response:
         for ending, body in self._bodies.items():
             if url.endswith(ending):
-                return Response(200, [body])
+                return protomaps.serve_range(body, headers)
         return Response(404, [])
 
 
@@ -216,6 +219,8 @@ def fetch_inputs(root: Path, *, tidal_river: bool = False) -> Lockfile:
         "/products/Terrain50": json.dumps({"id": "Terrain50", "version": "2026-07"}).encode(),
         "&redirect": _terrain50_zip(),
         ".osm.pbf": osm,
+        "/builds.json": protomaps.builds_json(),
+        f"/{protomaps.BUILD}.pmtiles": protomaps.archive_bytes(coverage().bounds_wgs84()),
     }  # fmt: skip
     clock = iter(range(0, 10**9, 2))
     return fetch(

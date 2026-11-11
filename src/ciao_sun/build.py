@@ -2,6 +2,7 @@
 
     <out>/f1/<build>/manifest.json
     <out>/f1/<build>/tiles/<grid ref>.bin
+    <out>/f1/<build>/basemap/{z}/{x}/{y}.mvt
 
 `build` reads everything through the fetch lockfile (`fetch.read_lockfile`),
 and makes a tile for every 1 km square the coverage touches that has a
@@ -25,6 +26,10 @@ leaves its `.partial` directory behind for inspection; the next build removes it
 
 Tiles depend only on the inputs, never on the build id, the clock or
 `workers`: the same inputs give byte-identical tiles.
+
+The basemap is exploded into `<build>.partial/basemap/` from the fetched cut of
+the Protomaps build (`basemap.explode`) once the build checks have passed, so it
+takes its place with the tiles in the one rename.
 
 `check_profiles` reruns the direct-ray check on a finished build directory.
 """
@@ -51,6 +56,7 @@ import shapely
 from affine import Affine
 from rasterio.crs import CRS
 
+from ciao_sun import basemap
 from ciao_sun.build_checks import BuildCheckError, Tolerances, check_tile_profiles
 from ciao_sun.candidates import WalkNetwork, build_tile, load_walk_network
 from ciao_sun.coverage import Coverage
@@ -394,6 +400,11 @@ def build(
     for entry in lock.inputs:
         if not entry.absent and not lock.path_of(entry).is_file():
             raise BuildError(f"{lock.path_of(entry)} is in the lockfile but missing. Fetch again.")
+    protomaps = [entry for entry in lock.inputs if entry.kind == "basemap"]
+    if len(protomaps) != 1:
+        raise BuildError(
+            f"{inputs} was fetched without a basemap. Run `ciao-sun fetch` again to add it."
+        )
 
     format_dir = out / f"f{FORMAT}"
     build_id = _next_build_id(format_dir, today or datetime.now(UTC).date())
@@ -415,6 +426,12 @@ def build(
     report(f"build {build_id}: {len(grid_refs)} squares on {workers} workers")
     reports = precompute_tiles(grid_refs, functools.partial(_build_one, job), workers=workers)
     _raise_on_failures(reports, tolerances)
+    try:
+        exploded = basemap.explode(
+            lock.path_of(protomaps[0]), coverage, partial / basemap.DIRECTORY
+        )
+    except basemap.BasemapError as exc:
+        raise BuildError(str(exc)) from exc
 
     tiles = {
         grid_ref: {
@@ -440,12 +457,14 @@ def build(
             horizon={"nearReachM": NEAR_REACH_M, "farReachM": far_reach_m},
             tiles=tiles,
             build_checks=checks,
+            basemap=exploded,
         ),
     )
     partial.rename(build_dir)
     report(
         f"build {build_id}: {len(tiles)} tiles, "
-        f"{sum(r.candidates or 0 for r in reports.values())} Candidates, in {build_dir}"
+        f"{sum(r.candidates or 0 for r in reports.values())} Candidates, "
+        f"{exploded.tile_count} basemap tiles, in {build_dir}"
     )
     return build_dir
 

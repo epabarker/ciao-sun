@@ -77,6 +77,7 @@ describe("fallback", () => {
 
   it('lists the nearest spots in the Answer\'s order, each with "stay N min" in place of a target badge', () => {
     const rows = [...render(overcast).querySelectorAll("[data-spot]")];
+    expect(rows.map((row) => row.getAttribute("data-spot"))).toEqual(["ST5873/32", "ST5773/26"]);
     expect(rows.map((row) => text(row, "name"))).toEqual(["East Street", "West Row"]);
     expect(rows.map((row) => text(row, "leave-by"))).toEqual(["Leave 14:00", "Leave 14:00"]);
     expect(rows.map((row) => text(row, "stay"))).toEqual(["Stay 28 min", "Stay 30 min"]);

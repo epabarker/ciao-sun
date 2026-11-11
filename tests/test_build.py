@@ -234,7 +234,7 @@ def test_the_manifest_indexes_exactly_the_tiles_written(built: Built):
 def test_the_manifest_records_the_tolerances_the_build_checks_passed_at(built: Built):
     checks = built.manifest["buildChecks"]
 
-    # #6: far-field lattice p99 0.035 deg and far sampling p99 0.014 deg, on
+    # #61: far-field lattice p99 0.040 deg at 50 m; #6: far sampling p99 0.014 deg; on
     # top of the storage code's half step (0.05 deg to 10 deg, 0.25 deg above).
     assert checks["profile"]["toleranceDeg"] == 0.05
     assert checks["profile"]["storageHalfStepDeg"] == {"upTo10Deg": 0.05, "above10Deg": 0.25}

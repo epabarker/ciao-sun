@@ -264,13 +264,13 @@
   },
   "tiles": {
     "ST5773": {
-      "bytes": 2584,
-      "sha256": "4999ccb485c1c76de063cd7d5e023d17d32195f65e62a31a5369a245ec783ea2",
+      "bytes": 2594,
+      "sha256": "4efdd3cafb1c1ffa1708d36d9145a472409a7e37c8cfe7d4ed5cf29dd2c9b51e",
       "candidates": 46
     },
     "ST5873": {
-      "bytes": 2787,
-      "sha256": "6975714f0d111ab3924a326f18f137ab1bb8c3974de2f183bb6991e5763b5e95",
+      "bytes": 2775,
+      "sha256": "ce2de5a9614bd7a16fad0247335579fc712a0959a2a43f049f962d99eceb8698",
       "candidates": 49
     }
   },

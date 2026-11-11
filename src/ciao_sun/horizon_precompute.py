@@ -10,16 +10,18 @@ crown-envelope surface out to 3 km, with Earth curvature and standard
 refraction and the variable-density sampling of `horizon.ray_samples`.
 
 Far field: OS Terrain 50 from 3 km out to 50 km (never beyond 100 km). It is
-not cast per Candidate. Each Candidate takes the nearest point of a 100 m
+not cast per Candidate. Each Candidate takes the nearest point of a 50 m
 lattice on the National Grid, the far horizon is cast once per lattice point,
 and each Candidate's own eye height is then corrected for at the distance of
 the ridge that sets it:
 
     far = lattice_far - degrees((eye - lattice_eye) / ridge_distance)
 
-Measured on Bristol (prototype/horizon-cost), this is within 0.035 deg (p99) of
-a per-Candidate far ray. Where Terrain 50 has no data along a whole ray (open
-sea beyond the grid) there is no far obstruction.
+Measured over the first Bristol build (#61), this is within 0.040 deg (p99) of
+a per-Candidate far ray where the far field sets the horizon below 10 deg; a
+100 m lattice was within 0.074 deg and failed the build's direct-ray check.
+Where Terrain 50 has no data along a whole ray (open sea beyond the grid) there
+is no far obstruction.
 
 The two are merged as `max(near, far)`, so a tile holds one profile per
 Candidate.
@@ -53,7 +55,7 @@ EYE_HEIGHT_M = 1.6
 NEAR_REACH_M = 3000.0
 FAR_REACH_M = 50_000.0
 FAR_REACH_CAP_M = 100_000.0
-FAR_LATTICE_M = 100.0
+FAR_LATTICE_M = 50.0
 # True azimuth of each profile sample, degrees clockwise from true north.
 PROFILE_AZIMUTHS_DEG = np.arange(PROFILE_SAMPLES) * (360.0 / PROFILE_SAMPLES)
 

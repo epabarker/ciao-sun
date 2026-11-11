@@ -3,16 +3,17 @@
 **Direct-ray profile check.** For a sample of each tile's Candidates, the
 Horizon profile decoded from the written tile is compared with rays cast
 directly from that Candidate: near-field rays over the obstruction surface, and
-far-field rays over Terrain 50 from the Candidate itself, not from the 100 m
+far-field rays over Terrain 50 from the Candidate itself, not from the 50 m
 lattice the precompute uses. A Candidate fails when fewer than 99% of its 1,440
 samples agree within the storage code's half step plus 0.05 deg.
 
 - The half step is 0.05 deg up to 10 deg and 0.25 deg above (the storage code
   is within 0.2 min of a linear 0.1 deg code on first sun, #6).
-- 0.05 deg covers the far-field lattice (p99 0.035 deg at 100 m, #6) and the
-  far field's sparser sampling beyond 10 km (p99 0.014 deg).
+- 0.05 deg covers the far-field lattice (p99 0.040 deg at 50 m over the first
+  Bristol build, #61; at 100 m the p99 was 0.074 deg and about 1 Candidate in
+  1,100 failed) and the far field's sparser sampling beyond 10 km (p99 0.014 deg).
 - 99%, because those are p99 figures: where the Horizon profile steps at a
-  far ridge, a Candidate up to 71 m from its lattice point legitimately sees
+  far ridge, a Candidate up to 35 m from its lattice point legitimately sees
   the step a sample or two to one side.
 
 The direct rays use the tile's one meridian convergence, as the precompute

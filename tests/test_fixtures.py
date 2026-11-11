@@ -401,6 +401,14 @@ def test_the_committed_synthetic_set_is_what_the_one_command_regenerates(generat
             ), stale
 
 
+def test_the_committed_decoded_tiles_are_what_the_reader_makes_of_the_committed_tiles():
+    committed = json.loads(synthetic_fixtures.DECODED_TILES.read_text(encoding="utf-8"))
+
+    assert committed == synthetic_fixtures.decoded_tiles(COMMITTED), (
+        "run `uv run python -m tests.synthetic_fixtures` and commit fixtures/synthetic"
+    )
+
+
 # --- The Bristol query set ------------------------------------------------------
 
 

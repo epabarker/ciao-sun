@@ -7,6 +7,9 @@ This Python package is the **offline build pipeline plus a scoring reference**
 (see `docs/adr/0001-static-precompute-client-evaluation.md`); the phone app
 evaluates the precomputed Horizon profiles itself. Terms follow `GLOSSARY.md`.
 
+The phone app itself is in `app/`: TypeScript, with its own tests and CI job.
+`app/README.md` has its layout, commands and conventions.
+
 The package is mid-way to that shape. The earlier laptop tool's `find` and
 `compare` commands, walking-distance routing and GeoJSON / map / GeoTIFF
 exports have been removed. What the CLI exposes today is:

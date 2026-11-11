@@ -56,6 +56,8 @@ src/forecast/forecast.ts forecast adapter: forecastSky() -> the sky slot's categ
 src/forecast/span.ts    the span C is averaged over, from a Query and the scorer's window plans
 src/sw/                 the service worker and its registration (below); vite-sw.ts builds it into sw.js
 test/parity/            the golden-fixture harness (below)
+scripts/release.ts      the release job: tag, pin, parity over the pinned build, tarball and SHA-256 (below)
+test/release/           its tests, against the synthetic build
 ```
 
 A module is a directory under `src/` named for the spec's module (data
@@ -70,8 +72,28 @@ that must keep their name go in `public/`; `sw.js` is built (`vite-sw.ts`).
 bundle carries it; nothing else in `src/` names a data origin. A relative
 `dataBase` resolves against the page. Until the first Bristol build (#55) it
 pins the synthetic build at `synthetic-data/`, which only the dev and preview
-servers serve: #55 sets the R2 data subdomain and the build id, and #54's
-release job reads the same file.
+servers serve: #55 sets the R2 data subdomain and the build id.
+
+## The release job
+
+A `ciao-sun-v<x.y.z>` tag runs `.github/workflows/release.yml`, which runs
+`scripts/release.ts` and attaches the tarball and SHA-256 it writes to the
+GitHub release. The script refuses, and writes nothing, in any of these cases:
+
+- the tag isn't `package.json`'s `version`;
+- `release.json`'s `dataBase` isn't an absolute https URL (it is refused
+  today, with the synthetic pin);
+- the pinned build has no manifest;
+- any test of the golden-fixture harness fails or is skipped over the pinned
+  build's fixtures, which it downloads with the tiles they name;
+- the built bundle doesn't carry the pin and the version, or holds anything
+  other than `index.html`, `sw.js` and `assets/`.
+
+Rehearse it with `node scripts/release.ts --tag ciao-sun-v<x.y.z> --out <dir>`.
+`--mirror <dir>` reads the pinned https host from a local directory in the
+hosted layout. `test/release/release.test.ts` runs every step against the
+synthetic build. The steps around it are in `docs/data-refresh.md`, and what
+the site does with the tarball is in `docs/site-contract.md`.
 
 ## The data loader
 
@@ -197,11 +219,9 @@ in production builds only.
   on it.
 - **Not cached:** the forecast (Open-Meteo), another build's files, anything
   outside `/ciao-sun/`.
-- **Headers the site serves** (spec story 73): `/ciao-sun/assets/*` immutable;
-  `/ciao-sun/sw.js` and `/ciao-sun/index.html` no-cache. `/ciao-sun/index.html`
-  is answered with a 200, not a redirect (the worker copes with one, but
-  needn't); `/ciao-sun` redirects to `/ciao-sun/`; no `Service-Worker-Allowed`
-  header. `release.json` is bundled into `sw.js`, so a new pin is a new worker.
+- **Headers the site serves**, its redirects and the worker's scope are in
+  `docs/site-contract.md`: the one page a site maintainer reads.
+  `release.json` is bundled into `sw.js`, so a new pin is a new worker.
 
 ## Conventions
 

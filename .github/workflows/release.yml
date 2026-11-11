@@ -1,0 +1,47 @@
+name: Release
+
+# A ciao-sun-v<x.y.z> tag releases the app (#54; docs/data-refresh.md).
+# app/scripts/release.ts does every check and writes the tarball and its
+# SHA-256 only if the JS passes every fixture of the pinned build; this file
+# only runs it and attaches what it wrote. The site contract is
+# docs/site-contract.md. The data host is public, so no secrets are needed.
+
+on:
+  push:
+    tags:
+      - "ciao-sun-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release (pinned-build parity, tarball, checksum)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check the tag and pin, run the JS over the pinned build, pack the bundle
+        run: node scripts/release.ts --tag "$GITHUB_REF_NAME" --out "$RUNNER_TEMP/release"
+      - name: Attach the tarball and its checksum to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#ciao-sun-v}"
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "Ciao Sun $version" \
+            --notes "Vendor at /ciao-sun/ as docs/site-contract.md says. Check: sha256sum -c ciao-sun-$version.tar.gz.sha256" \
+            "$RUNNER_TEMP/release/ciao-sun-$version.tar.gz" \
+            "$RUNNER_TEMP/release/ciao-sun-$version.tar.gz.sha256"

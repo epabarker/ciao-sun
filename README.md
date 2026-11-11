@@ -149,6 +149,19 @@ private bucket. A published build is never rewritten and nothing is deleted
 (ADR 0002): if the build's prefix already holds anything, nothing is uploaded.
 `docs/publishing.md` has the one-time bucket, CORS and credentials setup.
 
+### Releasing
+
+An app release pins one published build in `app/release.json` and is made by
+pushing a `ciao-sun-v<x.y.z>` tag. CI runs the JS against every golden fixture
+of that build, and attaches the bundle tarball and its SHA-256 to the GitHub
+release only if all of them pass.
+
+- [`docs/data-refresh.md`](docs/data-refresh.md) is the runbook: when to
+  refresh, and the steps fetch → build → publish → pin → tag.
+- [`docs/site-contract.md`](docs/site-contract.md) is what the website
+  consumes: the tarball, headers, service worker scope, data origin and
+  version rules.
+
 ### Licence and attribution
 
 Environment Agency LIDAR is released under the Open Government Licence.

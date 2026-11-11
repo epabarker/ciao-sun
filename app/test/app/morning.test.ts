@@ -123,6 +123,13 @@ describe("Morning screen over a local build", () => {
     expect(served.tiles()).toEqual([]);
   });
 
+  it("shows an overcast sky's fallback Answer as that status, not as a failure", async () => {
+    const { root, app } = await mount(deps());
+    change(root.querySelector("[name=sky]"), "overcast");
+    await app.idle();
+    expect(root.querySelector("[data-status]")?.getAttribute("data-status")).toBe("fallback");
+  });
+
   it("falls back to a typed origin when GPS is unavailable", async () => {
     const { root, app } = await mount(deps({ locate: async () => Promise.reject(new Error("denied")) }));
     expect(root.querySelectorAll("[data-spot]")).toHaveLength(0);

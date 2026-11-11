@@ -1,7 +1,9 @@
 // The parity rules of docs/fixtures.md ("Parity: what the JS scorer is held
 // to"), as functions that return what disagrees. Empty means parity.
 
-import type { Answer } from "../../src/contract";
+import type { Answer, Interval, Spot } from "../../src/contract";
+import type { SightOverrides } from "../../src/scorer/scoring";
+import { LOW_SUN_MAX_DEG, LOW_SUN_MIN_DEG } from "../../src/scorer/sunview";
 import { TIME_ZONE, toLocalIso } from "../../src/solar/local-day";
 import { type SunTrack, sampleTimeMs } from "../../src/solar/sun-track";
 import type { FixtureDocument, ReferenceSunTrack } from "./fixture-set";
@@ -149,21 +151,6 @@ export function nearBoundaryFreedom(fixture: FixtureDocument): NearBoundaryFreed
   };
 }
 
-// What a flip of sun in view at one Candidate can change in that Candidate's
-// Spot (docs/fixtures.md, "Near-boundary minutes").
-const FOLLOWS_FROM_SUN_IN_VIEW = new Set([
-  "sunIntervals",
-  "lowSunIntervals",
-  "sunMinutes",
-  "lowSunMinutes",
-  "lastSun",
-  "leaveBy",
-  "targetMet",
-]);
-// What a flip of "low sun" at one minute can change in any Spot.
-const FOLLOWS_FROM_LOW_SUN = new Set(["lowSunIntervals", "lowSunMinutes"]);
-const SPOT_MEMBER = /^(spots\[(\d+)\]|nearestSunBeyondLimit)\.([A-Za-z]+)/;
-
 /**
  * The near-boundary minutes that can change this fixture's Answer: the
  * Candidate minutes inside the Answer's window, or the whole day's for an
@@ -194,34 +181,109 @@ export function effectiveFreedom(fixture: FixtureDocument): NearBoundaryFreedom 
   };
 }
 
+/** What the fixture's stored sun track may be off by: it is rounded to 4 decimal places. */
+const STORED_ROUNDING_DEG = 5e-5;
+
 /**
- * The `answerDifferences` that near-boundary freedom does not explain: all of
- * them when the fixture has none. A difference is explained only when it is
- * in a member of a reference Spot that a flip can change, at a listed minute
- * of that Spot's own Candidate (sun in view) or of the window (low sun). A
- * flip that reorders the list or changes the status is not allowed for yet:
- * no fixture has met one, and a fixture that does fails here.
+ * The reference's side of every near-boundary minute that can change the
+ * Answer (`effectiveFreedom`), as overrides for the JS scorer.
+ *
+ * - **Sun in view**, at a listed minute of a Candidate: inside the window,
+ *   from the reference's Spot for that Candidate when its Answer has one
+ *   (in its sun intervals or not); outside it (Evening only, where it bears
+ *   only on Last sun), from that Spot's Last sun, and left alone when it is
+ *   before Last sun. A Candidate the Answer does not show is held out of view
+ *   at its listed minutes in the window: that can only keep it out of the
+ *   list, so if the reference's Answer is reachable by flips at all, it is
+ *   reachable this way. (Its side is not read from the stored sun track: next
+ *   to a wall, the track's rounding alone can span the 0.01 degree tolerance.)
+ * - **Low sun**, at a listed minute of the window: from any reference Spot
+ *   with the sun in view then (in its low-sun intervals or not); otherwise
+ *   from the fixture's sun track, which throws, naming the minute, when the
+ *   track's rounding to 4 decimal places could put it on either side.
  */
-export function unexplainedDifferences(differences: string[], fixture: FixtureDocument): string[] {
-  const freedom = effectiveFreedom(fixture);
-  if (!freedom.any) {
+export function referenceSight(fixture: FixtureDocument): Required<SightOverrides> {
+  const sunInView: Record<string, Record<number, boolean>> = {};
+  const lowSun: Record<number, boolean> = {};
+  const { answer, nearBoundary, sunTrack, query } = fixture;
+  if (answer.window === undefined) {
+    return { sunInView, lowSun };
+  }
+  const minuteOf = (iso: string) => (Date.parse(iso) - Date.parse(sunTrack.start)) / 60_000;
+  const [start, end] = [minuteOf(answer.window.start), minuteOf(answer.window.end)];
+  const inside = (intervals: readonly Interval[], m: number) =>
+    intervals.some((interval) => minuteOf(interval.start) <= m && m < minuteOf(interval.end));
+  const shown = new Map<string, Spot>();
+  for (const spot of [...answer.spots, ...(answer.nearestSunBeyondLimit ? [answer.nearestSunBeyondLimit] : [])]) {
+    shown.set(spot.candidateId, spot);
+  }
+
+  for (const [candidateId, minutes] of Object.entries(nearBoundary.candidates)) {
+    for (const m of minutes) {
+      const inWindow = start <= m && m < end;
+      if (!inWindow && query.window !== "evening") {
+        continue;
+      }
+      const spot = shown.get(candidateId);
+      let side: boolean | undefined;
+      if (spot === undefined) {
+        // Out of view can only keep it out of the list, the sunny set and the
+        // nearest beyond the limit; outside the window it bears only on a Last
+        // sun no Spot shows.
+        side = inWindow ? false : undefined;
+      } else if (inWindow) {
+        side = inside(spot.sunIntervals, m);
+      } else {
+        const last = spot.lastSun === undefined ? null : minuteOf(spot.lastSun);
+        side = last === null || m > last ? false : m === last ? true : undefined;
+      }
+      if (side !== undefined) {
+        (sunInView[candidateId] ??= {})[m] = side;
+      }
+    }
+  }
+
+  for (const m of nearBoundary.lowSunBand) {
+    if (m < start || m >= end) {
+      continue;
+    }
+    const witness = [...shown.values()].find((spot) => inside(spot.sunIntervals, m));
+    lowSun[m] = witness ? inside(witness.lowSunIntervals, m) : lowSideFromTrack(fixture, m);
+  }
+  return { sunInView, lowSun };
+}
+
+/** Whether the reference counted the sun as low at minute `m`, from the stored sun track. */
+function lowSideFromTrack(fixture: FixtureDocument, m: number): boolean {
+  const elevation = fixture.sunTrack.apparentElevation[m]!;
+  for (const end of [LOW_SUN_MIN_DEG, LOW_SUN_MAX_DEG]) {
+    if (Math.abs(elevation - end) <= STORED_ROUNDING_DEG) {
+      throw new Error(
+        `cannot tell the reference's low sun at minute ${m}: ${elevation} degrees is within the stored rounding of ${end}`,
+      );
+    }
+  }
+  return elevation >= LOW_SUN_MIN_DEG && elevation <= LOW_SUN_MAX_DEG;
+}
+
+/**
+ * The differences between the JS Answer and the reference's that near-boundary
+ * freedom does not explain (docs/fixtures.md, "Near-boundary minutes").
+ *
+ * When the Answers differ and the fixture has freedom, the Query is answered
+ * again by `rescore`, the JS scorer with the reference's side of each
+ * near-boundary minute forced (`referenceSight`). What still differs is
+ * unexplained, whatever it is: a Spot member, the order of the list, the
+ * status. With no freedom, every difference is unexplained.
+ */
+export async function unexplainedDifferences(
+  actual: Answer,
+  fixture: FixtureDocument,
+  rescore: (overrides: SightOverrides) => Answer | Promise<Answer>,
+): Promise<string[]> {
+  const differences = answerDifferences(actual, fixture.answer);
+  if (differences.length === 0 || !effectiveFreedom(fixture).any) {
     return differences;
   }
-  const lowSunFree = freedom.lowSunBandInWindow.length > 0;
-  return differences.filter((difference) => {
-    const match = SPOT_MEMBER.exec(difference);
-    if (!match) {
-      return true;
-    }
-    const spot =
-      match[2] === undefined ? fixture.answer.nearestSunBeyondLimit : fixture.answer.spots[Number(match[2])];
-    const member = match[3]!;
-    if (spot === undefined) {
-      return true;
-    }
-    const sunFree = (freedom.candidates[spot.candidateId]?.length ?? 0) > 0;
-    const explained =
-      (sunFree && FOLLOWS_FROM_SUN_IN_VIEW.has(member)) || (lowSunFree && FOLLOWS_FROM_LOW_SUN.has(member));
-    return !explained;
-  });
+  return answerDifferences(await rescore(referenceSight(fixture)), fixture.answer);
 }

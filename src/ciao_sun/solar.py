@@ -3,7 +3,7 @@
 Sunrise here is defined as the first minute of the day where the sun's apparent
 (refraction-corrected) elevation exceeds -0.833 degrees -- the standard flat-
 horizon definition used by almanacs. This is *not* the actual local sunrise at
-an obstructed site, which will generally be later. sunspot answers "where can I
+an obstructed site, which will generally be later. Ciao Sun answers "where can I
 see the sun during the hour after nominal sunrise", not "when does the sun
 appear at this exact spot".
 """

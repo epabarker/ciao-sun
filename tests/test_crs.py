@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from pyproj import Transformer
 
-from sunspot.tiles import _WGS84_TO_BNG
+from ciao_sun.tiles import _WGS84_TO_BNG
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "sunspot"
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "ciao_sun"
 
 ENGLISH_COORDS = [
     (51.4720, -2.6040),  # Bristol
@@ -33,7 +33,7 @@ def test_wgs84_to_bng_round_trip(lat, lon):
 def test_every_transformer_in_the_package_uses_always_xy():
     """The single most likely bug here is lon/lat vs x/y ordering."""
     files = list(SRC_DIR.glob("*.py"))
-    assert files, "expected to find sunspot source files"
+    assert files, "expected to find ciao_sun source files"
     for path in files:
         text = path.read_text()
         n_transformers = text.count("Transformer.from_crs(")

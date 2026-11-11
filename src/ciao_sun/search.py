@@ -8,9 +8,9 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from sunspot.horizon import horizon_angle, meridian_convergence, ray_samples
-from sunspot.raster import RasterGrid, sample
-from sunspot.solar import SunTrack
+from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
+from ciao_sun.raster import RasterGrid, sample
+from ciao_sun.solar import SunTrack
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from pyproj import Transformer
 
-from sunspot.search import SearchResult
+from ciao_sun.search import SearchResult
 
 _BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
@@ -202,7 +202,7 @@ def to_map(
         import folium
     except ImportError as exc:
         raise RuntimeError(
-            "folium is not installed; install sunspot[map] to export map.html"
+            "folium is not installed; install ciao-sun[map] to export map.html"
         ) from exc
 
     highlighted = set(order[:highlight_count].tolist()) if order is not None else set()

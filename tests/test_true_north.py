@@ -65,8 +65,11 @@ def _sun_at(true_azimuth: float, elevation: float) -> SunTrack:
     return SunTrack(
         times=pd.DatetimeIndex([t]),
         azimuth=np.array([true_azimuth]),
+        elevation=np.array([elevation]),
         apparent_elevation=np.array([elevation]),
-        sunrise=t,
+        nominal_sunrise=None,
+        nominal_sunset=None,
+        solar_noon=t,
     )
 
 

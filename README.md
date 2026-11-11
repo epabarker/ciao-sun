@@ -31,14 +31,17 @@ moment when its apparent elevation is above the horizon angle on its azimuth.
 `HANDOFF.md` is the original design brief for the laptop tool. It is kept for
 the maths and gotchas; its CLI and outputs sections are historical.
 
-## Sunrise definition
+## Solar model
 
-Sunrise is the first minute where the sun's *apparent* (refraction-corrected)
-elevation exceeds -0.833 degrees at the home coordinate -- the standard
-flat-horizon definition used by almanacs. **This is not the actual local
-sunrise at an obstructed site**, which will be later wherever the horizon
-angle is above zero. The track across the hour after Nominal sunrise is what `profile-only`
-overlays on its plot; it stays only until the Stage 1 solar model replaces it.
+The sun track is one local day at 1 min steps: true azimuth from NREL SPA and
+the apparent elevation of the disc centre, which is the SPA geometric
+elevation plus one refraction model that stays continuous below 0 degrees.
+Nominal sunrise and Nominal sunset are when the geometric centre crosses
+-0.833 degrees, the flat-horizon definition almanacs use; they are **not**
+when the sun appears or disappears at an obstructed site. Solar noon is the
+upper transit. `docs/solar-model.md` specifies all of it for the JS port,
+which must agree within 0.01 degrees. `profile-only` overlays the day's track,
+from Nominal sunrise to Nominal sunset, on its plot.
 
 ## Data
 
@@ -123,8 +126,6 @@ rejected):
 | `date` | `2026-12-21` | Date of the overlaid sun track (`--date` overrides) |
 | `max_ray` | `3000.0` | Furthest obstruction considered, metres (`--max-ray` overrides) |
 | `tz` | `Europe/London` | Time zone of the overlaid sun track |
-| `step_minutes` | `5.0` | Sun-track sampling interval |
-| `window_minutes` | `60.0` | How far past Nominal sunrise to track the sun |
 
 The point comes from the command's argument, not the file. `--eye-height` and
 `--curvature/--no-curvature` are flags only.

@@ -21,7 +21,8 @@ export type FetchLike = (url: string) => Promise<Response>;
 /**
  * How far from the origin tiles are fetched: the 20 min walk cap, whatever
  * the query's max walk, as `ciao_sun.reference.fixtures.tiles_touched` does.
- * The nearest spot with sun beyond the limit is looked for out to the cap.
+ * The nearest spot with sun beyond the limit is looked for out to the cap
+ * (Ed's ruling: https://github.com/epabarker/ciao-sun/issues/27#issuecomment-6801240295).
  */
 export const TILE_REACH_M = MAX_WALK_CAP_MIN * WALK_SPEED_M_PER_MIN;
 

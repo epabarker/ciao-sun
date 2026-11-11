@@ -101,7 +101,9 @@ the site does with the tarball is in `docs/site-contract.md`.
 other than f1 with `UnsupportedFormatError` before any tile is requested.
 `Build.area(origin)` returns `{covered: false}` outside the coverage polygon,
 else the decoded tiles within `TILE_REACH_M` (the 20 min cap at 80 m/min, as
-the reference's `tiles_touched`), each fetched once per Build.
+the reference's `tiles_touched`), each fetched once per Build. The reach is
+the cap, not the query's max walk, so the fallback's nearest spot with sun
+beyond the limit has its tiles ([Ed's ruling on #27](https://github.com/epabarker/ciao-sun/issues/27#issuecomment-6801240295)).
 
 ## The answer screen
 
@@ -114,7 +116,7 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 | `ui/screen.ts` | the frame: the persistent `.map`, then `header.top` (tabs, sentence) and `main.sheet` (result, then `footer.foot` with the fixed copy and About link) over it, and the About sheet while open; the `Result` kinds (loading, unreadable data, data unavailable, ...) | |
 | `ui/tabs.ts` | the Morning/Evening tabs; the fixed copy per tab (`SAFETY_COPY` on both, `DIM_LIGHTS` on Evening) | |
 | `ui/sheet.ts` | the bottom sheet: stops `peek`/`half`/`full` (heights in `style.css`'s `--sheet-h`), drag and tap on its handle | |
-| `ui/about-view.ts` | the footer's "About the data" link (in the frame, so on both tabs) and the sheet. Every credit, year and licence is from the loaded manifest's `attribution`, `lidarSurveyYears` and `licence`, rendered in order with none named in code; only `CAVEATS` in `about/about.ts` is fixed copy. Open is app state (`aboutOpen`), so a re-render keeps it open | |
+| `ui/about-view.ts` | the footer's "About the data" link (in the frame, so on both tabs) and the sheet. Every credit, year and licence is from the loaded manifest's `attribution`, `lidarSurveyYears` and `licence`, rendered in order with none named in code; only `CAVEATS` and `PRIVACY` (what the data host sees, ADR 0001) in `about/about.ts` are fixed copy. Open is app state (`aboutOpen`), so a re-render keeps it open | |
 | `ui/sentence.ts` | the sentence editor; its words per window in `WORDING`; the origin slot (`OriginSlot`: locating, GPS, typed or a saved place) | |
 | `ui/sky-slot.ts` | where the sky slot's value came from (`SkySource`, on the select as `data-sky-source`); the line under the sentence with the fetch time and `SKY_CREDIT`, shown only when the forecast filled the slot | |
 | `ui/places.ts` | saved places: the toggle under the sentence, rename, delete, save the origin in use | |

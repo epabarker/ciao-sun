@@ -63,7 +63,6 @@ FORMAT = 1
 # One Horizon profile sample per 0.25 deg of true azimuth, clockwise from true
 # north: sample i is at i * 0.25 deg.
 PROFILE_SAMPLES = 1440
-PROFILE_STEP_DEG = 0.25
 
 _MAGIC = b"CSUN"
 _GRID_REF = re.compile(r"[A-HJ-Z]{2}[0-9]{4}")
@@ -89,16 +88,16 @@ class UnsupportedFormatError(TileFormatError):
 class Candidates:
     """A tile's Candidates, one array element (or profile row) per Candidate.
 
-    Positions are WGS84 degrees * 1e7. `node` indexes the tile's walk-graph
-    nodes and `name` indexes the tile's Spot names. `offset_cm` is the distance
+    Positions are WGS84 degrees * 1e7. `node_index` indexes the tile's
+    walk-graph nodes and `name_index` indexes the tile's Spot names. `offset_cm` is the distance
     from the Candidate to its snapped node.
     """
 
     lat_e7: npt.NDArray[np.int32]
     lon_e7: npt.NDArray[np.int32]
-    node: npt.NDArray[np.uint32]
+    node_index: npt.NDArray[np.uint32]
     offset_cm: npt.NDArray[np.uint32]
-    name: npt.NDArray[np.uint32]
+    name_index: npt.NDArray[np.uint32]
     profile_codes: npt.NDArray[np.uint8]  # shape (Candidates, PROFILE_SAMPLES)
 
 
@@ -124,7 +123,7 @@ class Tile:
     walk_graph: WalkGraph
 
     def spot_name(self, candidate: int) -> str:
-        return self.names[int(self.candidates.name[candidate])]
+        return self.names[int(self.candidates.name_index[candidate])]
 
     def horizon_profile_degrees(self, candidate: int) -> npt.NDArray[np.float64]:
         """The Candidate's Horizon profile in degrees, by true azimuth sample."""
@@ -151,8 +150,8 @@ def _check_references(tile: Tile) -> None:
     """The rules a tile must obey beyond its byte layout; shared by writer and reader."""
     c, g = tile.candidates, tile.walk_graph
     nodes = g.node_id.shape[0]
-    _check_indexes(c.node, nodes, "Candidate walk node index")
-    _check_indexes(c.name, len(tile.names), "Candidate Spot name index")
+    _check_indexes(c.node_index, nodes, "Candidate walk node index")
+    _check_indexes(c.name_index, len(tile.names), "Candidate Spot name index")
     _check_indexes(g.edge_from, nodes, "edge 'from' node index")
     _check_indexes(g.edge_to, nodes, "edge 'to' node index")
     if c.profile_codes.size and int(c.profile_codes.max()) >= CODE_COUNT:
@@ -162,6 +161,8 @@ def _check_references(tile: Tile) -> None:
         )
     if g.node_id.size and int(g.node_id.max()) >= _NODE_ID_LIMIT:
         raise TileFormatError("walk node ids must be below 2^53")
+    if np.unique(g.node_id).size != g.node_id.size:
+        raise TileFormatError("walk node ids must be unique within a tile")
 
 
 def encode_tile(tile: Tile) -> bytes:
@@ -173,9 +174,9 @@ def encode_tile(tile: Tile) -> bytes:
     columns = [
         _column(c.lat_e7, _I32, n_cand, "Candidate latitude"),
         _column(c.lon_e7, _I32, n_cand, "Candidate longitude"),
-        _column(c.node, _U32, n_cand, "Candidate walk node index"),
+        _column(c.node_index, _U32, n_cand, "Candidate walk node index"),
         _column(c.offset_cm, _U32, n_cand, "Candidate offset"),
-        _column(c.name, _U32, n_cand, "Candidate Spot name index"),
+        _column(c.name_index, _U32, n_cand, "Candidate Spot name index"),
         _column(g.node_id, _U64, n_node, "walk node id"),
         _column(g.node_lat_e7, _I32, n_node, "walk node latitude"),
         _column(g.node_lon_e7, _I32, n_node, "walk node longitude"),
@@ -247,7 +248,7 @@ def decode_tile(data: bytes) -> Tile:
         )
 
     lat_e7, lon_e7 = cursor.column(_I32, n_cand), cursor.column(_I32, n_cand)
-    node, offset_cm, name = (cursor.column(_U32, n_cand) for _ in range(3))
+    node_index, offset_cm, name_index = (cursor.column(_U32, n_cand) for _ in range(3))
     node_id = cursor.column(_U64, n_node)
     node_lat_e7, node_lon_e7 = cursor.column(_I32, n_node), cursor.column(_I32, n_node)
     edge_from, edge_to, edge_length_cm = (cursor.column(_U32, n_edge) for _ in range(3))
@@ -267,7 +268,7 @@ def decode_tile(data: bytes) -> Tile:
     tile = Tile(
         grid_ref=grid_ref.decode("ascii", errors="replace"),
         names=names,
-        candidates=Candidates(lat_e7, lon_e7, node, offset_cm, name, profile_codes),
+        candidates=Candidates(lat_e7, lon_e7, node_index, offset_cm, name_index, profile_codes),
         walk_graph=WalkGraph(node_id, node_lat_e7, node_lon_e7, edge_from, edge_to, edge_length_cm),
     )
     if not _GRID_REF.fullmatch(tile.grid_ref):

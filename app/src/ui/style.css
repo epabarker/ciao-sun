@@ -348,3 +348,52 @@ select {
   font-size: 12px;
   margin: 6px 0 0;
 }
+
+/* The footer and the About the data sheet */
+.foot {
+  margin-top: 20px;
+}
+
+.about {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  font-size: 15px;
+}
+
+.about > * {
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.about h2 {
+  font-size: 20px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.about h3 {
+  font-size: 15px;
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+.about ul {
+  padding-left: 18px;
+}
+
+.about li {
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
+.about a {
+  color: var(--low-sun);
+}
+
+.about > .link {
+  display: block;
+}

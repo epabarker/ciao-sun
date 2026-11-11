@@ -6,6 +6,7 @@
 // State flows one way: an event changes `state`, then `refresh()` asks the
 // scorer (only when the query changed) and `draw()` re-renders the screen.
 
+import { readAbout } from "./about/about";
 import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
 import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
@@ -14,6 +15,7 @@ import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
 import { type SavedPlace, type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
+import { renderAbout } from "./ui/about-view";
 import { h } from "./ui/dom";
 import { renderPlaces } from "./ui/places";
 import { type Result, renderScreen } from "./ui/screen";
@@ -67,6 +69,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   let build: Build | undefined;
   let pending: Promise<unknown> = Promise.resolve();
   let asked = 0;
+  let aboutOpen = false;
 
   const track = (work: Promise<unknown>) => {
     pending = Promise.all([pending, work.catch(() => {})]);
@@ -91,7 +94,18 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       },
       placeEvents,
     );
-    renderScreen(root, { window, sentence: h("div", { class: "ask" }, renderSentence(state, events), places), result });
+    renderScreen(root, {
+      window,
+      sentence: h("div", { class: "ask" }, renderSentence(state, events), places),
+      result,
+      onAbout: () => setAbout(true),
+      about: aboutOpen ? renderAbout(readAbout(build?.manifest), () => setAbout(false)) : undefined,
+    });
+  };
+
+  const setAbout = (open: boolean) => {
+    aboutOpen = open;
+    draw();
   };
 
   const ask = async () => {

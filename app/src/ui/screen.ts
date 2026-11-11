@@ -4,12 +4,14 @@
 //     <header class="top">   the sentence editor (and, from #48, the tabs)
 //     <main class="sheet">   the result: the answer view or a message
 //                            (#47 makes it a bottom sheet over the map)
-//     <footer class="foot">  fixed copy (#48 safety copy, #51 About link)
+//     <footer class="foot">  fixed copy (#48 safety copy) and the About link
+//     <section class="about"> the About the data sheet, while it is open
 //
 // `renderScreen` replaces the root's content on every state change; views are
 // pure functions of state, and controls report through callbacks.
 
 import type { Answer, WindowName } from "../contract";
+import { aboutLink } from "./about-view";
 import { renderAnswer, message } from "./answer-view";
 import { h } from "./dom";
 
@@ -54,6 +56,10 @@ export interface ScreenParts {
   sentence: Node;
   result: Result;
   footer?: Node[];
+  /** Opens the About sheet; the link is in the footer whatever the window. */
+  onAbout: () => void;
+  /** The About sheet, while it is open. */
+  about?: Node;
 }
 
 export function renderScreen(root: HTMLElement, parts: ScreenParts): void {
@@ -63,7 +69,8 @@ export function renderScreen(root: HTMLElement, parts: ScreenParts): void {
       { class: "screen", "data-window": parts.window },
       h("header", { class: "top" }, parts.sentence),
       h("main", { class: "sheet", "aria-live": "polite" }, renderResult(parts.result)),
-      h("footer", { class: "foot" }, ...(parts.footer ?? [])),
+      h("footer", { class: "foot" }, ...(parts.footer ?? []), aboutLink(parts.onAbout)),
+      parts.about,
     ),
   );
 }

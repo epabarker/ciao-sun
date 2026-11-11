@@ -90,9 +90,9 @@ def synthetic_tile() -> Tile:
         candidates=Candidates(
             lat_e7=np.array([514541000, 514541900, 514550000], dtype=np.int32),
             lon_e7=np.array([-26070000, -26068500, -26059999], dtype=np.int32),
-            node=np.array([2, 0, 1], dtype=np.uint32),
+            node_index=np.array([2, 0, 1], dtype=np.uint32),
             offset_cm=np.array([0, 730, 1199], dtype=np.uint32),
-            name=np.array([0, 0, 2], dtype=np.uint32),
+            name_index=np.array([0, 0, 2], dtype=np.uint32),
             profile_codes=profile_codes,
         ),
         walk_graph=WalkGraph(
@@ -131,9 +131,9 @@ def test_tile_with_no_candidates_and_no_walk_graph_round_trips():
         candidates=Candidates(
             lat_e7=np.zeros(0, np.int32),
             lon_e7=np.zeros(0, np.int32),
-            node=np.zeros(0, np.uint32),
+            node_index=np.zeros(0, np.uint32),
             offset_cm=np.zeros(0, np.uint32),
-            name=np.zeros(0, np.uint32),
+            name_index=np.zeros(0, np.uint32),
             profile_codes=np.zeros((0, PROFILE_SAMPLES), np.uint8),
         ),
         walk_graph=WalkGraph(
@@ -209,7 +209,7 @@ def test_format_documents_worked_example_reads_as_the_tile_it_describes():
     assert tile.spot_name(0) == "Brandon Hill"
     assert tile.candidates.lat_e7.tolist() == [514541000]
     assert tile.candidates.lon_e7.tolist() == [-26070000]
-    assert tile.candidates.node.tolist() == [1]
+    assert tile.candidates.node_index.tolist() == [1]
     assert tile.candidates.offset_cm.tolist() == [730]
     assert tile.walk_graph.node_id.tolist() == [101, 2**40 + 7]
     assert tile.walk_graph.node_lat_e7.tolist() == [514540000, 514545000]
@@ -282,8 +282,8 @@ def test_horizon_profile_holding_a_code_above_227_is_refused_by_writer_and_reade
 @pytest.mark.parametrize(
     ("part", "field", "what"),
     [
-        ("candidates", "node", "walk node"),
-        ("candidates", "name", "Spot name"),
+        ("candidates", "node_index", "walk node"),
+        ("candidates", "name_index", "Spot name"),
         ("walk_graph", "edge_from", "'from' node"),
         ("walk_graph", "edge_to", "'to' node"),
     ],
@@ -301,6 +301,14 @@ def test_walk_node_id_too_large_for_a_double_is_refused():
     tile.walk_graph.node_id[0] = 2**53
 
     with pytest.raises(TileFormatError, match="2\\^53"):
+        encode_tile(tile)
+
+
+def test_two_walk_nodes_sharing_an_id_in_one_tile_are_refused():
+    tile = synthetic_tile()
+    tile.walk_graph.node_id[2] = tile.walk_graph.node_id[0]
+
+    with pytest.raises(TileFormatError, match="unique"):
         encode_tile(tile)
 
 

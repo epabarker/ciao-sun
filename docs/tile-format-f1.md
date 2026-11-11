@@ -1,6 +1,6 @@
 # Tile format f1
 
-This document specifies the Ciao Sun tile file, format `f1`. It is written so that a builder or a reader can be implemented from it in any language. Domain terms (Candidate, Horizon profile, Stage) follow `GLOSSARY.md`.
+This document specifies the Ciao Sun tile file, format `f1`. It is written so that a builder or a reader can be implemented from it in any language. Domain terms (Candidate, Horizon profile) follow `GLOSSARY.md`.
 
 A tile holds everything date-independent about one 1 km square: its Candidates, each Candidate's Horizon profile, and the part of the walk graph that touches the square.
 
@@ -84,13 +84,15 @@ A build of Great Britain converts its National Grid positions to latitude and lo
 | 10 | Edge to | `u32` | `E` | 4`E` | index (0-based) of the other end node |
 | 11 | Edge length | `u32` | `E` | 4`E` | centimetres along the path |
 | 12 | Horizon profiles | `u8` | 1440`C` | 1440`C` | delta-coded storage codes, one row of 1,440 per Candidate, in Candidate order |
-| 13 | Spot names | — | `S` entries | varies | each entry: `u16` byte length, then that many bytes of UTF-8 |
+| 13 | Spot names | — | `S` entries | varies | each entry: `u16` byte length, then that many bytes of UTF-8; so a name is at most 65,535 bytes |
 
 So the Horizon profiles start at byte `28 + 20C + 16N + 12E`, and the Spot names at `28 + 1460C + 16N + 12E`.
 
 ### Candidates
 
 A Candidate is identified within a build by its tile's grid reference and its 0-based index in that tile. The index is its position in every Candidate column and its row in the Horizon profiles.
+
+The node a Candidate is snapped to is always in the same tile's node sections, even when the node lies outside the square.
 
 Several Candidates usually share one Spot name. The name is stored once and each of them points at it.
 
@@ -152,8 +154,10 @@ A reader rejects the file, rather than returning a partial tile, when:
 - it is not valid gzip, or the magic is wrong
 - the format number is not one it knows (reported separately, as "this version can't read this data")
 - the payload ends before its last field, or has bytes after it
+- the grid reference is not two letters `A`–`Z` (never `I`) and four digits, or differs from the file name
 - a Candidate's walk node index is `N` or more, or its Spot name index is `S` or more
 - an edge's node index is `N` or more
+- a node id is 2⁵³ or more, or two nodes in the tile share an id
 - any decoded storage code is above 227
 - a Spot name is not valid UTF-8
 

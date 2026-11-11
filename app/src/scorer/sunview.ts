@@ -42,6 +42,26 @@ export function sunInView(codes: Uint8Array, track: SunTrack, start: number, end
   return inView;
 }
 
+/**
+ * One Candidate's Last sun: the last minute of the track's day with the sun in
+ * view. It is looked for over the whole day, not only a window, so it can fall
+ * after Nominal sunset where the Horizon profile is below 0 degrees. Null
+ * when the sun is never in view. `forced` sets sun in view at some minutes,
+ * as `SightOverrides` does.
+ */
+export function lastSun(
+  codes: Uint8Array,
+  track: SunTrack,
+  forced: Readonly<Record<number, boolean>> = {},
+): number | null {
+  const inView = sunInView(codes, track, 0, track.length);
+  for (const [minute, value] of Object.entries(forced)) {
+    if (Number(minute) < inView.length) inView[Number(minute)] = value ? 1 : 0;
+  }
+  const last = inView.lastIndexOf(1);
+  return last < 0 ? null : last;
+}
+
 /** Whether the sun's apparent elevation is 0-30 degrees (both included), per minute (1 or 0). */
 export function lowSun(track: SunTrack, start: number, end: number): Uint8Array {
   const low = new Uint8Array(Math.max(end - start, 0));

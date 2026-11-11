@@ -1,7 +1,6 @@
 // The golden-fixture harness (docs/fixtures.md): every fixture of one build,
 // checked against the JS: tile decoding, the sun track, the sun's three
-// events, and the Answer, for every fixture `answerParityPending` (./scorer)
-// does not hold back.
+// events, and the Answer.
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
@@ -10,13 +9,12 @@ import { PROFILE_SAMPLES } from "../../src/tile/decode";
 import { FixtureSet, pinFromEnvironment } from "./fixture-set";
 import {
   SOLAR_TOLERANCE_DEG,
-  answerDifferences,
   compareSunTrack,
   nearBoundaryFreedom,
   sunEvents,
   unexplainedDifferences,
 } from "./parity";
-import { answerParityPending, scorer } from "./scorer";
+import { scorer } from "./scorer";
 
 const set = new FixtureSet(pinFromEnvironment());
 const worst = { azimuth: 0, apparentElevation: 0, lowest: Infinity, minutes: 0, events: 0 };
@@ -95,32 +93,26 @@ describe(`golden fixtures of build f${set.pin.format}/${set.pin.build}`, () => {
       }
     });
 
-    it.skipIf(!scorer)("has the reference's Answer", async (context) => {
+    it.skipIf(!scorer)("has the reference's Answer", async () => {
       const fixture = await loaded;
-      const pending = answerParityPending(fixture.query, entry.status);
-      if (pending) {
-        context.skip(pending);
-      }
 
       // The scorer is pure: it must not reach for the network.
       vi.stubGlobal("fetch", () => {
         throw new Error("the scorer called fetch");
       });
-      let answer;
+      const world = { tiles: fixture.decodedTiles, coverage: fixture.coverage };
+      let unexplained;
       try {
-        answer = await scorer!(fixture.query, {
-          tiles: fixture.decodedTiles,
-          coverage: fixture.coverage,
-        });
+        const answer = await scorer!(fixture.query, world);
+        // Re-run with the reference's side of each near-boundary minute, if it differs.
+        unexplained = await unexplainedDifferences(answer, fixture, (sight) =>
+          scorer!(fixture.query, { ...world, sight }),
+        );
       } finally {
         vi.unstubAllGlobals();
       }
 
-      const differences = answerDifferences(answer, fixture.answer);
-      expect(
-        unexplainedDifferences(differences, fixture),
-        JSON.stringify(nearBoundaryFreedom(fixture)),
-      ).toEqual([]);
+      expect(unexplained, JSON.stringify(nearBoundaryFreedom(fixture))).toEqual([]);
     });
   });
 

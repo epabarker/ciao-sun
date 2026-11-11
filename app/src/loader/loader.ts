@@ -13,7 +13,7 @@ import type { ReleaseConfig } from "../config/release";
 import { MAX_WALK_CAP_MIN } from "../contract";
 import { WALK_SPEED_M_PER_MIN } from "../router/world";
 import { FORMAT, type Tile, UnsupportedFormatError, decodeTile } from "../tile/decode";
-import { type CoverageGeometry, coverageContains } from "./coverage";
+import { type CoverageGeometry, contains } from "../scorer/coverage";
 import { gridRefsInReach } from "./grid";
 
 export type FetchLike = (url: string) => Promise<Response>;
@@ -111,7 +111,7 @@ export async function openBuild(config: ReleaseConfig, options: LoaderOptions): 
     manifest,
     url,
     async area(origin) {
-      if (!coverageContains(manifest.coverage, origin.lat, origin.lon)) {
+      if (!contains(manifest.coverage, origin.lat, origin.lon)) {
         return { covered: false };
       }
       const gridRefs = gridRefsInReach(Object.keys(manifest.tiles), origin.lat, origin.lon, TILE_REACH_M);

@@ -229,10 +229,41 @@ band, for one minute. So at a minute listed in `nearBoundary`, and only there:
 
 Everything that follows from such a flip may differ with it: that spot's sun
 intervals, Sun minutes, Low-sun minutes, Last sun, Leave-by and `targetMet`,
-and through them the ranking and the status. A fixture whose `candidates` is
-empty and whose `lowSunBand` holds no minute of its window has no such
-freedom: its Answer must match exactly. Ten of the fifteen synthetic fixtures
-are like that. `morning-no-sun-in-reach` has a listed minute inside its window.
+and through them the ranking and the status. Precisely, the harness judges a
+JS Answer that differs like this:
+
+1. Only the minutes that can bear on the Answer count: a Candidate's listed
+   minutes inside the window (for an Evening window, also those outside it,
+   which bear on Last sun) and the `lowSunBand` minutes inside the window.
+   With none, the Answer must match exactly.
+2. The harness takes the reference's side at each such minute. For a
+   Candidate the reference's Answer shows (in `spots` or as
+   `nearestSunBeyondLimit`), sun in view in the window is whether the minute
+   is in its `sunIntervals`; outside it, the minute is out of view after its
+   `lastSun`, in view at it, and has no bearing before it. Low sun is whether
+   the minute is in the `lowSunIntervals` of any shown spot with the sun in
+   view then, or else from `sunTrack` against 0° and 30°, failing and naming
+   the minute if the track's rounding to 4 decimal places could change it.
+   A Candidate the Answer does not show is held out of view at its listed
+   minutes in the window. That can only keep it out of the list, the set of
+   spots with sun and `nearestSunBeyondLimit`, so if any flips reach the
+   reference's Answer, these do. Its side is not read from `sunTrack`: next
+   to a wall, the track's rounding alone can span the 0.01° tolerance.
+3. The JS scorer answers the Query again with those sides forced, and
+   nowhere else. That Answer must equal the reference's exactly, with the
+   tolerances above.
+
+So a flip can reorder or change the list, or turn `fallback` into `ranked`,
+only when the JS, given the reference's side at listed minutes, would have
+done the same. Any other difference still fails: a member no flip can move,
+or a minute that is not listed.
+
+A fixture whose `candidates` is empty and whose `lowSunBand` holds no minute
+of its window has no such freedom: its Answer must match exactly. Ten of the
+fifteen synthetic fixtures are like that. `morning-no-sun-in-reach` has a
+listed minute inside its window, at Candidates beyond its 0.1 min max walk:
+there a flip could change `nearestSunBeyondLimit` but not the status, since
+its one reachable Candidate has no listed minute.
 
 Not listed: the minutes at which the sun's azimuth is within 0.01° of a
 profile sample at the edge of the Sky openness sector. A flip there adds or

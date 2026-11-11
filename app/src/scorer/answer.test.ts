@@ -80,6 +80,52 @@ describe("ranking on a saturated tie", () => {
   });
 });
 
+describe("evening Leave-by", () => {
+  // Open sky: the sun is in view every minute up to Nominal sunset, 18:23 on
+  // 2026-03-20. The nearest Candidate, ST5873/0, is 4 m away: a 1 min walk once
+  // rounded up, and 0.05 min towards the 10 min Duration target.
+  const evening = (now: string): Query => ({ ...query, window: "evening", now });
+  const tiles = [tile("ST5873", [449])];
+
+  it("is the latest departure that leaves enough Sun minutes before Last sun", () => {
+    // ceil(10 - 0.05) = 10 Sun minutes from arrival: arrive 18:13, leave 18:12.
+    const [spot] = answer(evening("2026-03-20T18:00:00Z"), tiles).spots;
+
+    expect([spot!.leaveBy, spot!.targetMet]).toEqual(["2026-03-20T18:12:00+00:00", true]);
+  });
+
+  it("falls back to the morning rule, never before now, when no departure meets the target", () => {
+    // Only 18:18 to 18:23 is left: 5 Sun minutes, fewer than the 10 needed.
+    const [spot] = answer(evening("2026-03-20T18:18:00Z"), tiles).spots;
+
+    expect([spot!.leaveBy, spot!.targetMet]).toEqual(["2026-03-20T18:18:00+00:00", false]);
+  });
+});
+
+describe("lamp-only, once now is past the Morning window", () => {
+  // What `ciao_sun.reference.scorer.answer` gives for the same Queries.
+  const late = (now: string): Query => ({ ...query, date: now.slice(0, 10), wakeTime: "07:00", now });
+
+  it("names now as the next outdoor light while the sun is still up", () => {
+    expect(answer(late("2026-12-21T11:00:00Z"), [])).toEqual({
+      status: "lamp-only",
+      lamp: true,
+      nextOutdoorLight: "2026-12-21T11:00:00+00:00",
+      spots: [],
+    });
+  });
+
+  it("names the next day's Nominal sunrise after Nominal sunset, across a clock change", () => {
+    expect(answer(late("2026-12-21T17:30:00Z"), []).nextOutdoorLight).toBe("2026-12-22T08:14:00+00:00");
+    expect(answer(late("2026-03-28T23:30:00Z"), [])).toEqual({
+      status: "lamp-only",
+      lamp: false,
+      nextOutdoorLight: "2026-03-29T06:53:00+01:00",
+      spots: [],
+    });
+  });
+});
+
 describe("the scorer", () => {
   it("imports nothing outside src/ and touches no DOM or network", () => {
     const directories = ["scorer", "router"].map((name) => new URL(`../${name}/`, import.meta.url));

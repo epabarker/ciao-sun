@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Answer, Query, Status } from "../../src/contract";
+import type { CoverageGeometry } from "../../src/scorer/coverage";
 import { type Tile, decodeTile } from "../../src/tile/decode";
 
 export interface Pin {
@@ -73,11 +74,7 @@ export interface FixtureDocument {
   nearBoundary: NearBoundary;
 }
 
-/** A GeoJSON Polygon or MultiPolygon in WGS84 longitude/latitude. */
-export interface CoverageGeometry {
-  type: "Polygon" | "MultiPolygon";
-  coordinates: unknown;
-}
+export type { CoverageGeometry };
 
 /** A fixture with what the scorer under test is to be given. */
 export interface LoadedFixture extends FixtureDocument {

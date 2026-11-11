@@ -6,23 +6,35 @@
 // State flows one way: an event changes `state`, then `refresh()` asks the
 // scorer (only when the query changed) and `draw()` re-renders the screen.
 
+import { readAbout } from "./about/about";
 import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
-import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
-import type { MapFactory } from "./map/map";
+import { forecastCoordinate, forecastSky } from "./forecast/forecast";
+import { cloudSpan } from "./forecast/span";
+import { type Build, DataUnavailableError, openBuild } from "./loader/loader";
 import { type MapLink, linkMap } from "./map/link";
+import type { MapFactory } from "./map/map";
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
-import { type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
+import { type SavedPlace, type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
+import { renderAbout } from "./ui/about-view";
+import { h } from "./ui/dom";
+import { renderPlaces } from "./ui/places";
 import { type Result, mapContainer, renderScreen, screenInsets } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
 import type { SheetStop } from "./ui/sheet";
 
 export interface AppDeps {
   config: ReleaseConfig;
-  fetch: FetchLike;
+  /**
+   * Every request: the data host's, and the forecast's to Open-Meteo, which
+   * passes an abort signal for its timeout.
+   */
+  fetch: (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+  /** How long the forecast is waited for; the forecast adapter's default if unset. */
+  forecastTimeoutMs?: number;
   /** What a relative `dataBase` resolves against: the page URL. */
   baseUrl?: string;
   /** The settings' browser storage; may throw where storage is blocked. */
@@ -40,32 +52,38 @@ export interface App {
   idle(): Promise<void>;
 }
 
-/** The scorer, given the build: the one place a query becomes an Answer. */
-function score(query: Query, tiles: readonly Tile[], _build: Build): Answer {
-  return answer(query, tiles); // #44: pass _build.manifest.coverage as the third argument, and drop the loader's not-covered short-circuit in `ask`.
+/**
+ * The scorer, given the build: the one place a query becomes an Answer. The
+ * scorer decides `not-covered` from the manifest's coverage polygon.
+ */
+function score(query: Query, tiles: readonly Tile[], build: Build): Answer {
+  return answer(query, tiles, build.manifest.coverage);
 }
-
-const NOT_COVERED: Answer = { status: "not-covered", spots: [] };
 
 export function startApp(root: HTMLElement, deps: AppDeps): App {
   const settings: SettingsStore = openSettings(deps.storage);
   const saved = settings.read();
   const window: WindowName = "morning";
 
-  const state: SentenceState & { dateEdited: boolean } = {
+  const state: SentenceState & { dateEdited: boolean; placesOpen: boolean; placeDraft: string } = {
     window,
     wakeTime: saved.wakeTime,
     savedWakeTime: saved.wakeTime,
     date: nextMorningDate(deps.now(), saved.wakeTime),
     dateEdited: false,
     sky: "clear",
+    skySource: { kind: "unfilled" },
     maxWalkMin: saved.maxWalkMin,
     origin: { kind: "locating" },
+    places: saved.places,
+    placesOpen: false,
+    placeDraft: "",
   };
   let result: Result = { kind: "loading" };
   let build: Build | undefined;
   let pending: Promise<unknown> = Promise.resolve();
   let asked = 0;
+  let aboutOpen = false;
 
   const track = (work: Promise<unknown>) => {
     pending = Promise.all([pending, work.catch(() => {})]);
@@ -75,6 +93,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     const slot = state.origin;
     if (slot.kind === "gps") return { lat: slot.lat, lon: slot.lon };
     if (slot.kind === "typed") return parseOrigin(slot.text);
+    if (slot.kind === "place") return { lat: slot.place.lat, lon: slot.place.lon };
     return undefined;
   };
 
@@ -84,16 +103,33 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
   let sheet: SheetStop = "half";
 
   const draw = () => {
+    const places = renderPlaces(
+      {
+        places: state.places,
+        open: state.placesOpen,
+        canSave: state.origin.kind !== "place" && origin() !== undefined,
+        draft: state.placeDraft,
+        persistent: settings.persistent,
+      },
+      placeEvents,
+    );
     renderScreen(root, {
       window,
-      sentence: renderSentence(state, events),
+      sentence: h("div", { class: "ask" }, renderSentence(state, events), places),
       result,
+      onAbout: () => setAbout(true),
+      about: aboutOpen ? renderAbout(readAbout(build?.manifest), () => setAbout(false)) : undefined,
       selected,
       onSelect: events.selectSpot,
       sheet,
       onSheet: events.sheet,
     });
     map?.update({ origin: origin(), result, selected });
+  };
+
+  const setAbout = (open: boolean) => {
+    aboutOpen = open;
+    draw();
   };
 
   const ask = async () => {
@@ -113,7 +149,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     let next: Result;
     try {
       const area = await build.area(query.origin);
-      next = area.covered ? { kind: "answer", answer: score(query, area.tiles, build) } : { kind: "answer", answer: NOT_COVERED };
+      // An origin outside the coverage needs no tiles: the scorer answers not-covered.
+      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build) };
     } catch (error) {
       next = failure(error);
     }
@@ -124,7 +161,47 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     }
   };
 
+  // The sky slot from the forecast. A request is keyed by what decides its
+  // span and cell (window, date, Wake time and the 0.05 degree coordinate,
+  // not `now`), and its answer is dropped if the key moved on or the slot was
+  // set by hand meanwhile. A slot set by hand stays so until the window, date
+  // or place changes. The query never waits for any of this.
+  let forecastKey: string | undefined;
+  let manualFor: { window: WindowName; date: string; place?: string } | undefined;
+  const askForecast = () => {
+    const at = origin();
+    if (!at) return;
+    const place = `${forecastCoordinate(at.lat)},${forecastCoordinate(at.lon)}`;
+    if (state.skySource.kind === "manual" && manualFor?.window === window && manualFor.date === state.date) {
+      manualFor.place ??= place;
+      if (manualFor.place === place) return;
+    }
+    const key = `${window}|${state.date}|${state.wakeTime}|${place}`;
+    if (key === forecastKey) return;
+    forecastKey = key;
+    const span = cloudSpan(buildQuery({ ...state, origin: at }, deps.now(), window));
+    if (!span) {
+      state.skySource = { kind: "unfilled" };
+      return;
+    }
+    state.skySource = { kind: "pending" };
+    track(
+      forecastSky(at, span, { fetch: deps.fetch, now: deps.now, timeoutMs: deps.forecastTimeoutMs }).then((sky) => {
+        if (key !== forecastKey || state.skySource.kind === "manual") return;
+        if (sky.status === "forecast") {
+          state.sky = sky.sky;
+          state.skySource = { kind: "forecast", fetchedAtMs: sky.fetchedAtMs };
+          refresh();
+        } else {
+          state.skySource = { kind: "unavailable", reason: sky.reason };
+          draw();
+        }
+      }),
+    );
+  };
+
   const refresh = () => {
+    askForecast();
     const work = ask().then(draw);
     track(work);
     draw();
@@ -144,7 +221,15 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     track(
       deps.locate().then(
         (at) => current() && setOrigin({ kind: "gps", lat: at.lat, lon: at.lon }),
-        () => current() && setOrigin({ kind: "typed", text: "", reason: "Location unavailable: type a position." }),
+        () =>
+          current() &&
+          setOrigin({
+            kind: "typed",
+            text: "",
+            reason: state.places.length
+              ? "Location unavailable: pick a saved place or type a position."
+              : "Location unavailable: type a position.",
+          }),
       ),
     );
   };
@@ -166,6 +251,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     },
     sky(value: Sky) {
       state.sky = value;
+      state.skySource = { kind: "manual" };
+      manualFor = { window, date: state.date };
       refresh();
     },
     maxWalkMin(value: number) {
@@ -189,6 +276,51 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     sheet(stop: SheetStop) {
       sheet = stop;
       draw();
+    },
+    usePlace(id: string) {
+      const place = state.places.find((p) => p.id === id);
+      if (place) setOrigin({ kind: "place", place });
+    },
+  };
+
+  // Saved places: only ever written to the settings store (#49).
+  const savePlaces = (places: SavedPlace[]) => {
+    state.places = settings.update({ places }).places;
+  };
+  const placeEvents = {
+    togglePlaces() {
+      state.placesOpen = !state.placesOpen;
+      draw();
+    },
+    draftPlace(name: string) {
+      state.placeDraft = name;
+    },
+    savePlace() {
+      const at = state.origin.kind === "place" ? undefined : origin();
+      if (!at) return;
+      const id = String(Math.max(0, ...state.places.map((p) => Number(p.id) || 0)) + 1);
+      const name = state.placeDraft.trim() || `Place ${id}`;
+      savePlaces([...state.places, { id, name, lat: at.lat, lon: at.lon }]);
+      state.placeDraft = "";
+      // The origin is unchanged, so no new query: "here" now says its name.
+      const place = state.places.find((p) => p.id === id);
+      if (place) state.origin = { kind: "place", place };
+      draw();
+    },
+    renamePlace(id: string, name: string) {
+      savePlaces(state.places.map((p) => (p.id === id ? { ...p, name } : p)));
+      const slot = state.origin;
+      const renamed = state.places.find((p) => p.id === id);
+      if (slot.kind === "place" && slot.place.id === id && renamed) state.origin = { kind: "place", place: renamed };
+      draw();
+    },
+    deletePlace(id: string) {
+      savePlaces(state.places.filter((p) => p.id !== id));
+      if (state.origin.kind === "place" && state.origin.place.id === id) {
+        events.useGps();
+      } else {
+        draw();
+      }
     },
   };
 

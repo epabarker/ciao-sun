@@ -7,12 +7,14 @@
 //     <main class="sheet">     the bottom sheet (ui/sheet.ts): handle, then
 //       <div class="sheet-body">
 //         the result: the answer view or a message
-//         <footer class="foot">  fixed copy (#48 safety copy, #51 About link)
+//         <footer class="foot">  fixed copy (#48 safety copy) and the About link
+//     <section class="about">  the About the data sheet, while it is open
 //
 // `renderScreen` replaces everything but the map on every state change; views
 // are pure functions of state, and controls report through callbacks.
 
 import type { Answer, WindowName } from "../contract";
+import { aboutLink } from "./about-view";
 import { renderAnswer, message } from "./answer-view";
 import { h } from "./dom";
 import { type SheetStop, bottomSheet } from "./sheet";
@@ -50,7 +52,7 @@ export function renderResult(result: Result, selected?: string): Node {
     case "unavailable":
       return message("unavailable", "Can't reach the data.", "Check the connection and try again.");
     case "failed":
-      return message("failed", "This answer can't be shown yet.", "Try another sky, date or Wake time.");
+      return message("failed", "Something went wrong working out this answer.", "Try again, or change the sky, date or Wake time.");
   }
 }
 
@@ -59,6 +61,10 @@ export interface ScreenParts {
   sentence: Node;
   result: Result;
   footer?: Node[];
+  /** Opens the About sheet; the link is in the footer whatever the window. */
+  onAbout: () => void;
+  /** The About sheet, while it is open. */
+  about?: Node;
   /** The highlighted spot's candidateId, and a tap on a row. */
   selected?: string;
   onSelect?(id: string): void;
@@ -96,8 +102,9 @@ export function renderScreen(root: HTMLElement, parts: ScreenParts): void {
       parts.sheet ?? "half",
       (stop) => parts.onSheet?.(stop),
       renderResult(parts.result, parts.selected),
-      h("footer", { class: "foot" }, ...(parts.footer ?? [])),
+      h("footer", { class: "foot" }, ...(parts.footer ?? []), aboutLink(parts.onAbout)),
     ),
+    parts.about,
   );
   next.addEventListener("click", (event) => {
     const head = (event.target as Element).closest?.("[data-action=select-spot]");

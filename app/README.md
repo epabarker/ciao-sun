@@ -7,7 +7,8 @@ pipeline and the reference. Terms follow `GLOSSARY.md`; the spec is #27.
 ## Stack
 
 TypeScript (strict), Vite for the bundle, Vitest for tests, npm. No framework
-and no runtime dependencies yet. Node is pinned in `.nvmrc`, and every
+and no runtime dependencies yet; views are plain DOM built with `src/ui/dom.ts`'s
+`h()`. happy-dom (dev only) is the DOM for rendering tests. Node is pinned in `.nvmrc`, and every
 dependency is pinned exactly in `package.json` with `package-lock.json`
 committed.
 
@@ -22,14 +23,24 @@ on every push.
 | `npm run typecheck` | `tsc --noEmit` over `src/`, `test/` and the config |
 | `npm test` | Every test, once (`npm run test:watch` to keep it running) |
 | `npm run build` | The bundle, into `dist/`: `index.html` and hashed files under `assets/` |
-| `npm run dev` | Vite dev server at `/ciao-sun/` |
+| `npm run dev` | Vite dev server at `/ciao-sun/`, serving the synthetic build at `/ciao-sun/synthetic-data/` (so does `vite preview`) |
 
 ## Layout
 
 ```
 index.html              the page; Vite's entry
 vite.config.ts          Vite and Vitest config; base is /ciao-sun/
-src/main.ts             entry script (a placeholder until the answer screen)
+release.json            the pin: {dataBase, format, build} (below)
+src/main.ts             entry: the browser's dependencies, handed to startApp
+src/app.ts              the app: release config + data loader + settings + GPS + scorer -> screen
+src/config/release.ts   the release config, read from release.json at build time
+src/loader/loader.ts    data loader: openBuild(pin) checks the manifest format; Build.area(origin) -> tiles
+src/loader/grid.ts      WGS84 -> National Grid, and the 1 km tiles in reach of an origin
+src/loader/coverage.ts  whether an origin is inside the manifest's coverage polygon
+src/settings/store.ts   settings store: Wake time, max walk; browser storage with a memory fallback
+src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
+src/query/origin.ts     the typed origin "lat, lon"
+src/ui/                 the answer screen (below)
 src/contract.ts         the Query and Answer types, as fixture JSON holds them
 src/tile/decode.ts      tile decoder: f1 bytes -> Tile (docs/tile-format-f1.md)
 src/solar/sun-track.ts  solar model: sunTrack(), refraction, the three events (docs/solar-model.md)
@@ -43,8 +54,51 @@ test/parity/            the golden-fixture harness (below)
 ```
 
 A module is a directory under `src/` named for the spec's module (data
-loader, router, scorer, forecast adapter, settings store, ...). Static files
+loader, router, scorer, forecast adapter, settings store, ...). Never name one
+`data/`: the repo's `.gitignore` ignores every `data/` directory. Static files
 that must keep their name, such as `sw.js`, go in `public/`.
+
+## The release config
+
+`release.json` is the committed pin file of spec #27 ("Release and CI"):
+`{dataBase, format, build}`. `src/config/release.ts` validates it and the
+bundle carries it; nothing else in `src/` names a data origin. A relative
+`dataBase` resolves against the page. Until the first Bristol build (#55) it
+pins the synthetic build at `synthetic-data/`, which only the dev and preview
+servers serve: #55 sets the R2 data subdomain and the build id, and #54's
+release job reads the same file.
+
+## The data loader
+
+`openBuild(pin, {fetch, baseUrl})` fetches the manifest and refuses a format
+other than f1 with `UnsupportedFormatError` before any tile is requested.
+`Build.area(origin)` returns `{covered: false}` outside the coverage polygon,
+else the decoded tiles within `TILE_REACH_M` (the 20 min cap at 80 m/min, as
+the reference's `tiles_touched`), each fetched once per Build.
+
+## The answer screen
+
+`src/app.ts` holds the state and wires everything; `src/ui/` renders it. Views
+are pure functions of state that report through callbacks, and the screen is
+re-rendered on every change. The UI shows Answer fields only, never scores.
+
+| File | Does | Extended by |
+|---|---|---|
+| `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer; #51 an About link there |
+| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
+| `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
+| `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |
+| `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
+
+`AppDeps` (in `app.ts`) is every outside dependency: the pin, `fetch`, the
+storage accessor, the clock and GPS. `test/app/` runs the whole screen through
+it over the synthetic build. The scorer is called in one place, `score()` in
+`app.ts`; its marked line is where #44's coverage argument goes.
+
+The settings store (`openSettings(() => localStorage)`) has `read()`,
+`update(change)` and `persistent`; a new setting is a field of `Settings` with
+a reader in `FIELDS`. Wake time edited in the sentence is an override for one
+query; "Make HH:MM my usual Wake time" saves it. Max walk saves on change.
 
 ## Conventions
 
@@ -52,8 +106,8 @@ that must keep their name, such as `sw.js`, go in `public/`.
   under `test/`.
 - A test asserts behaviour through a module's exports, against values from an
   independent source: a document's worked example, the Python reference's
-  output, a fixture. Tests run in Node, so a module that needs the DOM takes
-  it as an argument or gets its own Vitest environment.
+  output, a fixture. Tests run in Node; a rendering test opts into happy-dom with
+  `// @vitest-environment happy-dom` on its first line.
 - `src/` never imports from `test/` or from `node:`; only tests read files.
 - Angles are degrees, azimuths true and clockwise from north. Instants are
   milliseconds since the Unix epoch; a time in an Answer is written with

@@ -269,7 +269,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     /** A tap on a spot's row or its marker. */
     selectSpot(id: string) {
       selected = id;
-      if (sheet === "peek") sheet = "half";
+      // Half way, so both the highlighted row and its marker are in view.
+      sheet = "half";
       draw();
       root.querySelector(`[data-spot="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
     },

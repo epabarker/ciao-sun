@@ -242,6 +242,15 @@ describe("Map-first screen", () => {
     expect(sheetSnap(root)).toBe("half");
   });
 
+  it("lowers a sheet pulled all the way up when a row is tapped, so the highlight shows on the map", async () => {
+    const map = fakeMap();
+    const { root } = await mount(deps({ map: map.factory }));
+    drag(handle(root), 700, 60);
+    expect(sheetSnap(root)).toBe("full");
+    tapRow(root, WINTER.answer.spots[1]!.candidateId);
+    expect(sheetSnap(root)).toBe("half");
+  });
+
   it("still shows the list when no map can be made", async () => {
     const failing: MapFactory = async () => {
       throw new Error("WebGL is not available");

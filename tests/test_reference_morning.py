@@ -510,6 +510,7 @@ def test_query_and_answer_cross_the_seam_as_the_contract_json(tmp_path: Path) ->
         "nominalSunset": at("16:04"),
         "solarNoon": at("12:08"),
         "durationTargetMin": 20,
+        "lamp": True,  # Nominal sunrise 08:13 is more than 1 h after Wake time 07:00
         "spots": [
             {
                 "candidateId": "ST5873/0",

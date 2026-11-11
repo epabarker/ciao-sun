@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.8",
     "osmium>=4.0",
     "shapely>=2.0",
+    "boto3>=1.36",
 ]
 
 [project.scripts]

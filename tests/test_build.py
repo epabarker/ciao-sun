@@ -138,7 +138,14 @@ def test_the_far_ridge_from_terrain_50_sets_the_horizon_where_nothing_nearer_doe
 def test_the_manifest_credits_every_source_and_licenses_the_bundle_odbl(built: Built):
     credits = {line["source"]: line for line in built.manifest["attribution"]}
 
-    assert list(credits) == ["Environment Agency", "Ordnance Survey", "OpenStreetMap", "Protomaps"]
+    assert list(credits) == [
+        "Environment Agency",
+        "Ordnance Survey",
+        "OpenStreetMap",
+        "Protomaps",
+        "Met Office",
+        "Open-Meteo",
+    ]
     assert credits["Environment Agency"]["text"] == (
         "© Environment Agency copyright and/or database right 2022. All rights reserved."
     )
@@ -150,6 +157,15 @@ def test_the_manifest_credits_every_source_and_licenses_the_bundle_odbl(built: B
     assert "OpenStreetMap" in credits["OpenStreetMap"]["text"]
     assert "ODbL" in credits["OpenStreetMap"]["licence"]
     assert "Protomaps" in credits["Protomaps"]["text"]
+    # The forecast's credits, as the sky slot words them (spec #27, story 50).
+    assert credits["Met Office"]["text"] == (
+        "Forecast data from the Met Office via Open-Meteo, cloud cover categorised by Ciao Sun"
+    )
+    assert credits["Met Office"]["licence"] == "CC BY-SA 4.0"
+    assert credits["Met Office"]["licenceUrl"] == "https://creativecommons.org/licenses/by-sa/4.0/"
+    assert credits["Open-Meteo"]["text"] == "Weather data by Open-Meteo.com"
+    assert credits["Open-Meteo"]["licence"] == "CC BY 4.0"
+    assert credits["Open-Meteo"]["licenceUrl"] == "https://creativecommons.org/licenses/by/4.0/"
     assert built.manifest["licence"]["spdx"] == "ODbL-1.0"
     assert "ODbL" in built.manifest["licence"]["name"]
 
@@ -280,6 +296,15 @@ def test_inputs_fetched_without_a_basemap_are_refused(built: Built, tmp_path: Pa
         build(world.coverage(), inputs, tmp_path / "builds", today=TODAY)
 
     assert not (tmp_path / "builds").exists()
+
+
+def test_a_far_reach_beyond_100_km_is_refused(tmp_path: Path):
+    lock = world.fetch_inputs(tmp_path)
+
+    with pytest.raises(ValueError, match="at most 100000 m"):
+        build(world.coverage(), lock.root, tmp_path / "builds", today=TODAY, far_reach_m=100_001.0)
+
+    assert not (tmp_path / "builds" / "f1" / "20261111a").exists()
 
 
 # --- Reproducibility ----------------------------------------------------------

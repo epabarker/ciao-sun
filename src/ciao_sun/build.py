@@ -39,7 +39,6 @@ takes its place with the tiles in the one rename.
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 import math
 import re
@@ -62,7 +61,7 @@ from ciao_sun import basemap
 from ciao_sun.build_checks import BuildCheckError, Tolerances, check_tile_profiles
 from ciao_sun.candidates import WalkNetwork, build_tile, load_walk_network
 from ciao_sun.coverage import Coverage
-from ciao_sun.fetch import EA_PRODUCTS, Lockfile, read_lockfile
+from ciao_sun.fetch import EA_PRODUCTS, Lockfile, read_lockfile, sha256_of
 from ciao_sun.horizon_precompute import (
     FAR_REACH_M,
     NEAR_REACH_M,
@@ -73,6 +72,7 @@ from ciao_sun.horizon_precompute import (
 from ciao_sun.manifest import manifest_document, read_manifest, write_manifest
 from ciao_sun.raster import RasterGrid, load_mosaic
 from ciao_sun.reference.fixtures import SetQuery, write_fixtures
+from ciao_sun.report import silent
 from ciao_sun.surface import (
     BuildingFootprints,
     crown_envelope_surface,
@@ -92,10 +92,6 @@ Bounds = tuple[float, float, float, float]
 
 class BuildError(Exception):
     """The build cannot run on these inputs."""
-
-
-def _silent(message: str) -> None:
-    return None
 
 
 # --- What each worker process holds ------------------------------------------
@@ -351,10 +347,6 @@ def _survey_years(geopackage: bytes) -> set[int]:
     return {int(year) for text in flown for year in re.findall(r"(?<!\d)(?:19|20)\d\d(?!\d)", text)}
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _raise_on_failures(reports: dict[str, _TileReport], tolerances: Tolerances) -> None:
     problems: list[str] = []
     water = {ref: r.water_candidates for ref, r in reports.items() if r.water_candidates}
@@ -386,7 +378,7 @@ def build(
     far_reach_m: float = FAR_REACH_M,
     tolerances: Tolerances | None = None,
     queries: Sequence[SetQuery] | None = None,
-    report: Callable[[str], None] = _silent,
+    report: Callable[[str], None] = silent,
 ) -> Path:
     """Build `coverage` from the fetched `inputs` into a new build directory under `out`.
 
@@ -441,7 +433,7 @@ def build(
     tiles = {
         grid_ref: {
             "bytes": (tiles_dir / f"{grid_ref}.bin").stat().st_size,
-            "sha256": _sha256(tiles_dir / f"{grid_ref}.bin"),
+            "sha256": sha256_of(tiles_dir / f"{grid_ref}.bin"),
             "candidates": tile_report.candidates,
         }
         for grid_ref, tile_report in reports.items()

@@ -20,8 +20,9 @@ export type SkySource =
   | { kind: "manual" };
 
 /**
- * The credit a forecast-filled sky slot carries. It is not in the manifest,
- * which credits the build's own sources; the About sheet (#51) can reuse it.
+ * The credit a forecast-filled sky slot carries, inline beside the slot (spec
+ * #27, "Attribution placement"). The About sheet credits the same two sources
+ * from the manifest's `attribution` (`ciao_sun.manifest`), not from here.
  */
 export const SKY_CREDIT = {
   source: "Met Office via Open-Meteo",

@@ -8,11 +8,9 @@
 
 import type { Query, Sky, WindowName } from "../contract";
 import { clampMaxWalk } from "../settings/store";
-import { TIME_ZONE, instantOf, toLocalIso } from "../solar/local-day";
+import { MORNING_WINDOW_MIN } from "../scorer/morning";
+import { MS_PER_MINUTE, TIME_ZONE, instantOf, toLocalIso } from "../solar/local-day";
 import { sampleTimeMs, sunTrack } from "../solar/sun-track";
-
-/** Minutes from Wake time to the end of the Morning window. */
-export const MORNING_WINDOW_MIN = 180;
 
 /** What the sentence holds: "I wake at [wakeTime] on [date], the sky looks [sky], ...". */
 export interface QueryInputs {
@@ -42,7 +40,7 @@ function wakeInstant(date: string, wakeTime: string): number {
 /** The date of the next Morning window to plan: today until it ends, else tomorrow. */
 export function nextMorningDate(nowMs: number, wakeTime: string): string {
   const today = localDate(nowMs);
-  const end = wakeInstant(today, wakeTime) + MORNING_WINDOW_MIN * 60_000;
+  const end = wakeInstant(today, wakeTime) + MORNING_WINDOW_MIN * MS_PER_MINUTE;
   return nowMs < end ? today : nextDate(today);
 }
 
@@ -103,7 +101,7 @@ export function morningWindowOver(query: Query): boolean {
   const nowMs = Date.parse(query.now);
   return (
     localDate(nowMs) === query.date &&
-    nowMs >= wakeInstant(query.date, query.wakeTime) + MORNING_WINDOW_MIN * 60_000
+    nowMs >= wakeInstant(query.date, query.wakeTime) + MORNING_WINDOW_MIN * MS_PER_MINUTE
   );
 }
 

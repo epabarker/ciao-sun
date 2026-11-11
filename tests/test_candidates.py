@@ -25,9 +25,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ciao_sun.candidates import build_tile, grid_ref_origin, load_walk_network
+from ciao_sun.candidates import build_tile, load_walk_network
 from ciao_sun.raster import RasterGrid
 from ciao_sun.tile_codec import PROFILE_SAMPLES, Tile, read_tile, write_tile
+from ciao_sun.tiles import grid_ref_origin
 from tests.conftest import make_flat_grid
 from tests.osm_extract import bng_of, write_osm_extract
 
@@ -394,9 +395,3 @@ def test_a_square_with_no_candidates_and_no_walk_edges_has_no_tile(tmp_path):
     network = load_walk_network(extract)
     assert build_tile(network, "ST6073", *_rasters()) is None
     assert network.grid_refs() == ["ST5873", "ST5973"]
-
-
-def test_grid_ref_origin_is_the_squares_south_west_corner():
-    assert grid_ref_origin("ST5873") == (358000, 173000)
-    assert grid_ref_origin("TQ3080") == (530000, 180000)
-    assert grid_ref_origin("SV0000") == (0, 0)

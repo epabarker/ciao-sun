@@ -74,7 +74,9 @@ describe("the tab the app opens on", () => {
 describe("the Evening tab", () => {
   it("words the sentence for the evening", async () => {
     const { root } = await mount("2026-12-21T12:00:00Z");
-    expect(root.querySelector("[data-field=sentence]")?.textContent).toMatch(/evening sky looks/);
+    expect(root.querySelector("[data-field=sentence]")?.textContent).toMatch(
+      /^I wake at.*on.*, the evening sky looks.*, and before sunset I'll walk up to.*min from.*\.$/s,
+    );
   });
 
   it("draws its timeline over the last 3 h before Nominal sunset", async () => {

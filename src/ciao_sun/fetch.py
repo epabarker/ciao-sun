@@ -55,6 +55,7 @@ from typing import Any, Protocol
 
 from ciao_sun import __version__, basemap
 from ciao_sun.coverage import Coverage
+from ciao_sun.report import silent
 from ciao_sun.tiles import tile_codes_near_polygon
 
 LOCKFILE_NAME = "fetch.lock.json"
@@ -182,10 +183,6 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _silent(message: str) -> None:
-    return None
-
-
 def fetch(
     coverage: Coverage,
     root: Path,
@@ -200,7 +197,7 @@ def fetch(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], datetime] = _utc_now,
-    report: Callable[[str], None] = _silent,
+    report: Callable[[str], None] = silent,
 ) -> Lockfile:
     """Bring `root` up to date with every build input and rewrite its lockfile.
 
@@ -471,7 +468,7 @@ def _obtain(
         _check_hash(item, dest, expected, "cached")
         downloaded = False
 
-    digest = _sha256(dest)
+    digest = sha256_of(dest)
     if previous is not None and previous.sha256 == digest and not downloaded:
         fetched_at = previous.fetched_at
     else:
@@ -537,7 +534,7 @@ def _download(item: _Wanted, part: Path, session: _Session) -> bool:
 def _check_hash(item: _Wanted, file: Path, expected: str | None, what: str) -> None:
     if expected is None:
         return
-    actual = _sha256(file)
+    actual = sha256_of(file)
     if actual == expected:
         return
     if what == "downloaded":
@@ -552,7 +549,8 @@ def _check_hash(item: _Wanted, file: Path, expected: str | None, what: str) -> N
     )
 
 
-def _sha256(path: Path) -> str:
+def sha256_of(path: Path) -> str:
+    """The file's SHA-256 as lowercase hex: the checksum lockfiles and manifests record."""
     digest = hashlib.sha256()
     with open(path, "rb") as f:
         while block := f.read(1 << 20):

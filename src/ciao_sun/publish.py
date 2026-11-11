@@ -43,7 +43,6 @@ one-time bucket and CORS setup.
 from __future__ import annotations
 
 import gzip
-import hashlib
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -51,8 +50,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ciao_sun import basemap
-from ciao_sun.fetch import FetchError, read_lockfile
+from ciao_sun.fetch import FetchError, read_lockfile, sha256_of
 from ciao_sun.manifest import MANIFEST_NAME, read_manifest
+from ciao_sun.report import silent
 
 CACHE_CONTROL = "public, max-age=31536000, immutable"
 ARCHIVED_INPUT_KINDS = ("osm", "terrain50")
@@ -126,10 +126,6 @@ class _Upload:
             )  # fmt: skip
 
 
-def _silent(message: str) -> None:
-    return None
-
-
 def publish(
     build_dir: Path,
     inputs_root: Path,
@@ -139,7 +135,7 @@ def publish(
     inputs_bucket: str,
     resume: bool = False,
     workers: int = DEFAULT_WORKERS,
-    report: Callable[[str], None] = _silent,
+    report: Callable[[str], None] = silent,
 ) -> Published:
     """Upload the build at `build_dir` and archive the inputs it was made from.
 
@@ -230,7 +226,7 @@ def _check_against_manifest(
             f"(differing: {', '.join(odd[:5])}{'…' if len(odd) > 5 else ''})."
         )
     for grid_ref, entry in index.items():
-        if _sha256(files[f"tiles/{grid_ref}.bin"]) != entry["sha256"]:
+        if sha256_of(files[f"tiles/{grid_ref}.bin"]) != entry["sha256"]:
             raise PublishError(
                 f"{build_dir}: tile {grid_ref} does not match the SHA-256 in the manifest. "
                 "The build directory has been changed since it was built."
@@ -269,7 +265,7 @@ def _archived_inputs(inputs_root: Path, manifest: dict[str, Any]) -> dict[str, P
             )
         for entry in matching:
             path = lock.path_of(entry)
-            if not path.is_file() or _sha256(path) != entry.sha256:
+            if not path.is_file() or sha256_of(path) != entry.sha256:
                 raise PublishError(
                     f"{path} is missing or does not match its lockfile SHA-256; "
                     "it cannot be archived as this build's input."
@@ -314,12 +310,6 @@ def _send_all(uploads: list[_Upload], store: ObjectStore, workers: int) -> None:
             raise
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 class S3ObjectStore:

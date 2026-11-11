@@ -22,16 +22,18 @@ and the horizon angle for that azimuth is max(angle) over all sampled d.
 from __future__ import annotations
 
 import numpy as np
-from pyproj import Proj, Transformer
+from pyproj import Proj
 
+from ciao_sun.crs import BNG_TO_WGS84
 from ciao_sun.raster import RasterGrid, sample
 
 _BNG = Proj("EPSG:27700")
-_BNG_TO_WGS84 = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
 
-EARTH_RADIUS_M = 6371000.0
+# The Earth radius the rays' curvature drop uses (with refraction, R_EFF); not the
+# lat/lon distances' DISTANCE_EARTH_RADIUS_M (`ciao_sun.reference.world`).
+CURVATURE_EARTH_RADIUS_M = 6371000.0
 STANDARD_REFRACTION_COEFF = 1.13
-R_EFF = EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
+R_EFF = CURVATURE_EARTH_RADIUS_M * STANDARD_REFRACTION_COEFF
 
 # Variable-density ray sampling: dense near the observer where parallax matters
 # most. Uniform 1 m sampling all the way to max_ray is ~14x the work for no
@@ -78,7 +80,7 @@ def meridian_convergence(x: float, y: float) -> float:
     the two differ by ~0.001 deg; the WGS84 value matches the grid bearing of
     a WGS84 meridian to ~0.0002 deg.
     """
-    lon, lat = _BNG_TO_WGS84.transform(x, y)
+    lon, lat = BNG_TO_WGS84.transform(x, y)
     return float(_BNG.get_factors(lon, lat).meridian_convergence)
 
 

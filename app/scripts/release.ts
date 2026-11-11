@@ -2,7 +2,8 @@
 // `.github/workflows/release.yml`, runs this from `app/` on a `ciao-sun-v*`
 // tag and attaches what it writes to the GitHub release; nothing else does.
 // Run by Node as TypeScript (type stripping), so it names its imports with
-// `.ts`, imports only types from `src/` and `test/`, and reads JSON with fs.
+// `.ts`, imports only types from `src/` and `test/` (values only from the
+// import-free `src/ids.ts`), and reads JSON with fs.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -12,18 +13,14 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 
+import type { ReleaseConfig } from "../src/config/release.ts";
+import { BUILD_ID, GRID_REF } from "../src/ids.ts";
+
 export class ReleaseRefused extends Error {
   override name = "ReleaseRefused";
 }
 
-export interface Pin {
-  dataBase: string;
-  format: number;
-  build: string;
-}
-
 const TAG = /^ciao-sun-v(\d+\.\d+\.\d+)$/;
-const BUILD_ID = /^\d{8}[a-z]$/;
 
 /** The version a tag releases: `ciao-sun-v<x.y.z>`, equal to `package.json`'s `version`. */
 export function checkTag(tag: string, version: string): string {
@@ -41,7 +38,7 @@ export function checkTag(tag: string, version: string): string {
 }
 
 /** `release.json` as the app reads it (`src/config/release.ts`): any non-empty `dataBase`. */
-export function checkPinShape(json: unknown): Pin {
+export function checkPinShape(json: unknown): ReleaseConfig {
   const { dataBase, format, build } = (json ?? {}) as Record<string, unknown>;
   if (typeof dataBase !== "string" || dataBase === "") {
     throw new ReleaseRefused("release.json: dataBase must be a non-empty URL");
@@ -56,7 +53,7 @@ export function checkPinShape(json: unknown): Pin {
 }
 
 /** `release.json`, if it pins a build the site can fetch: an absolute https `dataBase`. */
-export function checkPin(json: unknown): Pin {
+export function checkPin(json: unknown): ReleaseConfig {
   const { dataBase, format, build } = checkPinShape(json);
   if (!URL.canParse(dataBase) || new URL(dataBase).protocol !== "https:") {
     throw new ReleaseRefused(
@@ -71,7 +68,7 @@ export function checkPin(json: unknown): Pin {
 export type FetchLike = (url: string) => Promise<Response>;
 
 /** `<dataBase>/f<format>/<build>/`, joined as the app's loader does (`src/loader/loader.ts`). */
-export function buildUrl(pin: Pin): string {
+export function buildUrl(pin: ReleaseConfig): string {
   const dataBase = pin.dataBase.endsWith("/") ? pin.dataBase : `${pin.dataBase}/`;
   return new URL(`f${pin.format}/${pin.build}/`, dataBase).href;
 }
@@ -93,7 +90,6 @@ export function mirrorFetch(dataBase: string, dir: string): FetchLike {
   };
 }
 
-const GRID_REF = /^[A-Z]{2}\d{4}$/;
 const FIXTURE_FILE = /^[a-z0-9]+(-[a-z0-9]+)*\.json$/;
 
 interface IndexEntry {
@@ -114,7 +110,7 @@ export interface Downloaded {
  * (docs/fixtures.md). The manifest comes first: `publish` uploads it last, so
  * a build with one is whole.
  */
-export async function downloadBuild(pin: Pin, fetch: FetchLike, dir: string): Promise<Downloaded> {
+export async function downloadBuild(pin: ReleaseConfig, fetch: FetchLike, dir: string): Promise<Downloaded> {
   const url = buildUrl(pin);
   const buildDir = join(dir, `f${pin.format}`, pin.build);
   const get = async (path: string): Promise<Uint8Array> => {
@@ -190,7 +186,7 @@ interface VitestReport {
 export function runParity(
   appDir: string,
   dataBaseDir: string,
-  pin: Pin,
+  pin: ReleaseConfig,
   fixtures: number,
   echo = false,
 ): { fixtures: number; tests: number } {
@@ -261,7 +257,7 @@ const hasLiteral = (source: string, pattern: string) => new RegExp(pattern).test
  * but `sw.js` in the worker's precache; and the pin and version it was tested
  * with in both `sw.js` and the page's script. Else refused.
  */
-export function checkBundle(distDir: string, pin: Pin, version: string): string[] {
+export function checkBundle(distDir: string, pin: ReleaseConfig, version: string): string[] {
   if (!statSync(distDir, { throwIfNoEntry: false })?.isDirectory()) {
     throw new ReleaseRefused(`no bundle at ${distDir}`);
   }

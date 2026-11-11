@@ -11,14 +11,14 @@ samples agree within the storage code's half step plus 0.05 deg.
   is within 0.2 min of a linear 0.1 deg code on first sun, #6).
 - 0.05 deg covers the far-field lattice (p99 0.035 deg at 100 m, #6) and the
   far field's sparser sampling beyond 10 km (p99 0.014 deg).
-- 99%, because those are p99 figures: where a far skyline steps, a Candidate
-  up to 71 m from its lattice point legitimately sees the step a sample or
-  two to one side.
+- 99%, because those are p99 figures: where the Horizon profile steps at a
+  far ridge, a Candidate up to 71 m from its lattice point legitimately sees
+  the step a sample or two to one side.
 
 The direct rays use the tile's one meridian convergence, as the precompute
 does, so the near field agrees exactly. A profile cast along grid north instead
 of true north is turned by about 0.5 deg in Bristol (two samples), and fails
-wherever the skyline has more than a handful of edges.
+wherever the Horizon profile has more than a handful of edges.
 
 **Water guard.** There is no water mask (ADR 0003). Instead the build counts
 the Candidates whose merged horizon is set, at any azimuth, by a cell inside an
@@ -33,8 +33,9 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-from pyproj import Transformer
 
+from ciao_sun.candidates import CANDIDATE_SPACING_M
+from ciao_sun.crs import WGS84_TO_BNG
 from ciao_sun.horizon import (
     curvature_drop,
     grid_azimuth,
@@ -44,14 +45,15 @@ from ciao_sun.horizon import (
 )
 from ciao_sun.horizon_precompute import EYE_HEIGHT_M, NEAR_REACH_M, PROFILE_AZIMUTHS_DEG
 from ciao_sun.raster import RasterGrid, sample, sample_bilinear
-from ciao_sun.tile_codec import PROFILE_SAMPLES, Tile, codes_to_degrees
+from ciao_sun.tile_codec import (
+    FINE_TOP_DEG,
+    PROFILE_SAMPLES,
+    STORAGE_MAX_DEG,
+    STORAGE_MIN_DEG,
+    Tile,
+    codes_to_degrees,
+)
 
-_WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
-
-# Candidates stand on this National Grid lattice (`candidates.CANDIDATE_SPACING_M`).
-_CANDIDATE_GRID_M = 10.0
-_STORAGE_MIN_DEG, _STORAGE_MAX_DEG = -2.0, 63.5
-_FINE_TOP_DEG = 10.0
 _FAR_STEP_M = 50.0
 
 
@@ -99,10 +101,10 @@ class ProfileCheck:
 
 def candidate_positions(tile: Tile) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """A tile's Candidates in National Grid metres, back on their 10 m lattice."""
-    x, y = _WGS84_TO_BNG.transform(tile.candidates.lon_e7 / 1e7, tile.candidates.lat_e7 / 1e7)
+    x, y = WGS84_TO_BNG.transform(tile.candidates.lon_e7 / 1e7, tile.candidates.lat_e7 / 1e7)
     return (
-        np.round(np.asarray(x, dtype=np.float64) / _CANDIDATE_GRID_M) * _CANDIDATE_GRID_M,
-        np.round(np.asarray(y, dtype=np.float64) / _CANDIDATE_GRID_M) * _CANDIDATE_GRID_M,
+        np.round(np.asarray(x, dtype=np.float64) / CANDIDATE_SPACING_M) * CANDIDATE_SPACING_M,
+        np.round(np.asarray(y, dtype=np.float64) / CANDIDATE_SPACING_M) * CANDIDATE_SPACING_M,
     )
 
 
@@ -156,11 +158,11 @@ def check_tile_profiles(
         far = _direct_far(terrain50, x, y, eye, float(azimuth), convergence, far_reach_m)
         direct[:, i] = np.fmax(near, far)
     # NaN: no ground under the Candidate, or no surface along a whole ray.
-    direct = np.clip(direct, _STORAGE_MIN_DEG, _STORAGE_MAX_DEG)
+    direct = np.clip(direct, STORAGE_MIN_DEG, STORAGE_MAX_DEG)
 
     stored = codes_to_degrees(tile.candidates.profile_codes[chosen])
     half_step = np.where(
-        np.fmax(stored, direct) > _FINE_TOP_DEG,
+        np.fmax(stored, direct) > FINE_TOP_DEG,
         tolerances.coarse_half_step_deg,
         tolerances.fine_half_step_deg,
     )

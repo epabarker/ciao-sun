@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ciao_sun.tiles import bng_to_tile_code, tile_codes_near_polygon
+from ciao_sun.tiles import bng_to_tile_code, grid_ref_origin, tile_codes_near_polygon
 
 
 def test_bng_origin_is_grid_square_sv():
@@ -15,6 +15,14 @@ def test_central_london_is_grid_square_tq():
     # Central London (easting ~530000, northing ~180000) is well-known to be in
     # grid square TQ.
     assert bng_to_tile_code(530_000.0, 180_000.0) == "TQ3080"
+
+
+def test_a_1km_grid_ref_names_the_square_by_its_south_west_corner():
+    # docs/tile-format-f1.md: ST5873.bin is the square whose south-west corner
+    # is 358000 E, 173000 N.
+    assert grid_ref_origin("ST5873") == (358000, 173000)
+    assert grid_ref_origin("TQ3080") == (530000, 180000)
+    assert grid_ref_origin("SV0000") == (0, 0)
 
 
 def test_100km_boundary_crossing():

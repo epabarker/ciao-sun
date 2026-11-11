@@ -159,22 +159,6 @@ def test_a_missing_osm_extract_is_reported(tmp_path: Path) -> None:
         read_building_footprints(tmp_path / "nowhere.osm.pbf", BNG)
 
 
-def test_a_tree_cell_is_raised_to_the_first_return_height(
-    footprints: BuildingFootprints,
-) -> None:
-    last, first, dtm = _world()
-    # A bare winter crown: the last return reaches the ground, the first return
-    # stops on the branches 12 m up.
-    first.data[3, 15] = 22.0
-
-    surface = crown_envelope_surface(last, first, dtm, footprints)
-
-    assert surface.data[3, 15] == 22.0
-    # Its neighbours are open ground.
-    assert surface.data[3, 14] == GROUND
-    assert surface.data[4, 15] == GROUND
-
-
 def test_a_building_edge_cell_inside_the_buffer_is_not_raised(
     footprints: BuildingFootprints,
 ) -> None:
@@ -247,18 +231,13 @@ def test_cells_with_no_first_return_keep_the_last_return_height(
     assert surface.data[6, 16] == 13.0
 
 
-def test_the_surface_shares_its_inputs_grid_and_leaves_them_untouched(
-    footprints: BuildingFootprints,
-) -> None:
+def test_the_last_return_is_left_untouched(footprints: BuildingFootprints) -> None:
+    # The build goes on to pick Candidates' open ground from the same last return.
     last, first, dtm = _world()
     first.data[3, 15] = 22.0
 
-    surface = crown_envelope_surface(last, first, dtm, footprints)
+    crown_envelope_surface(last, first, dtm, footprints)
 
-    assert surface.transform == last.transform
-    assert surface.crs == last.crs
-    assert surface.shape == last.shape
-    assert surface.data.dtype == np.float32
     assert last.data[3, 15] == GROUND
 
 

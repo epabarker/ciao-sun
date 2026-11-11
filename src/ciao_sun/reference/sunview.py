@@ -17,7 +17,7 @@ OPENNESS_CUTOFF = 0.75
 
 _SAMPLES_PER_DEG = PROFILE_SAMPLES / 360.0
 _DEGREES_OF_CODE = codes_to_degrees(np.arange(CODE_COUNT))
-# What one profile sample adds to the sector sky-view fraction: cos^2(max(h, 0)).
+# What one profile sample adds to the sector's Sky openness: cos^2(max(h, 0)).
 _OPEN_SKY_OF_CODE = np.cos(np.radians(np.maximum(_DEGREES_OF_CODE, 0.0))) ** 2
 
 
@@ -71,11 +71,11 @@ def low_sun(track: SunTrack, start: int, end: int) -> npt.NDArray[np.bool_]:
 def sky_openness(
     profile_codes: npt.NDArray[np.uint8], track: SunTrack, start: int, end: int
 ) -> npt.NDArray[np.float64]:
-    """Sky openness per Candidate: the sector sky-view fraction.
+    """Sky openness per Candidate, over the sun path's sector.
 
     The sector runs from the least to the greatest true azimuth of the sun
-    over the minutes `start` to `end`, widened by 10 degrees each side. The
-    fraction is the mean of cos^2(max(h, 0)) over the profile samples whose
+    over the minutes `start` to `end`, widened by 10 degrees each side. It
+    is the mean of cos^2(max(h, 0)) over the profile samples whose
     azimuth lies in the sector, ends included.
     """
     path = track.azimuth[start:end]

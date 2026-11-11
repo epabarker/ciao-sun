@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import typer
-from pyproj import Transformer
 
 from ciao_sun import build as tile_build
 from ciao_sun import fetch as fetch_inputs
@@ -18,6 +17,7 @@ from ciao_sun import publish as publisher
 from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.config import CiaoSunConfig
 from ciao_sun.coverage import Coverage, CoverageError
+from ciao_sun.crs import WGS84_TO_BNG
 from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
 from ciao_sun.raster import TilesNotFoundError, find_tiles, load_mosaic_cached
 from ciao_sun.raster import sample as raster_sample
@@ -28,7 +28,6 @@ from ciao_sun.terrain50 import Terrain50Error
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
-_WGS84_TO_BNG = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
 
 EYE_HEIGHT_DEFAULT = 1.6
 
@@ -377,7 +376,7 @@ def profile_only(
     lat, lon = _parse_centre(point)
     cfg = CiaoSunConfig.load(config, home_lat=lat, home_lon=lon, date=date, max_ray=max_ray)
     date, max_ray = cfg.date, cfg.max_ray
-    px, py = _WGS84_TO_BNG.transform(lon, lat)
+    px, py = WGS84_TO_BNG.transform(lon, lat)
     pad = max_ray
     bounds = (px - pad, py - pad, px + pad, py + pad)
     try:

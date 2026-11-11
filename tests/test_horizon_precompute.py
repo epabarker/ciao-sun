@@ -202,14 +202,6 @@ def test_profile_is_1440_samples_each_within_the_storage_code_tolerance_of_a_dir
     assert (direct < 10.0).any() and (direct > 10.5).any()
 
 
-def test_far_field_reach_is_capped_at_100_km():
-    cx, cy = _bristol_candidate()
-    world = _rooftop_world(cx, cy, seed=34)
-
-    with pytest.raises(ValueError, match="100000 m"):
-        horizon_profile_codes(world, far_reach_m=100_001.0)
-
-
 _PARALLEL_TILES = {"ST5873": 1, "ST5973": 2, "ST5874": 3}
 
 

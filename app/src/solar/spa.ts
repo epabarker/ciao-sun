@@ -6,15 +6,13 @@
 // that as the reference. SPA's own refraction and rise/set routines are not
 // ported: the model does not use them.
 
+import { DEGREES_PER_RADIAN, RADIANS_PER_DEGREE } from "../angles";
 import { B0, B1, L0, L1, L2, L3, L4, L5, NUTATION_ABCD, NUTATION_Y, R0, R1, R2, R3, R4 } from "./spa-tables";
 
 /** Delta T (TT - UT1) in seconds: fixed for every query. */
 export const DELTA_T_SECONDS = 67.0;
 /** Observer altitude in metres: fixed for every query. */
 export const OBSERVER_ALTITUDE_M = 0.0;
-
-const RAD = Math.PI / 180;
-const DEG = 180 / Math.PI;
 
 type Table = readonly (readonly number[])[];
 
@@ -59,7 +57,7 @@ function nutation(jce: number): [number, number] {
     const y = NUTATION_Y[row]!;
     const [a, b, c, d] = NUTATION_ABCD[row] as readonly [number, number, number, number];
     const argument =
-      RAD * (y[0]! * x[0] + y[1]! * x[1] + y[2]! * x[2] + y[3]! * x[3] + y[4]! * x[4]);
+      RADIANS_PER_DEGREE * (y[0]! * x[0] + y[1]! * x[1] + y[2]! * x[2] + y[3]! * x[3] + y[4]! * x[4]);
     psi += (a + b * jce) * Math.sin(argument);
     epsilon += (c + d * jce) * Math.cos(argument);
   }
@@ -99,8 +97,8 @@ export function sunPosition(unixSeconds: number, lat: number, lon: number): SunP
 
   // Earth's heliocentric position, then the sun's geocentric one.
   const radius = series([R0, R1, R2, R3, R4], jme); // AU
-  const helioLongitude = mod(series([L0, L1, L2, L3, L4, L5], jme) * DEG, 360);
-  const helioLatitude = series([B0, B1], jme) * DEG;
+  const helioLongitude = mod(series([L0, L1, L2, L3, L4, L5], jme) * DEGREES_PER_RADIAN, 360);
+  const helioLatitude = series([B0, B1], jme) * DEGREES_PER_RADIAN;
   const theta = mod(helioLongitude + 180, 360);
   const beta = -helioLatitude;
 
@@ -113,13 +111,13 @@ export function sunPosition(unixSeconds: number, lat: number, lon: number): SunP
     280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * jc * jc - (jc * jc * jc) / 38710000,
     360,
   );
-  const sidereal = meanSidereal + deltaPsi * Math.cos(RAD * epsilon);
+  const sidereal = meanSidereal + deltaPsi * Math.cos(RADIANS_PER_DEGREE * epsilon);
 
-  const epsilonRad = RAD * epsilon;
-  const lambdaRad = RAD * lambda;
-  const betaRad = RAD * beta;
+  const epsilonRad = RADIANS_PER_DEGREE * epsilon;
+  const lambdaRad = RADIANS_PER_DEGREE * lambda;
+  const betaRad = RADIANS_PER_DEGREE * beta;
   const rightAscension = mod(
-    DEG *
+    DEGREES_PER_RADIAN *
       Math.atan2(
         Math.sin(lambdaRad) * Math.cos(epsilonRad) - Math.tan(betaRad) * Math.sin(epsilonRad),
         Math.cos(lambdaRad),
@@ -132,9 +130,9 @@ export function sunPosition(unixSeconds: number, lat: number, lon: number): SunP
   );
 
   // Topocentric: correct for the observer's place on the Earth's surface.
-  const hourAngleRad = RAD * mod(sidereal + lon - rightAscension, 360);
-  const parallaxRad = RAD * (8.794 / (3600 * radius));
-  const latRad = RAD * lat;
+  const hourAngleRad = RADIANS_PER_DEGREE * mod(sidereal + lon - rightAscension, 360);
+  const parallaxRad = RADIANS_PER_DEGREE * (8.794 / (3600 * radius));
+  const latRad = RADIANS_PER_DEGREE * lat;
   const u = Math.atan(0.99664719 * Math.tan(latRad));
   const x = Math.cos(u) + (OBSERVER_ALTITUDE_M / 6378140) * Math.cos(latRad);
   const y = 0.99664719 * Math.sin(u) + (OBSERVER_ALTITUDE_M / 6378140) * Math.sin(latRad);
@@ -151,14 +149,14 @@ export function sunPosition(unixSeconds: number, lat: number, lon: number): SunP
   const topoHourAngleRad = hourAngleRad - deltaAlphaRad;
 
   const elevation =
-    DEG *
+    DEGREES_PER_RADIAN *
     Math.asin(
       Math.sin(latRad) * Math.sin(topoDeclinationRad) +
         Math.cos(latRad) * Math.cos(topoDeclinationRad) * Math.cos(topoHourAngleRad),
     );
   // Astronomers' azimuth is measured westward from south; ours eastward from north.
   const astronomersAzimuth = mod(
-    DEG *
+    DEGREES_PER_RADIAN *
       Math.atan2(
         Math.sin(topoHourAngleRad),
         Math.cos(topoHourAngleRad) * Math.sin(latRad) - Math.tan(topoDeclinationRad) * Math.cos(latRad),

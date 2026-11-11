@@ -15,6 +15,7 @@
 // three, so a denied GPS offers the saved places (#49).
 
 import { MAX_WALK_CAP_MIN, type Sky, type WindowName } from "../contract";
+import { parseOrigin } from "../query/origin";
 import type { QueryInputs } from "../query/query";
 import type { SavedPlace } from "../settings/store";
 import { h } from "./dom";
@@ -26,6 +27,20 @@ export type OriginSlot =
   | { kind: "typed"; text: string; reason?: string }
   /** A saved place, as it was when picked (the app keeps it in step with renames). */
   | { kind: "place"; place: SavedPlace };
+
+/** Where an origin slot puts the origin, or undefined while it has none yet. */
+export function originPosition(origin: OriginSlot): { lat: number; lon: number } | undefined {
+  switch (origin.kind) {
+    case "gps":
+      return { lat: origin.lat, lon: origin.lon };
+    case "typed":
+      return parseOrigin(origin.text);
+    case "place":
+      return { lat: origin.place.lat, lon: origin.place.lon };
+    case "locating":
+      return undefined;
+  }
+}
 
 export interface SentenceState extends Omit<QueryInputs, "origin"> {
   window: WindowName;
@@ -70,10 +85,10 @@ export const WORDING: Record<WindowName, Wording> = {
     from: "min from",
     end: ".",
   },
-  // "I woke at 07:00 on 21 Dec, the evening sky looks clear, and before
+  // "I wake at 07:00 on 21 Dec, the evening sky looks clear, and before
   // sunset I'll walk up to 15 min from here."
   evening: {
-    wake: "I woke at",
+    wake: "I wake at",
     on: "on",
     sky: ", the evening sky looks",
     walk: ", and before sunset I'll walk up to",
@@ -113,11 +128,29 @@ const HERE = "here";
 const TYPED = "typed";
 const PLACE = "place:";
 
+/** The words for the GPS origin: "here", and while GPS has not answered yet, says so. */
+function hereLabel(origin: OriginSlot): string {
+  return origin.kind === "locating" ? "here (locating…)" : "here";
+}
+
+/** Which of the select's choices an origin slot is. */
+function choiceOf(origin: OriginSlot): string {
+  switch (origin.kind) {
+    case "place":
+      return PLACE + origin.place.id;
+    case "typed":
+      return TYPED;
+    case "gps":
+    case "locating":
+      return HERE;
+  }
+}
+
 /** The origin slot once places are saved: here, each place, or a typed position. */
 function originChoice(origin: OriginSlot, places: readonly SavedPlace[], events: SentenceEvents): Node {
-  const value = origin.kind === "place" ? PLACE + origin.place.id : origin.kind === "typed" ? TYPED : HERE;
+  const value = choiceOf(origin);
   const labels = new Map<string, string>([
-    [HERE, origin.kind === "locating" ? "here (locating…)" : "here"],
+    [HERE, hereLabel(origin)],
     ...places.map((place): [string, string] => [PLACE + place.id, place.name]),
     [TYPED, "a position…"],
   ]);
@@ -149,7 +182,7 @@ function originSlot(origin: OriginSlot, places: readonly SavedPlace[], events: S
   const button = h(
     "button",
     { type: "button", class: "slot slot-button", "data-action": "type-origin", title: "Type a position instead" },
-    origin.kind === "locating" ? "here (locating…)" : origin.kind === "place" ? origin.place.name : "here",
+    origin.kind === "place" ? origin.place.name : hereLabel(origin),
   );
   button.addEventListener("click", () => events.typeOrigin(""));
   return button;

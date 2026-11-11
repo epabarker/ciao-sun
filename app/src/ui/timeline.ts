@@ -12,7 +12,7 @@
 // it: the line then sits at the axis start marked data-off-axis="before".
 
 import type { AnswerWindow, Interval, Spot } from "../contract";
-import { TIME_ZONE, toLocalIso } from "../solar/local-day";
+import { MS_PER_MINUTE, TIME_ZONE, toLocalIso } from "../solar/local-day";
 import { h } from "./dom";
 import { clockOf } from "./format";
 
@@ -55,14 +55,14 @@ function intervals(kind: SegmentKind, axis: Axis, list: readonly Interval[]): (H
 export function timelineBar(spot: Spot, window: AnswerWindow): HTMLElement {
   const axis = new Axis(window);
   const leave = Date.parse(spot.leaveBy);
-  const arrive = leave + spot.walkMin * 60_000;
+  const arrive = leave + spot.walkMin * MS_PER_MINUTE;
   return h(
     "div",
     { class: "timeline", role: "img", "aria-label": timelineDescription(spot) },
     ...intervals("sun", axis, spot.sunIntervals),
     ...intervals("low-sun", axis, spot.lowSunIntervals),
     segment("walk", axis.place(leave, arrive)),
-    spot.stayMin ? segment("stay", axis.place(arrive, arrive + spot.stayMin * 60_000)) : null,
+    spot.stayMin ? segment("stay", axis.place(arrive, arrive + spot.stayMin * MS_PER_MINUTE)) : null,
     h("span", {
       class: "seg seg-leave-by",
       "data-segment": "leave-by",

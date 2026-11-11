@@ -24,6 +24,11 @@ boundary between the 1 km squares ST5773 and ST5873 (easting 358000):
 
 `tidal_river=True` adds a river north of the street whose first return stands
 5 m above the ground, as tidal water does in the EA composite.
+
+`streets` and `box` make the wider world the committed golden fixtures are
+built from (`tests/synthetic_fixtures.py`): the street's three edges become
+three streets with their own names, and the coverage takes in the whole street,
+so an Answer can list more than one spot.
 """
 
 from __future__ import annotations
@@ -59,6 +64,10 @@ STREET_Y = 173500
 COVERAGE_BOX = (357905.0, 173400.0, 358095.0, 173600.0)
 CANDIDATE_XS = tuple(range(357910, 358100, 10))
 CANDIDATE_YS = (173490, 173500, 173510)
+STREET = ("Ridge Road",)
+# The wider world: the street's edges 1-2, 2-3 and 3-4 named apart, and all of it covered.
+THREE_STREETS = ("West Row", "Ridge Road", "East Street")
+WIDE_COVERAGE_BOX = (357805.0, 173400.0, 358195.0, 173600.0)
 
 P = (358050.0, 173500.0)
 WALL_TOP = 40.0
@@ -125,7 +134,9 @@ def _zip(members: Mapping[str, bytes]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, body in members.items():
-            archive.writestr(name, body)
+            # A fixed timestamp: the same world gives the same bytes, and so the same hashes.
+            entry = zipfile.ZipInfo(name, date_time=(2026, 11, 11, 0, 0, 0))
+            archive.writestr(entry, body, compress_type=zipfile.ZIP_DEFLATED)
     return buffer.getvalue()
 
 
@@ -142,15 +153,21 @@ def _terrain50_zip() -> bytes:
     return _zip(members)
 
 
-def _osm_extract(path: Path, tidal_river: bool) -> bytes:
+def _osm_extract(path: Path, tidal_river: bool, streets: tuple[str, ...]) -> bytes:
     nodes: dict[int, tuple[float, float]] = {
         1: (357850, STREET_Y), 2: (357950, STREET_Y), 3: (358050, STREET_Y), 4: (358150, STREET_Y),
         # the pond
         11: (357960, 173455), 12: (357990, 173455), 13: (357990, 173475), 14: (357960, 173475),
     }  # fmt: skip
+    # One way for the whole street, or one per edge when the edges are named apart.
+    street_nodes = [[1, 2, 3, 4]] if len(streets) == 1 else [[1, 2], [2, 3], [3, 4]]
     ways: list[tuple[int, list[int], dict[str, str]]] = [
-        (100, [1, 2, 3, 4], {"highway": "residential", "name": "Ridge Road"}),
+        (100, street_nodes[0], {"highway": "residential", "name": streets[0]}),
         (101, [11, 12, 13, 14, 11], {"natural": "water"}),
+    ]
+    ways += [
+        (102 + i, refs, {"highway": "residential", "name": name})
+        for i, (refs, name) in enumerate(zip(street_nodes[1:], streets[1:], strict=True), start=1)
     ]
     if tidal_river:
         nodes |= {
@@ -189,7 +206,13 @@ class _FakeWeb:
         return Response(404, [])
 
 
-def fetch_inputs(root: Path, *, tidal_river: bool = False) -> Lockfile:
+def fetch_inputs(
+    root: Path,
+    *,
+    tidal_river: bool = False,
+    streets: tuple[str, ...] = STREET,
+    box: tuple[float, float, float, float] = COVERAGE_BOX,
+) -> Lockfile:
     """Write the synthetic inputs under `root` by running the real fetch against a fake web."""
     root.mkdir(parents=True, exist_ok=True)
     ground = np.full((Y1 - Y0, X1 - X0), GROUND)
@@ -206,7 +229,7 @@ def fetch_inputs(root: Path, *, tidal_river: bool = False) -> Lockfile:
     scratch = root / "scratch"
     scratch.mkdir(exist_ok=True)
     survey = _survey_metadata(scratch)
-    osm = _osm_extract(scratch / "extract.osm.pbf", tidal_river)
+    osm = _osm_extract(scratch / "extract.osm.pbf", tidal_river, streets)
     bodies = {
         f"/lidar_composite_last_return_dsm/2022/1/{EA_TILE}": _zip(
             {f"{EA_TILE}_LAST_RETURN_DSM_1m.tif": _geotiff(last),
@@ -220,11 +243,11 @@ def fetch_inputs(root: Path, *, tidal_river: bool = False) -> Lockfile:
         "&redirect": _terrain50_zip(),
         ".osm.pbf": osm,
         "/builds.json": protomaps.builds_json(),
-        f"/{protomaps.BUILD}.pmtiles": protomaps.archive_bytes(coverage().bounds_wgs84()),
+        f"/{protomaps.BUILD}.pmtiles": protomaps.archive_bytes(coverage(box).bounds_wgs84()),
     }  # fmt: skip
     clock = iter(range(0, 10**9, 2))
     return fetch(
-        coverage(),
+        coverage(box),
         root / "inputs",
         osm_date="261110",
         client=_FakeWeb(bodies),

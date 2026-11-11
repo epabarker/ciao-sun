@@ -8,6 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from ciao_sun.reference.contract import Answer, Query
+from ciao_sun.reference.lamp import lamp_only
 from ciao_sun.reference.windows import WindowPlan, minute_of, now_minute, wake_minute
 from ciao_sun.solar import SunTrack
 
@@ -55,4 +56,4 @@ def plan_morning(query: Query, track: SunTrack) -> WindowPlan | Answer:
 
 def _no_daylight(query: Query, track: SunTrack) -> Answer:
     """The Morning window holds no daylight: the lamp-only Answer."""
-    raise NotImplementedError("the lamp-only Answer is ticket #40")
+    return lamp_only(query, track)

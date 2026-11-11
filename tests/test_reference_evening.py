@@ -334,6 +334,24 @@ def test_evening_leave_by_is_never_before_now(
     assert spot.target_met is target_met
 
 
+# --- Fallback ----------------------------------------------------------------
+
+
+def test_an_overcast_evening_lists_fallback_spots_left_for_at_the_start_of_the_window(
+    tmp_path: Path,
+) -> None:
+    tiles = street(tmp_path, [Stand(400, "Roof Row", ROOF)])
+
+    result = answer(evening(wake_time="07:00", sky="overcast"), tiles)
+
+    assert result.status == "fallback"
+    assert result.lamp is None  # there is no evening lamp
+    [spot] = result.spots
+    assert spot.leave_by == at("13:00")
+    assert spot.stay_min == 30
+    assert spot.last_sun == at("15:28")
+
+
 # --- Contract ----------------------------------------------------------------
 
 

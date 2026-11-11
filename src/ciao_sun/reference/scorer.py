@@ -8,17 +8,23 @@ fixtures come from. The rules live beside it:
 - `world`: tiles joined into one walk graph; the origin snap and the walk
 - `scoring`: per-Candidate scores, and a scored Candidate as a Spot
 - `ranking`: the deterministic order and the de-dupe
+- `fallback`: the nearest open spots, and the nearest sun beyond max walk
+- `lamp`: the lamp message and the lamp-only Answer
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
 
+from ciao_sun.coverage import Coverage
 from ciao_sun.reference.contract import Answer, Query, Sky, Spot, Status, Window, WindowName
 from ciao_sun.reference.evening import plan_evening
+from ciao_sun.reference.fallback import fallback_spots, nearest_sun_beyond_limit
+from ciao_sun.reference.lamp import lamp
 from ciao_sun.reference.morning import plan_morning
 from ciao_sun.reference.ranking import dedupe, rank_by_low_sun
 from ciao_sun.reference.scoring import build_spot, score, walk_minutes
@@ -35,10 +41,14 @@ Planner = Callable[[Query, SunTrack], WindowPlan | Answer]
 PLANNERS: dict[WindowName, Planner] = {"morning": plan_morning, "evening": plan_evening}
 
 
-def answer(query: Query, tiles: Sequence[Tile]) -> Answer:
-    """The Answer to a Query over built tiles (read them with `load_tiles`)."""
-    if query.window not in PLANNERS:
-        raise NotImplementedError(f"the {query.window} window is not built yet (ticket #39)")
+def answer(query: Query, tiles: Sequence[Tile], coverage: Coverage | None = None) -> Answer:
+    """The Answer to a Query over built tiles (read them with `load_tiles`).
+
+    `coverage` is the build's coverage polygon. An origin outside it is not
+    covered, whatever the window; without one, every origin is answered.
+    """
+    if coverage is not None and not coverage.contains(query.origin_lat, query.origin_lon):
+        return Answer(status="not-covered")
     track = sun_track(query.origin_lat, query.origin_lon, query.date, tz=TIME_ZONE)
     plan = PLANNERS[query.window](query, track)
     if isinstance(plan, Answer):
@@ -50,7 +60,14 @@ def answer(query: Query, tiles: Sequence[Tile]) -> Answer:
 
     sunny = np.flatnonzero(scored.reachable & (scored.sun_minutes > 0))
     if query.sky == "overcast" or sunny.size == 0:
-        raise NotImplementedError("the fallback Answer is ticket #40")
+        listed = fallback_spots(world, track, plan, scored, target_min)
+        beyond = (
+            None
+            if query.sky == "overcast"
+            else nearest_sun_beyond_limit(world, track, plan, scored, target_min)
+        )
+        fallback = windowed_answer("fallback", listed, query, track, plan)
+        return replace(fallback, nearest_sun_beyond_limit=beyond)
 
     spots = []
     for j in dedupe(world, scored, rank_by_low_sun(world, scored, sunny)):
@@ -80,4 +97,5 @@ def windowed_answer(
         nominal_sunset=event(track.nominal_sunset),
         solar_noon=event(track.solar_noon),
         duration_target_min=DURATION_TARGET_MIN[query.sky],
+        lamp=lamp(query, track) if query.window == "morning" else None,
     )

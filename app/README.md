@@ -37,7 +37,7 @@ src/config/release.ts   the release config, read from release.json at build time
 src/loader/loader.ts    data loader: openBuild(pin) checks the manifest format; Build.area(origin) -> tiles
 src/loader/grid.ts      WGS84 -> National Grid, and the 1 km tiles in reach of an origin
 src/scorer/coverage.ts  whether an origin is inside the manifest's coverage polygon (the scorer's not-covered; the loader uses it too)
-src/settings/store.ts   settings store: Wake time, max walk; browser storage with a memory fallback
+src/settings/store.ts   settings store: Wake time, max walk, saved places; browser storage with a memory fallback
 src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
 src/query/origin.ts     the typed origin "lat, lon"
 src/ui/                 the answer screen (below)
@@ -85,7 +85,8 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 | File | Does | Extended by |
 |---|---|---|
 | `ui/screen.ts` | the frame: `header.top` (sentence), `main.sheet` (result), `footer.foot`; the `Result` kinds (loading, unreadable data, data unavailable, ...) | #47 makes `.sheet` a bottom sheet over the map; #48 puts tabs in the header and safety copy in the footer; #51 an About link there |
-| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING` | #48 Evening wording; #49 saved places in `OriginSlot`; #50 the sky slot's forecast and credit |
+| `ui/sentence.ts` | the sentence editor; its words per window in `WORDING`; the origin slot (`OriginSlot`: locating, GPS, typed or a saved place) | #48 Evening wording; #50 the sky slot's forecast and credit |
+| `ui/places.ts` | saved places: the toggle under the sentence, rename, delete, save the origin in use | |
 | `ui/answer-view.ts` | an Answer by status, from `STATUS_VIEWS` | #48 replaces the `fallback`, `lamp-only` and `no-evening-window` entries and adds the lamp notice; #47 links rows (`data-spot` is the candidateId) to markers |
 | `ui/timeline.ts` | the timeline bar and its axis | #48 the "stay N min" segment (`SegmentKind` has `stay`) |
 | `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
@@ -101,6 +102,16 @@ The settings store (`openSettings(() => localStorage)`) has `read()`,
 `update(change)` and `persistent`; a new setting is a field of `Settings` with
 a reader in `FIELDS`. Wake time edited in the sentence is an override for one
 query; "Make HH:MM my usual Wake time" saves it. Max walk saves on change.
+
+Saved places (#49) are `Settings.places`, a list of `SavedPlace`
+`{id, name, lat, lon}` in saving order; `id` is a decimal string, unique on
+the phone. They are only ever written to the settings store: the one network
+dependency, `fetch`, is called only by the data loader, with the pinned
+build's file paths. The origin in use is `state.origin`, an `OriginSlot`, and
+`origin()` in `app.ts` turns it into the Query's `{lat, lon}`; saving takes the
+position from the origin in use (GPS or typed). Once a place is saved the
+origin slot is a select of "here", each place and "a position…", so a denied
+GPS offers them. `test/app/saved-places.test.ts` covers it through `AppDeps`.
 
 ## Conventions
 

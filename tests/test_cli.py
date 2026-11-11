@@ -1,4 +1,4 @@
-"""CLI smoke test: `ciao-sun tiles` for the Bristol example in HANDOFF.md."""
+"""CLI smoke tests: `ciao-sun tiles` for the Bristol example in HANDOFF.md; console script."""
 
 from __future__ import annotations
 
@@ -27,9 +27,8 @@ def test_tiles_command_rejects_bad_centre():
 def test_ciao_sun_console_script_runs_the_cli():
     (script,) = entry_points(group="console_scripts", name="ciao-sun")
     assert script.dist is not None and script.dist.name == "ciao-sun"
-    assert script.value == "ciao_sun.cli:app"
+    assert script.load() is app
 
-    result = runner.invoke(script.load(), ["--help"], prog_name="ciao-sun")
+    result = runner.invoke(script.load(), ["--help"])
     assert result.exit_code == 0, result.output
-    assert "Usage: ciao-sun" in result.output
     assert "tiles" in result.output

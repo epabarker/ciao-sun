@@ -23,4 +23,4 @@ This departs from the site's convention of committing everything into git. That 
 
 ## Amendments
 
-- **2026-11-10, names only.** The tool was renamed from sunspot to Ciao Sun ([spec #27](https://github.com/epabarker/ciao-sun/issues/27), [ticket #28](https://github.com/epabarker/ciao-sun/issues/28)), and the names this decision relies on were amended to match. The site path is `/ciao-sun/` (was `/sunspot/`), and the app release that pins a build is tagged `ciao-sun-v<x.y.z>` (was `sunspot-v<x.y.z>`). The reasoning is otherwise unchanged.
+- **2026-11-10, names only.** The tool was renamed from sunspot to Ciao Sun ([spec #27](https://github.com/epabarker/ciao-sun/issues/27), [ticket #28](https://github.com/epabarker/ciao-sun/issues/28)), and the names this decision relies on were amended to match. The site path is `/ciao-sun/` (was `/sunspot/`). The app release that pins a build is tagged `ciao-sun-v<x.y.z>`; this ADR did not name the tag before, and the website contract ([#16](https://github.com/epabarker/ciao-sun/issues/16)) called it `sunspot-v<x.y.z>`. The reasoning is otherwise unchanged.

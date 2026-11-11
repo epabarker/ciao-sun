@@ -33,9 +33,10 @@ TODAY = date(2026, 11, 11)
 
 
 class Built:
-    def __init__(self, directory: Path, inputs: Path) -> None:
+    def __init__(self, directory: Path, inputs: Path, reported: list[str]) -> None:
         self.directory = directory
         self.inputs = inputs
+        self.reported = reported
         self.manifest = json.loads((directory / "manifest.json").read_text())
         self.tiles: dict[str, Tile] = {
             path.stem: read_tile(path) for path in sorted((directory / "tiles").glob("*.bin"))
@@ -46,8 +47,13 @@ class Built:
 def built(tmp_path_factory: pytest.TempPathFactory) -> Built:
     root = tmp_path_factory.mktemp("build")
     lock = world.fetch_inputs(root)
-    directory = build(world.coverage(), lock.root, root / "builds", today=TODAY)
-    return Built(directory, lock.root)
+    reported: list[str] = []
+    ten_minutes_a_tick = iter(range(0, 10**9, 600))
+    directory = build(
+        world.coverage(), lock.root, root / "builds", today=TODAY,
+        report=reported.append, clock=lambda: float(next(ten_minutes_a_tick)),
+    )  # fmt: skip
+    return Built(directory, lock.root, reported)
 
 
 def test_a_build_writes_one_tile_per_square_the_coverage_touches_and_a_manifest(built: Built):
@@ -55,6 +61,17 @@ def test_a_build_writes_one_tile_per_square_the_coverage_touches_and_a_manifest(
     assert built.manifest["format"] == 1
     assert built.manifest["build"] == "20261111a"
     assert built.directory.name == "20261111a" and built.directory.parent.name == "f1"
+
+
+def test_a_build_reports_each_square_as_it_finishes_with_the_time_left(built: Built):
+    counts = {ref: entry["candidates"] for ref, entry in built.manifest["tiles"].items()}
+
+    progress = [line for line in built.reported if line.startswith("square ")]
+
+    assert progress == [
+        f"square 1/2 ST5773: {counts['ST5773']} Candidates; 10 min elapsed, about 10 min left",
+        f"square 2/2 ST5873: {counts['ST5873']} Candidates; 20 min elapsed, about 0 min left",
+    ]
 
 
 def _positions(tile: Tile) -> list[tuple[int, int]]:

@@ -214,14 +214,21 @@ def _write_rooftop_tile(directory: Path, grid_ref: str) -> Path:
 
 
 def test_tiles_computed_in_parallel_are_byte_identical_to_a_serial_run(tmp_path):
+    serial_done: list[tuple[str, Path]] = []
+    parallel_done: list[tuple[str, Path]] = []
     serial = precompute_tiles(
-        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "serial"), workers=1
-    )
+        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "serial"), workers=1,
+        on_done=lambda ref, path: serial_done.append((ref, path)),
+    )  # fmt: skip
     parallel = precompute_tiles(
-        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "parallel"), workers=3
-    )
+        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "parallel"), workers=3,
+        on_done=lambda ref, path: parallel_done.append((ref, path)),
+    )  # fmt: skip
 
     assert list(serial) == list(parallel) == list(_PARALLEL_TILES)
+    # Each tile is announced once as it finishes; in parallel, in whatever order they finish.
+    assert serial_done == list(serial.items())
+    assert sorted(parallel_done) == sorted(parallel.items())
     for grid_ref in _PARALLEL_TILES:
         assert parallel[grid_ref].read_bytes() == serial[grid_ref].read_bytes()
     profiles = [read_tile(path).candidates.profile_codes for path in parallel.values()]

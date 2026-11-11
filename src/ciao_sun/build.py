@@ -46,6 +46,7 @@ import shutil
 import sqlite3
 import string
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -347,6 +348,37 @@ def _survey_years(geopackage: bytes) -> set[int]:
     return {int(year) for text in flown for year in re.findall(r"(?<!\d)(?:19|20)\d\d(?!\d)", text)}
 
 
+def _progress(
+    total: int, report: Callable[[str], None], clock: Callable[[], float]
+) -> Callable[[str, _TileReport], None]:
+    """A progress line per finished square: how many are done, and roughly how long is left.
+
+    The estimate is the mean time per square so far, times the squares left.
+    """
+    start = clock()
+    done = 0
+
+    def on_done(grid_ref: str, tile: _TileReport) -> None:
+        nonlocal done
+        done += 1
+        elapsed = clock() - start
+        left = elapsed / done * (total - done)
+        what = "no tile" if tile.candidates is None else f"{tile.candidates} Candidates"
+        report(
+            f"square {done}/{total} {grid_ref}: {what}; "
+            f"{_duration(elapsed)} elapsed, about {_duration(left)} left"
+        )
+
+    return on_done
+
+
+def _duration(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes // 60} h {minutes % 60:02d} min"
+
+
 def _raise_on_failures(reports: dict[str, _TileReport], tolerances: Tolerances) -> None:
     problems: list[str] = []
     water = {ref: r.water_candidates for ref, r in reports.items() if r.water_candidates}
@@ -379,6 +411,7 @@ def build(
     tolerances: Tolerances | None = None,
     queries: Sequence[SetQuery] | None = None,
     report: Callable[[str], None] = silent,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Path:
     """Build `coverage` from the fetched `inputs` into a new build directory under `out`.
 
@@ -386,6 +419,7 @@ def build(
     directory, if the direct-ray profile check or the water guard fails.
     `today` is the UTC date the build id is cut from. `queries` is the query
     set whose golden fixtures go in the build's `fixtures/`; None writes none.
+    `report` gets one line per square as it finishes, timed by `clock`.
     """
     tolerances = tolerances or Tolerances()
     lock = read_lockfile(inputs)
@@ -421,7 +455,12 @@ def build(
     )
     grid_refs = grid_refs_touching(coverage)
     report(f"build {build_id}: {len(grid_refs)} squares on {workers} workers")
-    reports = precompute_tiles(grid_refs, functools.partial(_build_one, job), workers=workers)
+    reports = precompute_tiles(
+        grid_refs,
+        functools.partial(_build_one, job),
+        workers=workers,
+        on_done=_progress(len(grid_refs), report, clock),
+    )
     _raise_on_failures(reports, tolerances)
     try:
         exploded = basemap.explode(

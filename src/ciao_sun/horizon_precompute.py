@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import multiprocessing
 from collections.abc import Callable, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -229,7 +229,11 @@ def cast_tile(world: TileWorld, *, far_reach_m: float = FAR_REACH_M) -> TileHori
 
 
 def precompute_tiles(
-    grid_refs: Sequence[str], compute_tile: Callable[[str], T], *, workers: int
+    grid_refs: Sequence[str],
+    compute_tile: Callable[[str], T],
+    *,
+    workers: int,
+    on_done: Callable[[str, T], None] | None = None,
 ) -> dict[str, T]:
     """Run `compute_tile` once per tile, on `workers` processes, and collect the results.
 
@@ -240,14 +244,33 @@ def precompute_tiles(
     rasters, cast, and write the tile itself, returning something small such
     as the tile's path; profile arrays are best not sent back to the parent.
     `workers=1` runs in this process.
+
+    `on_done(grid_ref, result)` runs in this process as each tile finishes, in
+    the order they finish, for progress. The first tile to raise stops the run:
+    tiles not yet started are cancelled and the exception propagates.
     """
     if workers < 1:
         raise ValueError("workers must be at least 1")
     if len(set(grid_refs)) != len(grid_refs):
         raise ValueError("each tile must be listed once")
+    finished: dict[str, T] = {}
     if workers == 1:
-        return {grid_ref: compute_tile(grid_ref) for grid_ref in grid_refs}
+        for grid_ref in grid_refs:
+            finished[grid_ref] = compute_tile(grid_ref)
+            if on_done is not None:
+                on_done(grid_ref, finished[grid_ref])
+        return finished
     # spawn, not fork: GDAL and PROJ handles do not survive a fork.
     context = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=workers, mp_context=context) as pool:
-        return dict(zip(grid_refs, pool.map(compute_tile, grid_refs), strict=True))
+        futures = {pool.submit(compute_tile, grid_ref): grid_ref for grid_ref in grid_refs}
+        try:
+            for future in as_completed(futures):
+                grid_ref = futures[future]
+                finished[grid_ref] = future.result()
+                if on_done is not None:
+                    on_done(grid_ref, finished[grid_ref])
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+    return {grid_ref: finished[grid_ref] for grid_ref in grid_refs}

@@ -9,13 +9,16 @@
 import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
 import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
+import type { MapFactory } from "./map/map";
+import { type MapLink, linkMap } from "./map/link";
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
 import { type SettingsStore, type StorageLike, clampMaxWalk, openSettings } from "./settings/store";
 import { type Tile, UnsupportedFormatError } from "./tile/decode";
-import { type Result, renderScreen } from "./ui/screen";
+import { type Result, mapContainer, renderScreen, screenInsets } from "./ui/screen";
 import { type OriginSlot, type SentenceState, renderSentence } from "./ui/sentence";
+import type { SheetStop } from "./ui/sheet";
 
 export interface AppDeps {
   config: ReleaseConfig;
@@ -28,6 +31,8 @@ export interface AppDeps {
   now: () => number;
   /** The GPS position; rejects when it is denied or unavailable. */
   locate: () => Promise<{ lat: number; lon: number }>;
+  /** The map under the sheet (MapLibre in the browser); without one, the screen is the list alone. */
+  map?: MapFactory;
 }
 
 export interface App {
@@ -73,8 +78,22 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     return undefined;
   };
 
+  let map: MapLink | undefined;
+  /** The highlighted spot's candidateId, linking its row and its marker. */
+  let selected: string | undefined;
+  let sheet: SheetStop = "half";
+
   const draw = () => {
-    renderScreen(root, { window, sentence: renderSentence(state, events), result });
+    renderScreen(root, {
+      window,
+      sentence: renderSentence(state, events),
+      result,
+      selected,
+      onSelect: events.selectSpot,
+      sheet,
+      onSheet: events.sheet,
+    });
+    map?.update({ origin: origin(), result, selected });
   };
 
   const ask = async () => {
@@ -100,6 +119,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     }
     if (ticket === asked) {
       result = next;
+      // A highlight lasts only while its spot is still in the list.
+      if (next.kind !== "answer" || !next.answer.spots.some((spot) => spot.candidateId === selected)) selected = undefined;
     }
   };
 
@@ -158,6 +179,17 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
       locate();
       refresh();
     },
+    /** A tap on a spot's row or its marker. */
+    selectSpot(id: string) {
+      selected = id;
+      if (sheet === "peek") sheet = "half";
+      draw();
+      root.querySelector(`[data-spot="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    },
+    sheet(stop: SheetStop) {
+      sheet = stop;
+      draw();
+    },
   };
 
   draw();
@@ -166,6 +198,10 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     openBuild(deps.config, { fetch: deps.fetch, baseUrl: deps.baseUrl }).then(
       (opened) => {
         build = opened;
+        if (deps.map) {
+          map = linkMap(deps.map, mapContainer(root), opened, { onSelect: events.selectSpot, insets: () => screenInsets(root) });
+          track(map.ready);
+        }
         refresh();
       },
       (error: unknown) => {

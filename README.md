@@ -17,6 +17,8 @@ exports have been removed. What the CLI exposes today is:
   hash.
 - `build` -- turn the fetched inputs into one build directory of tiles and a
   manifest.
+- `publish` -- upload a build directory to the R2 data bucket and archive its
+  inputs.
 
 The build's output is one binary file per 1 km square, in tile format `f1`.
 `docs/tile-format-f1.md` specifies it for any language; `ciao_sun.tile_codec`
@@ -122,6 +124,19 @@ under `data/dsm/` and `data/dtm/` (searched recursively).
 `ciao-sun profile-only` fails with a clear message (not a traceback) if tiles
 are missing.
 
+### Publishing
+
+```
+uv run ciao-sun publish data/builds/f1/20261110a
+```
+
+`publish` uploads every file of a build directory to the R2 data bucket at
+`f<format>/<build id>/…`, each with `Cache-Control: public, max-age=31536000,
+immutable`, and archives the build's OSM extract and Terrain 50 zip in a second,
+private bucket. A published build is never rewritten and nothing is deleted
+(ADR 0002): if the build's prefix already holds anything, nothing is uploaded.
+`docs/publishing.md` has the one-time bucket, CORS and credentials setup.
+
 ### Licence and attribution
 
 Environment Agency LIDAR is released under the Open Government Licence.
@@ -143,6 +158,7 @@ uv sync
 ```
 ciao-sun fetch --coverage bristol.geojson --osm-date 261110
 ciao-sun build --coverage bristol.geojson
+ciao-sun publish data/builds/f1/20261110a
 ciao-sun profile-only 51.4720,-2.6040 --date 2026-12-21
 ```
 

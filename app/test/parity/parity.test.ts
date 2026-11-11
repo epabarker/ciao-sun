@@ -5,8 +5,14 @@ import { describe, expect, it } from "vitest";
 
 import type { Answer, Spot } from "../../src/contract";
 import type { SunTrack } from "../../src/solar/sun-track";
-import { FixtureSet, SYNTHETIC_PIN, pinFromEnvironment } from "./fixture-set";
-import { answerDifferences, compareSunTrack, nearBoundaryFreedom } from "./parity";
+import { type FixtureDocument, FixtureSet, SYNTHETIC_PIN, pinFromEnvironment } from "./fixture-set";
+import {
+  answerDifferences,
+  compareSunTrack,
+  effectiveFreedom,
+  nearBoundaryFreedom,
+  unexplainedDifferences,
+} from "./parity";
 
 const spot: Spot = {
   candidateId: "ST5873/5",
@@ -149,5 +155,78 @@ describe("the committed synthetic set", () => {
     const minutes = Object.values(freedom.candidates).flat();
     expect(minutes.length).toBeGreaterThan(0);
     expect(minutes.some((minute) => minute >= window.start && minute < window.end)).toBe(true);
+  });
+});
+
+describe("near-boundary freedom", () => {
+  // Minute 840 of 2026-12-21 is 14:00, inside the window; minute 600 is 10:00, before it.
+  const fixture = (
+    window: "morning" | "evening",
+    minutes: number[],
+    lowSunBand: number[] = [],
+  ): FixtureDocument => ({
+    query: {
+      window,
+      date: "2026-12-21",
+      wakeTime: "07:30",
+      origin: { lat: 51.4589122, lon: -2.6051884 },
+      maxWalkMin: 15,
+      sky: "clear",
+    },
+    tiles: ["ST5873"],
+    answer: {
+      ...answer,
+      window: {
+        start: "2026-12-21T13:30:00+00:00",
+        end: "2026-12-21T16:04:00+00:00",
+        axisStart: "2026-12-21T13:04:00+00:00",
+        axisEnd: "2026-12-21T16:04:00+00:00",
+      },
+      spots: [spot, { ...spot, candidateId: "ST5773/26", name: "West Row" }],
+    },
+    sunTrack: { start: "2026-12-21T00:00:00+00:00", stepMin: 1, azimuth: [], apparentElevation: [] },
+    nearBoundary: { toleranceDeg: 0.01, candidates: { "ST5873/5": minutes }, lowSunBand },
+  });
+  const flipped = [
+    "spots[0].sunMinutes: 141, the reference has 142",
+    "spots[0].targetMet: false, the reference has true",
+  ];
+
+  it("lets what follows from a flip differ at the Candidate with a listed minute in the window", () => {
+    expect(unexplainedDifferences(flipped, fixture("morning", [840]))).toEqual([]);
+  });
+
+  it("lets nothing differ at another Candidate, or outside the Spot", () => {
+    const elsewhere = [
+      "spots[1].sunMinutes: 141, the reference has 142",
+      'spots[0].candidateId: "ST5773/26", the reference has "ST5873/5"',
+      'status: "fallback", the reference has "ranked"',
+    ];
+    expect(unexplainedDifferences(elsewhere, fixture("morning", [840]))).toEqual(elsewhere);
+  });
+
+  it("ignores a morning minute outside the window, but not an evening one: Last sun is looked for all day", () => {
+    expect(effectiveFreedom(fixture("morning", [600])).any).toBe(false);
+    expect(unexplainedDifferences(flipped, fixture("morning", [600]))).toEqual(flipped);
+    expect(unexplainedDifferences(flipped, fixture("evening", [600]))).toEqual([]);
+  });
+
+  it("lets only Low-sun members differ, at any Spot, for a low-sun-band minute in the window", () => {
+    const low = [
+      "spots[1].lowSunMinutes: 141, the reference has 142",
+      "spots[1].sunMinutes: 141, the reference has 142",
+    ];
+    expect(unexplainedDifferences(low, fixture("morning", [], [840]))).toEqual([low[1]]);
+  });
+
+  it("leaves every Morning ranked fixture of the synthetic set none: their Answers must match exactly", async () => {
+    const set = new FixtureSet(SYNTHETIC_PIN);
+    const fixtures = await Promise.all(set.entries.map((entry) => set.load(entry)));
+    const morningRanked = fixtures.filter(
+      (f) => f.query.window === "morning" && f.answer.status === "ranked",
+    );
+
+    expect(morningRanked).toHaveLength(5);
+    expect(morningRanked.filter((f) => effectiveFreedom(f).any).map((f) => f.id)).toEqual([]);
   });
 });

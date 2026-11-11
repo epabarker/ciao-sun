@@ -1,9 +1,9 @@
 // The golden-fixture harness (docs/fixtures.md): every fixture of one build,
-// checked against the JS. Tile decoding, the sun track and the sun's three
-// events are checked now; Answer parity turns on when `./scorer` exports the
-// JS scorer.
+// checked against the JS: tile decoding, the sun track, the sun's three
+// events, and the Answer, for every fixture `answerParityPending` (./scorer)
+// does not hold back.
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { sunTrack } from "../../src/solar/sun-track";
 import { PROFILE_SAMPLES } from "../../src/tile/decode";
@@ -14,8 +14,9 @@ import {
   compareSunTrack,
   nearBoundaryFreedom,
   sunEvents,
+  unexplainedDifferences,
 } from "./parity";
-import { scorer } from "./scorer";
+import { answerParityPending, scorer } from "./scorer";
 
 const set = new FixtureSet(pinFromEnvironment());
 const worst = { azimuth: 0, apparentElevation: 0, lowest: Infinity, minutes: 0, events: 0 };
@@ -94,18 +95,32 @@ describe(`golden fixtures of build f${set.pin.format}/${set.pin.build}`, () => {
       }
     });
 
-    it.skipIf(!scorer)("has the reference's Answer", async () => {
+    it.skipIf(!scorer)("has the reference's Answer", async (context) => {
       const fixture = await loaded;
+      const pending = answerParityPending(fixture.query, entry.status);
+      if (pending) {
+        context.skip(pending);
+      }
 
-      const answer = await scorer!(fixture.query, {
-        tiles: fixture.decodedTiles,
-        coverage: fixture.coverage,
+      // The scorer is pure: it must not reach for the network.
+      vi.stubGlobal("fetch", () => {
+        throw new Error("the scorer called fetch");
       });
+      let answer;
+      try {
+        answer = await scorer!(fixture.query, {
+          tiles: fixture.decodedTiles,
+          coverage: fixture.coverage,
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
 
       const differences = answerDifferences(answer, fixture.answer);
-      // TODO(#43, #44): where `nearBoundaryFreedom(fixture).any`, allow what
-      // follows from a flip at a listed minute, and nothing else.
-      expect(differences, JSON.stringify(nearBoundaryFreedom(fixture))).toEqual([]);
+      expect(
+        unexplainedDifferences(differences, fixture),
+        JSON.stringify(nearBoundaryFreedom(fixture)),
+      ).toEqual([]);
     });
   });
 

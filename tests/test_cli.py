@@ -1,9 +1,10 @@
-"""CLI smoke tests: `ciao-sun tiles` for the Bristol example in HANDOFF.md; console script."""
+"""CLI tests: the Stage 1 command surface, `ciao-sun tiles` for Bristol, console script."""
 
 from __future__ import annotations
 
 from importlib.metadata import entry_points
 
+import typer
 from typer.testing import CliRunner
 
 from ciao_sun.cli import app
@@ -32,3 +33,15 @@ def test_ciao_sun_console_script_runs_the_cli():
     result = runner.invoke(script.load(), ["--help"])
     assert result.exit_code == 0, result.output
     assert "tiles" in result.output
+
+
+def test_cli_exposes_only_profile_only_and_the_tiles_placeholder():
+    group = typer.main.get_command(app)
+    assert sorted(group.commands) == ["profile-only", "tiles"]
+
+
+def test_find_and_compare_are_no_longer_commands():
+    for removed in ("find", "compare"):
+        result = runner.invoke(app, [removed, "--help"])
+        assert result.exit_code != 0, f"`{removed}` should be gone"
+        assert "No such command" in result.output

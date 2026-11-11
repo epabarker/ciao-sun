@@ -97,6 +97,18 @@ select {
   line-height: 1.3;
 }
 
+/* Under the sentence: the forecast's fetch time and credit, or why there is none */
+.sky-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mute);
+}
+
+.sky-note a {
+  color: inherit;
+}
+
 .link {
   background: none;
   border: 0;

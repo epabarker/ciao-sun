@@ -9,7 +9,9 @@
 import { readAbout } from "./about/about";
 import type { ReleaseConfig } from "./config/release";
 import type { Answer, Query, Sky, WindowName } from "./contract";
-import { type Build, DataUnavailableError, type FetchLike, openBuild } from "./loader/loader";
+import { forecastCoordinate, forecastSky } from "./forecast/forecast";
+import { cloudSpan } from "./forecast/span";
+import { type Build, DataUnavailableError, openBuild } from "./loader/loader";
 import { parseOrigin } from "./query/origin";
 import { buildQuery, nextMorningDate } from "./query/query";
 import { answer } from "./scorer/answer";
@@ -23,7 +25,13 @@ import { type OriginSlot, type SentenceState, renderSentence } from "./ui/senten
 
 export interface AppDeps {
   config: ReleaseConfig;
-  fetch: FetchLike;
+  /**
+   * Every request: the data host's, and the forecast's to Open-Meteo, which
+   * passes an abort signal for its timeout.
+   */
+  fetch: (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+  /** How long the forecast is waited for; the forecast adapter's default if unset. */
+  forecastTimeoutMs?: number;
   /** What a relative `dataBase` resolves against: the page URL. */
   baseUrl?: string;
   /** The settings' browser storage; may throw where storage is blocked. */
@@ -59,6 +67,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     date: nextMorningDate(deps.now(), saved.wakeTime),
     dateEdited: false,
     sky: "clear",
+    skySource: { kind: "unfilled" },
     maxWalkMin: saved.maxWalkMin,
     origin: { kind: "locating" },
     places: saved.places,
@@ -135,7 +144,47 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     }
   };
 
+  // The sky slot from the forecast. A request is keyed by what decides its
+  // span and cell (window, date, Wake time and the 0.05 degree coordinate,
+  // not `now`), and its answer is dropped if the key moved on or the slot was
+  // set by hand meanwhile. A slot set by hand stays so until the window, date
+  // or place changes. The query never waits for any of this.
+  let forecastKey: string | undefined;
+  let manualFor: { window: WindowName; date: string; place?: string } | undefined;
+  const askForecast = () => {
+    const at = origin();
+    if (!at) return;
+    const place = `${forecastCoordinate(at.lat)},${forecastCoordinate(at.lon)}`;
+    if (state.skySource.kind === "manual" && manualFor?.window === window && manualFor.date === state.date) {
+      manualFor.place ??= place;
+      if (manualFor.place === place) return;
+    }
+    const key = `${window}|${state.date}|${state.wakeTime}|${place}`;
+    if (key === forecastKey) return;
+    forecastKey = key;
+    const span = cloudSpan(buildQuery({ ...state, origin: at }, deps.now(), window));
+    if (!span) {
+      state.skySource = { kind: "unfilled" };
+      return;
+    }
+    state.skySource = { kind: "pending" };
+    track(
+      forecastSky(at, span, { fetch: deps.fetch, now: deps.now, timeoutMs: deps.forecastTimeoutMs }).then((sky) => {
+        if (key !== forecastKey || state.skySource.kind === "manual") return;
+        if (sky.status === "forecast") {
+          state.sky = sky.sky;
+          state.skySource = { kind: "forecast", fetchedAtMs: sky.fetchedAtMs };
+          refresh();
+        } else {
+          state.skySource = { kind: "unavailable", reason: sky.reason };
+          draw();
+        }
+      }),
+    );
+  };
+
   const refresh = () => {
+    askForecast();
     const work = ask().then(draw);
     track(work);
     draw();
@@ -185,6 +234,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     },
     sky(value: Sky) {
       state.sky = value;
+      state.skySource = { kind: "manual" };
+      manualFor = { window, date: state.date };
       refresh();
     },
     maxWalkMin(value: number) {

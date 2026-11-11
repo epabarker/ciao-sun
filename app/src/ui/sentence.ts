@@ -6,8 +6,9 @@
 //
 // Each slot is a native control (time, date, select) so a phone shows its own
 // picker, and reports on `change`. The words around the slots come from
-// WORDING by window: #48 adds the Evening tab's wording there. #50 pre-fills
-// the sky slot and adds its credit.
+// WORDING by window: #48 adds the Evening tab's wording there. The sky slot is
+// pre-filled from the forecast; `sky-slot.ts` has where its value came from
+// and the credit under it (#50).
 //
 // The origin slot says which origin is in use: "here" (GPS), a saved place's
 // name, or a typed position. Once places are saved it is a select of all
@@ -17,6 +18,7 @@ import { MAX_WALK_CAP_MIN, type Sky, type WindowName } from "../contract";
 import type { QueryInputs } from "../query/query";
 import type { SavedPlace } from "../settings/store";
 import { h } from "./dom";
+import { type SkySource, skyNote } from "./sky-slot";
 
 export type OriginSlot =
   | { kind: "locating" }
@@ -27,6 +29,7 @@ export type OriginSlot =
 
 export interface SentenceState extends Omit<QueryInputs, "origin"> {
   window: WindowName;
+  skySource: SkySource;
   /** The saved default Wake time; differs from `wakeTime` while it is overridden for one query. */
   savedWakeTime: string;
   origin: OriginSlot;
@@ -142,6 +145,14 @@ function originSlot(origin: OriginSlot, places: readonly SavedPlace[], events: S
   return button;
 }
 
+function skySlot(state: SentenceState, events: SentenceEvents): HTMLSelectElement {
+  const slot = select("sky", state.sky, Object.keys(SKY_LABELS) as Sky[], (sky) => SKY_LABELS[sky], (v) =>
+    events.sky(v as Sky),
+  );
+  slot.setAttribute("data-sky-source", state.skySource.kind);
+  return slot;
+}
+
 export function renderSentence(state: SentenceState, events: SentenceEvents): HTMLElement {
   const words = WORDING[state.window] ?? WORDING.morning!;
   const overridden = state.wakeTime !== state.savedWakeTime;
@@ -165,13 +176,14 @@ export function renderSentence(state: SentenceState, events: SentenceEvents): HT
       ` ${words.on} `,
       input("date", "date", state.date, events.date),
       `${words.sky} `,
-      select("sky", state.sky, Object.keys(SKY_LABELS) as Sky[], (sky) => SKY_LABELS[sky], (v) => events.sky(v as Sky)),
+      skySlot(state, events),
       `${words.walk} `,
       select("maxWalkMin", state.maxWalkMin, MAX_WALK_CHOICES, String, (v) => events.maxWalkMin(Number(v))),
       ` ${words.from} `,
       originSlot(state.origin, state.places, events),
       words.end,
     ),
+    skyNote(state.skySource),
     save,
     state.origin.kind === "typed" && state.places.length === 0
       ? (() => {

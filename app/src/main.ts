@@ -23,7 +23,7 @@ const root = document.querySelector<HTMLDivElement>("#app");
 if (root) {
   startApp(root, {
     config: RELEASE,
-    fetch: (url) => fetch(url),
+    fetch: (url, init) => fetch(url, init),
     baseUrl: document.baseURI,
     storage: () => window.localStorage,
     now: () => Date.now(),

@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { type AppDeps, startApp } from "../../src/app";
 import type { Query } from "../../src/contract";
+import { FORECAST_URL } from "../../src/forecast/forecast";
 import type { FetchLike } from "../../src/loader/loader";
 import { SETTINGS_KEY } from "../../src/settings/store";
 
@@ -249,10 +250,22 @@ describe("saved places", () => {
       "Where",
       "Renamed",
     ];
+    // Both positions are in the 0.05 degree forecast cell (51.45, -2.60): the
+    // one thing besides the build's files that may leave the phone (#50).
+    const forecasts = served.requested.filter((url) => url.startsWith(FORECAST_URL));
+    expect(forecasts.length).toBeGreaterThan(0);
     for (const url of served.requested) {
-      const text = decodeURIComponent(url);
-      // Only the pinned build's files are fetched, at their own paths.
-      expect(text.startsWith(`${PIN.dataBase}f1/${PIN.build}/`)).toBe(true);
+      let text = decodeURIComponent(url);
+      if (url.startsWith(FORECAST_URL)) {
+        const params = new URL(url).searchParams;
+        expect([params.get("latitude"), params.get("longitude")]).toEqual(["51.45", "-2.60"]);
+        params.delete("latitude");
+        params.delete("longitude");
+        text = decodeURIComponent(`${FORECAST_URL}?${params}`);
+      } else {
+        // Otherwise only the pinned build's files are fetched, at their own paths.
+        expect(text.startsWith(`${PIN.dataBase}f1/${PIN.build}/`)).toBe(true);
+      }
       for (const secret of secrets) expect(text).not.toContain(secret);
     }
   });

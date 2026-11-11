@@ -45,7 +45,7 @@ export function renderResult(result: Result): Node {
     case "unavailable":
       return message("unavailable", "Can't reach the data.", "Check the connection and try again.");
     case "failed":
-      return message("failed", "This answer can't be shown yet.", "Try another sky, date or Wake time.");
+      return message("failed", "Something went wrong working out this answer.", "Try again, or change the sky, date or Wake time.");
   }
 }
 

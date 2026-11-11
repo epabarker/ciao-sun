@@ -36,7 +36,7 @@ src/app.ts              the app: release config + data loader + settings + GPS +
 src/config/release.ts   the release config, read from release.json at build time
 src/loader/loader.ts    data loader: openBuild(pin) checks the manifest format; Build.area(origin) -> tiles
 src/loader/grid.ts      WGS84 -> National Grid, and the 1 km tiles in reach of an origin
-src/loader/coverage.ts  whether an origin is inside the manifest's coverage polygon
+src/scorer/coverage.ts  whether an origin is inside the manifest's coverage polygon (the scorer's not-covered; the loader uses it too)
 src/settings/store.ts   settings store: Wake time, max walk; browser storage with a memory fallback
 src/query/query.ts      the sentence's inputs -> Query; the next Morning window's date
 src/query/origin.ts     the typed origin "lat, lon"
@@ -93,7 +93,9 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 `AppDeps` (in `app.ts`) is every outside dependency: the pin, `fetch`, the
 storage accessor, the clock and GPS. `test/app/` runs the whole screen through
 it over the synthetic build. The scorer is called in one place, `score()` in
-`app.ts`; its marked line is where #44's coverage argument goes.
+`app.ts`, with the manifest's coverage polygon: the scorer decides
+`not-covered` (`scorer/coverage.ts`, which the loader also uses to skip
+fetching tiles for an origin outside it).
 
 The settings store (`openSettings(() => localStorage)`) has `read()`,
 `update(change)` and `persistent`; a new setting is a field of `Settings` with

@@ -35,12 +35,13 @@ export interface App {
   idle(): Promise<void>;
 }
 
-/** The scorer, given the build: the one place a query becomes an Answer. */
-function score(query: Query, tiles: readonly Tile[], _build: Build): Answer {
-  return answer(query, tiles); // #44: pass _build.manifest.coverage as the third argument, and drop the loader's not-covered short-circuit in `ask`.
+/**
+ * The scorer, given the build: the one place a query becomes an Answer. The
+ * scorer decides `not-covered` from the manifest's coverage polygon.
+ */
+function score(query: Query, tiles: readonly Tile[], build: Build): Answer {
+  return answer(query, tiles, build.manifest.coverage);
 }
-
-const NOT_COVERED: Answer = { status: "not-covered", spots: [] };
 
 export function startApp(root: HTMLElement, deps: AppDeps): App {
   const settings: SettingsStore = openSettings(deps.storage);
@@ -94,7 +95,8 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     let next: Result;
     try {
       const area = await build.area(query.origin);
-      next = area.covered ? { kind: "answer", answer: score(query, area.tiles, build) } : { kind: "answer", answer: NOT_COVERED };
+      // An origin outside the coverage needs no tiles: the scorer answers not-covered.
+      next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build) };
     } catch (error) {
       next = failure(error);
     }

@@ -25,9 +25,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ciao_sun.candidates import build_tile, grid_ref_origin, load_walk_network
+from ciao_sun.candidates import build_tile, load_walk_network
 from ciao_sun.raster import RasterGrid
 from ciao_sun.tile_codec import PROFILE_SAMPLES, Tile, read_tile, write_tile
+from ciao_sun.tiles import grid_ref_origin
 from tests.conftest import make_flat_grid
 from tests.osm_extract import bng_of, write_osm_extract
 

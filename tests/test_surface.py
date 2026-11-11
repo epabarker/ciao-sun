@@ -231,6 +231,16 @@ def test_cells_with_no_first_return_keep_the_last_return_height(
     assert surface.data[6, 16] == 13.0
 
 
+def test_the_last_return_is_left_untouched(footprints: BuildingFootprints) -> None:
+    # The build goes on to pick Candidates' open ground from the same last return.
+    last, first, dtm = _world()
+    first.data[3, 15] = 22.0
+
+    crown_envelope_surface(last, first, dtm, footprints)
+
+    assert last.data[3, 15] == GROUND
+
+
 def test_misaligned_inputs_are_refused(footprints: BuildingFootprints) -> None:
     last, _, dtm = _world()
     shifted_first = make_flat_grid(GROUND, X0 + 1.0, Y0, width=20, height=20)

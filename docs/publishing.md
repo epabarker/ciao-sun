@@ -7,8 +7,9 @@ archives the inputs it was made from. The rules it keeps are in
 has to exist first, done once by hand in the Cloudflare dashboard, and the
 command to run afterwards.
 
-Nothing on this page has been run against a real Cloudflare account yet. The
-first real publish (#55) is where it is checked; correct this page then.
+This page was first run for real on 2026-11-12 (#55): build `20261111b` to
+`ciao-sun-data`, served at `https://ciao-sun-data.edbarker.dev`, with its inputs
+in `ciao-sun-inputs`. Every step below worked as written.
 
 ## One-time setup
 
@@ -25,7 +26,10 @@ because everything in the data bucket is public.
 ### 2. The data bucket's custom domain
 
 Connect the data bucket to a subdomain (R2 > the bucket > Settings > Custom
-Domains). That URL is the app's **data base URL**: the object with key
+Domains). The site's zone must be in the same Cloudflare account. Keep the
+subdomain one level deep (`ciao-sun-data.edbarker.dev`, not
+`ciao-sun.data.edbarker.dev`): the free Universal SSL certificate covers only
+first-level subdomains. That URL is the app's **data base URL**: the object with key
 `f1/20261110a/manifest.json` is served at `<dataBase>/f1/20261110a/manifest.json`.
 Leave the bucket's `r2.dev` public URL disabled, so the custom domain is the
 only way in.
@@ -67,14 +71,22 @@ Access Key. The S3 endpoint is `https://<account id>.r2.cloudflarestorage.com`.
 
 ## Publishing
 
-```
-export AWS_ACCESS_KEY_ID=…            # the token's Access Key ID
-export AWS_SECRET_ACCESS_KEY=…        # the token's Secret Access Key
-export CIAO_SUN_R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
-export CIAO_SUN_DATA_BUCKET=<data bucket>
-export CIAO_SUN_INPUTS_BUCKET=<inputs bucket>
+Keep the token's keys in a file outside the repo that only you can read,
+`~/.config/ciao-sun/r2.env` (`chmod 600`), never in the shell history:
 
-uv run ciao-sun publish data/builds/f1/20261110a --inputs data/inputs
+```
+AWS_ACCESS_KEY_ID=…            # the token's Access Key ID
+AWS_SECRET_ACCESS_KEY=…        # the token's Secret Access Key
+CIAO_SUN_R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+CIAO_SUN_DATA_BUCKET=ciao-sun-data
+CIAO_SUN_INPUTS_BUCKET=ciao-sun-inputs
+```
+
+and load it for the one command:
+
+```
+(set -a; . ~/.config/ciao-sun/r2.env; set +a
+ uv run ciao-sun publish data/builds/f1/20261111b --inputs data/inputs)
 ```
 
 `--inputs` must be the inputs directory the build read. `publish` checks the
@@ -85,7 +97,7 @@ What is stored:
 
 | Files | Stored as | Headers besides `Cache-Control` |
 |---|---|---|
-| `tiles/*.bin` | the gzip file on disk, byte for byte | `Content-Type: application/octet-stream`, no `Content-Encoding` |
+| `tiles/<window>/*.bin` | the gzip file on disk, byte for byte | `Content-Type: application/octet-stream`, no `Content-Encoding` |
 | `basemap/{z}/{x}/{y}.mvt` | gzipped on upload | `Content-Type: application/vnd.mapbox-vector-tile`, `Content-Encoding: gzip` |
 | `manifest.json`, other `*.json` | as on disk | `Content-Type: application/json` |
 

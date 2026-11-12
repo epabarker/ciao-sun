@@ -105,8 +105,9 @@ uv run ciao-sun build --coverage bristol.geojson
 ```
 
 `build` reads `data/inputs/` (`--inputs`) through its lockfile and writes
-`data/builds/f1/<build id>/` (`--out`): `tiles/<grid ref>.bin` for every 1 km
-square the coverage touches, `basemap/{z}/{x}/{y}.mvt` and `manifest.json`. The
+`data/builds/f1/<build id>/` (`--out`): `tiles/morning/<grid ref>.bin` and
+`tiles/evening/<grid ref>.bin` for every 1 km square the coverage touches, each
+holding only its window's sector of the Horizon profiles, `basemap/{z}/{x}/{y}.mvt` and `manifest.json`. The
 build id is the UTC date plus a letter, e.g. `20261110a`. Tiles are built in parallel (`--workers`), and
 the same inputs give byte-identical tiles.
 

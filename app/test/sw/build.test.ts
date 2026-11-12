@@ -109,11 +109,11 @@ describe("the built service worker", () => {
     const dataCache = `ciao-sun-data-f${pin.format}-${pin.build}`;
     expect([...stores.keys()].sort()).toEqual([dataCache, `ciao-sun-shell-${pkg.version}`]);
     // A relative dataBase (the synthetic pin) resolves under /ciao-sun/, as the page resolves it.
-    const tile = new URL(`f${pin.format}/${pin.build}/tiles/ST5873.bin`, new URL(pin.dataBase, `${ORIGIN}/ciao-sun/`)).href;
+    const tile = new URL(`f${pin.format}/${pin.build}/tiles/morning/ST5873.bin`, new URL(pin.dataBase, `${ORIGIN}/ciao-sun/`)).href;
     expect((await request(tile))?.status).toBe(200);
     expect([...(stores.get(dataCache)?.keys() ?? [])].map((url) => url.slice(url.lastIndexOf(pin.build)))).toEqual([
       `${pin.build}/manifest.json`,
-      `${pin.build}/tiles/ST5873.bin`,
+      `${pin.build}/tiles/morning/ST5873.bin`,
     ]);
   });
 });

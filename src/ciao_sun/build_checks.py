@@ -54,7 +54,6 @@ from ciao_sun.horizon_precompute import EYE_HEIGHT_M, NEAR_REACH_M, PROFILE_AZIM
 from ciao_sun.raster import RasterGrid, sample, sample_bilinear
 from ciao_sun.tile_codec import (
     FINE_TOP_DEG,
-    PROFILE_SAMPLES,
     STORAGE_MAX_DEG,
     STORAGE_MIN_DEG,
     Tile,
@@ -152,6 +151,7 @@ def check_tile_profiles(
     all_x, all_y = candidate_positions(tile)
     # The tile's one convergence, worked out here and not taken from the precompute.
     convergence = meridian_convergence(float(all_x.mean()), float(all_y.mean()))
+    samples = tile.sector.indexes()  # only the tile's sector can be read (#62)
     chosen = np.unique(
         np.linspace(0, count - 1, min(count, tolerances.candidates_per_tile)).round().astype(int)
     )
@@ -159,15 +159,15 @@ def check_tile_profiles(
     eye = sample(dtm, x, y).astype(np.float64) + EYE_HEIGHT_M
 
     ray_d = ray_samples(NEAR_REACH_M)
-    direct = np.empty((len(chosen), PROFILE_SAMPLES), dtype=np.float64)
-    for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG):
+    direct = np.empty((len(chosen), samples.size), dtype=np.float64)
+    for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG[samples]):
         near = horizon_angle(surface, x, y, eye, float(azimuth), ray_d, convergence_deg=convergence)
         far = _direct_far(terrain50, x, y, eye, float(azimuth), convergence, far_reach_m)
         direct[:, i] = np.fmax(near, far)
     # NaN: no ground under the Candidate, or no surface along a whole ray.
     direct = np.clip(direct, STORAGE_MIN_DEG, STORAGE_MAX_DEG)
 
-    stored = codes_to_degrees(tile.candidates.profile_codes[chosen])
+    stored = codes_to_degrees(tile.candidates.profile_codes[np.ix_(chosen, samples)])
     half_step = np.where(
         np.fmax(stored, direct) > FINE_TOP_DEG,
         tolerances.coarse_half_step_deg,
@@ -187,8 +187,8 @@ def check_tile_profiles(
         worst = int(off.argmax())
         failures.append(
             f"{tile.grid_ref} Candidate {candidate}: {int((~within[row]).sum())} of "
-            f"{PROFILE_SAMPLES} profile samples disagree with direct ray casting "
-            f"(worst at true azimuth {PROFILE_AZIMUTHS_DEG[worst]:g} deg: tile "
+            f"{samples.size} profile samples disagree with direct ray casting "
+            f"(worst at true azimuth {PROFILE_AZIMUTHS_DEG[samples[worst]]:g} deg: tile "
             f"{stored[row, worst]:.2f} deg, direct ray {direct[row, worst]:.2f} deg)"
         )
     return ProfileCheck(len(chosen), tuple(failures))

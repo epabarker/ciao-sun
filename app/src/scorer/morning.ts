@@ -6,7 +6,7 @@ import type { SunTrack } from "../solar/sun-track";
 import { lampOnly } from "./lamp";
 import { type WindowPlan, nowMinute, wakeMinute } from "./windows";
 
-/** The window ends this long after Wake time. */
+/** The window ends this long after Wake time, or at solar noon if that is sooner. */
 export const MORNING_WINDOW_MIN = 180;
 /** Weight 1 until this long after Wake time, then linear to 0 at the end. */
 export const FULL_WEIGHT_MIN = 60;
@@ -23,7 +23,8 @@ export function morningLeaveBy(inView: Uint8Array, walkMin: number, plan: Window
 export function planMorning(query: Query, track: SunTrack): WindowPlan | Answer {
   const wake = wakeMinute(query, track);
   const now = nowMinute(query, track);
-  const end = Math.min(wake + MORNING_WINDOW_MIN, track.length);
+  // Never past solar noon: morning tiles hold only the sun's path up to it (#62).
+  const end = Math.min(wake + MORNING_WINDOW_MIN, track.length, track.solarNoon);
   const earliestLeave = now === null ? wake : Math.max(wake, now);
   if (track.nominalSunrise === null) {
     return noDaylight(query, track);

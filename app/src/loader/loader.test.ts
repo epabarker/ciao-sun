@@ -59,18 +59,26 @@ describe("data loader", () => {
     expect(served.requested).toEqual(["https://data.example/ciao-sun/data/f1/20261111a/manifest.json"]);
   });
 
-  it.each(["morning-winter-solstice", "morning-summer-solstice", "morning-september-equinox-now", "morning-march-equinox"])(
-    "fetches the tiles the reference ranked %s over, and the scorer's Answer over them is the fixture's",
+  it.each([
+    "morning-winter-solstice",
+    "morning-summer-solstice",
+    "morning-september-equinox-now",
+    "morning-march-equinox",
+    "evening-summer-solstice",
+  ])(
+    "fetches the window's tiles the reference ranked %s over, and the scorer's Answer over them is the fixture's",
     async (id) => {
       const expected = fixture(id);
       const served = host();
       const build = await openBuild(PIN, { fetch: served.fetch });
-      const area = await build.area(expected.query.origin);
+      const area = await build.area(expected.query.origin, expected.query.window);
       expect(area.covered).toBe(true);
       if (!area.covered) return;
       expect(area.tiles.map((tile) => tile.gridRef)).toEqual(expected.tiles);
       expect(tileRequests(served.requested)).toEqual(
-        expected.tiles.map((gridRef) => `https://data.example/f1/20261111a/tiles/${gridRef}.bin`),
+        expected.tiles.map(
+          (gridRef) => `https://data.example/f1/20261111a/tiles/${expected.query.window}/${gridRef}.bin`,
+        ),
       );
       const got = answer(expected.query, area.tiles);
       expect(got.spots.map((spot) => [spot.candidateId, spot.leaveBy, spot.targetMet])).toEqual(
@@ -83,9 +91,22 @@ describe("data loader", () => {
     const served = host();
     const build = await openBuild(PIN, { fetch: served.fetch });
     const { query } = fixture("morning-winter-solstice");
-    await build.area(query.origin);
-    await build.area(query.origin);
+    await build.area(query.origin, "morning");
+    await build.area(query.origin, "morning");
     expect(tileRequests(served.requested)).toHaveLength(2);
+  });
+
+  it("fetches a square's evening tile apart from its morning one, holding only the evening sector", async () => {
+    const served = host();
+    const build = await openBuild(PIN, { fetch: served.fetch });
+    const { query } = fixture("morning-winter-solstice");
+    const morning = await build.area(query.origin, "morning");
+    const evening = await build.area(query.origin, "evening");
+    expect(tileRequests(served.requested)).toHaveLength(4);
+    if (!morning.covered || !evening.covered) throw new Error("covered");
+    const sectors = manifest.sectors;
+    expect(morning.tiles[0]!.sector).toEqual(sectors.morning);
+    expect(evening.tiles[0]!.sector).toEqual(sectors.evening);
   });
 
   it("refuses a manifest in a format it can't read, and loads no tiles", async () => {
@@ -116,7 +137,7 @@ describe("data loader", () => {
     const { query } = fixture("morning-not-covered");
     const served = host();
     const build = await openBuild(PIN, { fetch: served.fetch });
-    expect(await build.area(query.origin)).toEqual({ covered: false });
+    expect(await build.area(query.origin, "morning")).toEqual({ covered: false });
     expect(tileRequests(served.requested)).toEqual([]);
   });
 });

@@ -1,8 +1,8 @@
 // From what the sentence says to the Query the scorer is asked, and the
 // defaults the sentence starts from. Pure, with the clock passed in.
 //
-// The Morning window ends at Wake time + 3 h, so its date is today until then
-// and tomorrow after. The query starts from "now" on today's date (the scorer
+// The Morning window ends at Wake time + 3 h, or at solar noon if that is
+// sooner (#62), so its date is today until then and tomorrow after. The query starts from "now" on today's date (the scorer
 // clips the window start to it). The Evening window's date is today until
 // Nominal sunset; the app opens on whichever window comes next (`chooseWindow`).
 
@@ -37,19 +37,32 @@ function wakeInstant(date: string, wakeTime: string): number {
   return instantOf(date, hour!, minute!, TIME_ZONE);
 }
 
-/** The date of the next Morning window to plan: today until it ends, else tomorrow. */
-export function nextMorningDate(nowMs: number, wakeTime: string): string {
-  const today = localDate(nowMs);
-  const end = wakeInstant(today, wakeTime) + MORNING_WINDOW_MIN * MS_PER_MINUTE;
-  return nowMs < end ? today : nextDate(today);
-}
-
 /**
- * Where the tab choice and the Evening date read Nominal sunset: central
- * Bristol. The coverage is Bristol, across which sunset differs by seconds,
+ * Where the tab choice and the dates read the sun: central Bristol. The
+ * coverage is Bristol, across which sunset and solar noon differ by seconds,
  * and the choice is made before GPS answers, so a late fix never flips the tab.
  */
 export const PLANNING_POINT = { lat: 51.4545, lon: -2.5879 } as const;
+
+/**
+ * The instant a local date's Morning window ends at a place: Wake time + 3 h,
+ * or solar noon if that is sooner, as the scorer's `planMorning` has it.
+ */
+export function morningEndMs(date: string, wakeTime: string, at: { lat: number; lon: number }): number {
+  const track = sunTrack(at.lat, at.lon, date, TIME_ZONE);
+  const afterWake = wakeInstant(date, wakeTime) + MORNING_WINDOW_MIN * MS_PER_MINUTE;
+  return Math.min(afterWake, sampleTimeMs(track, track.solarNoon));
+}
+
+/** The date of the next Morning window to plan: today until it ends, else tomorrow. */
+export function nextMorningDate(
+  nowMs: number,
+  wakeTime: string,
+  at: { lat: number; lon: number } = PLANNING_POINT,
+): string {
+  const today = localDate(nowMs);
+  return nowMs < morningEndMs(today, wakeTime, at) ? today : nextDate(today);
+}
 
 /** The instant of Nominal sunset on a local date at a place, or null if the sun does not set. */
 function nominalSunsetMs(date: string, at: { lat: number; lon: number }): number | null {
@@ -80,7 +93,7 @@ export function chooseWindow(
   at: { lat: number; lon: number } = PLANNING_POINT,
 ): { window: WindowName; date: string } {
   const today = localDate(nowMs);
-  if (nextMorningDate(nowMs, wakeTime) === today) {
+  if (nextMorningDate(nowMs, wakeTime, at) === today) {
     return { window: "morning", date: today };
   }
   const sunset = nominalSunsetMs(today, at);
@@ -92,17 +105,15 @@ export function chooseWindow(
 
 /**
  * Whether the Query's Morning window is already over when it is asked: `now`
- * is on the query's date, at or after Wake time + 3 h. A fact of the Query,
+ * is on the query's date, at or after the window's end (`morningEndMs`, at
+ * the Query's origin, as the scorer reads the sun). A fact of the Query,
  * not a score: the answer screen uses it to tell a Morning window emptied by
  * `now` from one that holds no daylight, both `lamp-only`.
  */
 export function morningWindowOver(query: Query): boolean {
   if (query.now === undefined) return false;
   const nowMs = Date.parse(query.now);
-  return (
-    localDate(nowMs) === query.date &&
-    nowMs >= wakeInstant(query.date, query.wakeTime) + MORNING_WINDOW_MIN * MS_PER_MINUTE
-  );
+  return localDate(nowMs) === query.date && nowMs >= morningEndMs(query.date, query.wakeTime, query.origin);
 }
 
 /** The Query for the sentence's inputs, asked at `nowMs`. */

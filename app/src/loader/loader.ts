@@ -3,14 +3,14 @@
 // 1. `openBuild` fetches `<dataBase>/f<format>/<build>/manifest.json` and
 //    refuses, with `UnsupportedFormatError`, a manifest whose format this app
 //    can't read, before any tile is requested (ADR 0002).
-// 2. `Build.area(origin)` says whether the origin is in the coverage and, if
-//    it is, fetches and decodes the tiles in reach of it. A tile is fetched
-//    once per Build.
+// 2. `Build.area(origin, window)` says whether the origin is in the coverage
+//    and, if it is, fetches and decodes the window's tiles in reach of it
+//    (`tiles/<window>/<grid ref>.bin`, #62). A tile is fetched once per Build.
 //
 // `fetch` is injected; the URL layout is the spec's "Data hosting and layout".
 
 import type { ReleaseConfig } from "../config/release";
-import { MAX_WALK_CAP_MIN } from "../contract";
+import { MAX_WALK_CAP_MIN, type WindowName } from "../contract";
 import { WALK_SPEED_M_PER_MIN } from "../router/world";
 import { FORMAT, type Tile, UnsupportedFormatError, decodeTile } from "../tile/decode";
 import { type CoverageGeometry, contains } from "../scorer/coverage";
@@ -26,11 +26,17 @@ export type FetchLike = (url: string) => Promise<Response>;
  */
 export const TILE_REACH_M = MAX_WALK_CAP_MIN * WALK_SPEED_M_PER_MIN;
 
-/** One line of the manifest's tile index. */
-export interface TileEntry {
+/** One window's tile file of a square. */
+export interface TileFile {
   bytes: number;
   sha256: string;
+}
+
+/** One line of the manifest's tile index: a square's Candidates and its two windows' tiles. */
+export interface TileEntry {
   candidates: number;
+  morning: TileFile;
+  evening: TileFile;
 }
 
 /** What the app reads of `manifest.json` (built by `ciao_sun.manifest`). */
@@ -49,8 +55,8 @@ export interface Build {
   readonly manifest: Manifest;
   /** `<dataBase>/f<format>/<build>/`, absolute, ending in "/". */
   readonly url: string;
-  /** Whether the origin is covered, and the decoded tiles in reach of it if so. */
-  area(origin: { lat: number; lon: number }): Promise<Area>;
+  /** Whether the origin is covered, and the window's decoded tiles in reach of it if so. */
+  area(origin: { lat: number; lon: number }, window: WindowName): Promise<Area>;
 }
 
 export interface LoaderOptions {
@@ -94,16 +100,17 @@ export async function openBuild(config: ReleaseConfig, options: LoaderOptions): 
   }
 
   const tiles = new Map<string, Promise<Tile>>();
-  const tile = (gridRef: string): Promise<Tile> => {
-    let pending = tiles.get(gridRef);
+  const tile = (window: WindowName, gridRef: string): Promise<Tile> => {
+    const path = `tiles/${window}/${gridRef}.bin`;
+    let pending = tiles.get(path);
     if (!pending) {
-      pending = get(options.fetch, `${url}tiles/${gridRef}.bin`)
+      pending = get(options.fetch, `${url}${path}`)
         .then(async (response) => decodeTile(new Uint8Array(await response.arrayBuffer()), gridRef))
         .catch((error: unknown) => {
-          tiles.delete(gridRef);
+          tiles.delete(path);
           throw error;
         });
-      tiles.set(gridRef, pending);
+      tiles.set(path, pending);
     }
     return pending;
   };
@@ -111,12 +118,12 @@ export async function openBuild(config: ReleaseConfig, options: LoaderOptions): 
   return {
     manifest,
     url,
-    async area(origin) {
+    async area(origin, window) {
       if (!contains(manifest.coverage, origin.lat, origin.lon)) {
         return { covered: false };
       }
       const gridRefs = gridRefsInReach(Object.keys(manifest.tiles), origin.lat, origin.lon, TILE_REACH_M);
-      return { covered: true, tiles: await Promise.all(gridRefs.map(tile)) };
+      return { covered: true, tiles: await Promise.all(gridRefs.map((gridRef) => tile(window, gridRef))) };
     },
   };
 }

@@ -284,7 +284,7 @@ def test_resume_refuses_a_prefix_that_holds_another_builds_objects(built: Built)
 
 def test_a_tile_changed_since_the_build_is_refused(built: Built, tmp_path: Path):
     copy = _copy(built, tmp_path)
-    tile = next((copy.directory / "tiles").glob("*.bin"))
+    tile = next((copy.directory / "tiles" / "evening").glob("*.bin"))
     tile.write_bytes(tile.read_bytes() + b"\x00")
     store = FakeStore()
 
@@ -296,7 +296,7 @@ def test_a_tile_changed_since_the_build_is_refused(built: Built, tmp_path: Path)
 
 def test_a_tile_missing_from_the_build_directory_is_refused(built: Built, tmp_path: Path):
     copy = _copy(built, tmp_path)
-    next((copy.directory / "tiles").glob("*.bin")).unlink()
+    next((copy.directory / "tiles" / "morning").glob("*.bin")).unlink()
     store = FakeStore()
 
     with pytest.raises(PublishError, match="tile index"):

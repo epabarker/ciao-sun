@@ -1,7 +1,8 @@
 """`ciao-sun build`: fetched inputs -> one build directory of f1 tiles and a manifest.
 
     <out>/f1/<build>/manifest.json
-    <out>/f1/<build>/tiles/<grid ref>.bin
+    <out>/f1/<build>/tiles/morning/<grid ref>.bin   the morning sector of each profile
+    <out>/f1/<build>/tiles/evening/<grid ref>.bin   the evening sector (`sectors.py`)
     <out>/f1/<build>/basemap/{z}/{x}/{y}.mvt
     <out>/f1/<build>/fixtures/              golden fixtures, when given a query set
 
@@ -45,6 +46,7 @@ and the workers read that.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import math
@@ -77,11 +79,18 @@ from ciao_sun.horizon_precompute import (
     cast_tile,
     precompute_tiles,
 )
-from ciao_sun.manifest import manifest_document, read_manifest, write_manifest
+from ciao_sun.manifest import (
+    manifest_document,
+    manifest_sectors,
+    read_manifest,
+    tile_file,
+    write_manifest,
+)
 from ciao_sun.osm_clip import clip_osm
 from ciao_sun.raster import RasterGrid, load_mosaic
 from ciao_sun.reference.fixtures import SetQuery, write_fixtures
 from ciao_sun.report import silent
+from ciao_sun.sectors import window_sectors
 from ciao_sun.surface import (
     RAISED_ON_WATER_M,
     BuildingFootprints,
@@ -94,7 +103,7 @@ from ciao_sun.surface import (
     read_water_areas,
 )
 from ciao_sun.terrain50 import load_terrain50
-from ciao_sun.tile_codec import FORMAT, read_tile, write_tile
+from ciao_sun.tile_codec import FORMAT, Sector, read_tile, write_tile
 from ciao_sun.tiles import KM, grid_ref_of, grid_ref_origin
 
 _BNG = CRS.from_epsg(27700)
@@ -122,7 +131,8 @@ class _Job:
     inputs_root: Path
     coverage_json: str
     osm_pbf: Path  # the clip of the fetched OSM extract (`_clip_osm`)
-    tiles_dir: Path
+    tiles_dir: Path  # each window's tiles in tiles_dir/<window>/
+    sectors: tuple[tuple[str, Sector], ...]  # (window, sector) per window
     far_reach_m: float
     tolerances: Tolerances
 
@@ -313,28 +323,40 @@ def _build_one(job: _Job, grid_ref: str) -> _TileReport:
         review=_flags(open_water.raised_river, surface),
     )  # fmt: skip
     horizons = cast_tile(world, far_reach_m=job.far_reach_m)
-    path = write_tile(outline.with_profiles(horizons.codes), job.tiles_dir)
-    check = check_tile_profiles(
-        read_tile(path), surface, rasters.dtm, inputs.terrain50,
-        far_reach_m=job.far_reach_m, tolerances=job.tolerances,
-    )  # fmt: skip
+    whole = outline.with_profiles(horizons.codes)
+    for window, sector in job.sectors:
+        write_tile(dataclasses.replace(whole, sector=sector), job.tiles_dir / window)
+    checked, failures = _check_windows(job, grid_ref, surface, rasters.dtm, inputs.terrain50)
     return _TileReport(
         candidates=len(outline.easting),
         water_candidates=int(horizons.set_by_water.sum()),
         review_candidates=int(horizons.set_by_review.sum()),
-        candidates_checked=check.candidates_checked,
-        profile_failures=check.failures,
+        candidates_checked=checked,
+        profile_failures=failures,
     )
+
+
+def _check_windows(
+    job: _Job, grid_ref: str, surface: RasterGrid, dtm: RasterGrid, terrain50: RasterGrid
+) -> tuple[int, tuple[str, ...]]:
+    """The direct-ray check on each window's written tile, over that tile's sector."""
+    checked, failures = 0, []
+    for window, _ in job.sectors:
+        check = check_tile_profiles(
+            read_tile(job.tiles_dir / window / f"{grid_ref}.bin"), surface, dtm, terrain50,
+            far_reach_m=job.far_reach_m, tolerances=job.tolerances,
+        )  # fmt: skip
+        checked = max(checked, check.candidates_checked)  # the same Candidates in each
+        failures += [f"{window}: {line}" for line in check.failures]
+    return checked, tuple(failures)
 
 
 def _check_one(job: _Job, grid_ref: str) -> _TileReport:
     inputs = _inputs(job)
     rasters = _tile_rasters(inputs, grid_ref)
-    check = check_tile_profiles(
-        read_tile(job.tiles_dir / f"{grid_ref}.bin"), _surface(inputs, rasters).surface,
-        rasters.dtm, inputs.terrain50, far_reach_m=job.far_reach_m, tolerances=job.tolerances,
-    )  # fmt: skip
-    return _TileReport(candidates_checked=check.candidates_checked, profile_failures=check.failures)
+    surface = _surface(inputs, rasters).surface
+    checked, failures = _check_windows(job, grid_ref, surface, rasters.dtm, inputs.terrain50)
+    return _TileReport(candidates_checked=checked, profile_failures=failures)
 
 
 # --- The build ----------------------------------------------------------------
@@ -518,6 +540,8 @@ def build(
     tiles_dir.mkdir(parents=True)
 
     grid_refs = grid_refs_touching(coverage)
+    west, south, east, north = coverage.bounds_wgs84()
+    sectors = window_sectors(south, north, (west + east) / 2)
     report(f"build {build_id}: {len(grid_refs)} squares on {workers} workers")
     with tempfile.TemporaryDirectory(prefix="ciao-sun-osm-") as scratch:
         job = _Job(
@@ -525,6 +549,7 @@ def build(
             coverage_json=json.dumps(coverage.geometry, sort_keys=True),
             osm_pbf=_clip_osm(lock, coverage, Path(scratch), report, clock),
             tiles_dir=tiles_dir.resolve(),
+            sectors=tuple(sectors.items()),
             far_reach_m=far_reach_m,
             tolerances=tolerances,
         )
@@ -545,9 +570,14 @@ def build(
 
     tiles = {
         grid_ref: {
-            "bytes": (tiles_dir / f"{grid_ref}.bin").stat().st_size,
-            "sha256": sha256_of(tiles_dir / f"{grid_ref}.bin"),
             "candidates": tile_report.candidates,
+            **{
+                window: {
+                    "bytes": tile_file(partial, window, grid_ref).stat().st_size,
+                    "sha256": sha256_of(tile_file(partial, window, grid_ref)),
+                }
+                for window in sectors
+            },
         }
         for grid_ref, tile_report in reports.items()
         if tile_report.candidates is not None
@@ -570,6 +600,7 @@ def build(
             horizon={"nearReachM": NEAR_REACH_M, "farReachM": far_reach_m},
             tiles=tiles,
             build_checks=checks,
+            sectors=sectors,
             basemap=exploded,
         ),
     )
@@ -604,6 +635,7 @@ def check_profiles(
                 read_lockfile(inputs), coverage, Path(scratch), silent, time.monotonic
             ),
             tiles_dir=(build_dir / "tiles").resolve(),
+            sectors=tuple(manifest_sectors(manifest).items()),
             far_reach_m=float(manifest["horizon"]["farReachM"]),
             tolerances=tolerances,
         )

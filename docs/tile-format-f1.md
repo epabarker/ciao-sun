@@ -2,14 +2,14 @@
 
 This document specifies the Ciao Sun tile file, format `f1`. It is written so that a builder or a reader can be implemented from it in any language. Domain terms (Candidate, Horizon profile) follow `GLOSSARY.md`.
 
-A tile holds everything date-independent about one 1 km square: its Candidates, each Candidate's Horizon profile, and the part of the walk graph that touches the square.
+A tile holds everything date-independent about one 1 km square for one window: its Candidates, each Candidate's Horizon profile over the window's sector of azimuths, and the part of the walk graph that touches the square.
 
 ## Files and names
 
-- One file per 1 km British National Grid square.
+- Two files per 1 km British National Grid square: a **morning** tile and an **evening** tile. They hold the same Candidates and walk graph, and each holds only the Horizon profile samples its window can need (its **sector**, see [Horizon profiles](#horizon-profiles)). A query reads its own window's tiles only, which halves what it fetches (#62).
 - The file is named by the square's OS grid reference, two letters and four digits, plus `.bin`: `ST5873.bin` is the square whose south-west corner is 358000 E, 173000 N.
-- In a published build the file lives at `<dataBase>/f1/<build>/tiles/<grid ref>.bin`.
-- A square with no Candidates and no walk edges has no file.
+- In a published build the files live at `<dataBase>/f1/<build>/tiles/morning/<grid ref>.bin` and `<dataBase>/f1/<build>/tiles/evening/<grid ref>.bin`.
+- A square with no Candidates and no walk edges has no files.
 
 ## When the format number changes
 
@@ -56,7 +56,7 @@ A build of Great Britain converts its National Grid positions to latitude and lo
 
 `C`, `N`, `E` and `S` are the counts from the header.
 
-### Header: 28 bytes
+### Header: 32 bytes
 
 | Offset | Type | Field | Value |
 | --- | --- | --- | --- |
@@ -67,6 +67,8 @@ A build of Great Britain converts its National Grid positions to latitude and lo
 | 16 | `u32` | `N` | number of walk-graph nodes |
 | 20 | `u32` | `E` | number of walk-graph edges |
 | 24 | `u32` | `S` | number of Spot names |
+| 28 | `u16` | `F` | the sector's first Horizon profile sample, 0 – 1439 |
+| 30 | `u16` | `P` | the number of samples in the sector, 1 – 1440 |
 
 ### Sections, in file order
 
@@ -83,10 +85,10 @@ A build of Great Britain converts its National Grid positions to latitude and lo
 | 9 | Edge from | `u32` | `E` | 4`E` | index (0-based) of one end node |
 | 10 | Edge to | `u32` | `E` | 4`E` | index (0-based) of the other end node |
 | 11 | Edge length | `u32` | `E` | 4`E` | centimetres along the path |
-| 12 | Horizon profiles | `u8` | 1440`C` | 1440`C` | delta-coded storage codes, one row of 1,440 per Candidate, in Candidate order |
+| 12 | Horizon profiles | `u8` | `PC` | `PC` | delta-coded storage codes, one row of `P` per Candidate, in Candidate order |
 | 13 | Spot names | — | `S` entries | varies | each entry: `u16` byte length, then that many bytes of UTF-8; so a name is at most 65,535 bytes |
 
-So the Horizon profiles start at byte `28 + 20C + 16N + 12E`, and the Spot names at `28 + 1460C + 16N + 12E`.
+So the Horizon profiles start at byte `32 + 20C + 16N + 12E`, and the Spot names at `32 + (20 + P)C + 16N + 12E`.
 
 ### Candidates
 
@@ -125,27 +127,29 @@ The stored angle is therefore within 0.05° of the true one up to 10°, and with
 
 ## Horizon profiles
 
-Each Candidate has 1,440 samples, covering the full circle:
+The full circle is 1,440 samples:
 
 - Sample `i` (0 to 1439) is the Horizon profile at **true azimuth `i × 0.25°`**, measured clockwise from true north. Sample 0 is north, 360 is east, 720 is south, 1080 is west.
 - Azimuths are true, not grid. The builder applies grid convergence; the reader never does.
 - For an azimuth between two samples, a reader interpolates linearly between the two decoded angles. Sample 1439 is followed by sample 0.
 
-The samples are stored as **differences along azimuth**. If `c[0] … c[1439]` are one Candidate's storage codes, the 1,440 stored bytes `d` are:
+A tile holds only its **sector**: the `P` samples `F, F + 1, …, F + P − 1`, counted mod 1440, so a sector may run on past north. A reader must refuse to use a sample outside the sector, rather than read it as an angle. The builder chooses each window's sector so that its scorer never needs one: the build's `manifest.json` records them (`sectors`), and a morning tile holds the morning sector, an evening tile the evening sector. A tile may hold the full circle (`F = 0`, `P = 1440`).
+
+The sector's samples are stored as **differences along azimuth**. If `c[0] … c[P−1]` are one Candidate's storage codes for samples `F … F + P − 1`, the `P` stored bytes `d` are:
 
 ```
 d[0] = c[0]
-d[i] = (c[i] − c[i−1]) mod 256      for i = 1 … 1439
+d[j] = (c[j] − c[j−1]) mod 256      for j = 1 … P − 1
 ```
 
 To decode, a reader takes a running sum:
 
 ```
 c[0] = d[0]
-c[i] = (c[i−1] + d[i]) mod 256      for i = 1 … 1439
+c[j] = (c[j−1] + d[j]) mod 256      for j = 1 … P − 1
 ```
 
-Each Candidate's row starts afresh: nothing carries from one row to the next, and sample 0 is not differenced against sample 1439. A falling profile gives bytes near 255: a step from code 25 down to code 20 is stored as 251.
+Each Candidate's row starts afresh: nothing carries from one row to the next, and the sector's first sample is not differenced against its last. A falling profile gives bytes near 255: a step from code 25 down to code 20 is stored as 251.
 
 ## What a reader must refuse
 
@@ -153,6 +157,7 @@ A reader rejects the file, rather than returning a partial tile, when:
 
 - it is not valid gzip, or the magic is wrong
 - the format number is not one it knows (reported separately, as "this version can't read this data")
+- the sector's first sample `F` is 1440 or more, or its count `P` is 0 or more than 1440
 - the payload ends before its last field, or has bytes after it
 - the grid reference is not two letters `A`–`Z` (never `I`) and four digits, or differs from the file name
 - a Candidate's walk node index is `N` or more, or its Spot name index is `S` or more
@@ -165,9 +170,9 @@ A builder must not write any of these.
 
 ## Worked example
 
-Tile `ST5873` with one Candidate, two nodes, one edge and one Spot name. The Candidate's Horizon profile is 0.0° (code 20) all round, except a ridge due east: samples 360, 361 and 362 hold codes 25, 130 and 25, which are 0.5°, 15.0° and 0.5°.
+Tile `ST5873` with one Candidate, two nodes, one edge and one Spot name, holding the full circle. The Candidate's Horizon profile is 0.0° (code 20) all round, except a ridge due east: samples 360, 361 and 362 hold codes 25, 130 and 25, which are 0.5°, 15.0° and 0.5°.
 
-The payload is 1,546 bytes:
+The payload is 1,550 bytes:
 
 | Offset | Bytes (hex) | Field |
 | --- | --- | --- |
@@ -178,28 +183,30 @@ The payload is 1,546 bytes:
 | 16 | `02 00 00 00` | `N` = 2 |
 | 20 | `01 00 00 00` | `E` = 1 |
 | 24 | `01 00 00 00` | `S` = 1 |
-| 28 | `C8 45 AB 1E` | Candidate latitude 514541000 = 51.4541000° |
-| 32 | `10 34 72 FE` | Candidate longitude −26070000 = −2.6070000° |
-| 36 | `01 00 00 00` | Candidate walk node: index 1 |
-| 40 | `DA 02 00 00` | Candidate offset 730 cm |
-| 44 | `00 00 00 00` | Candidate Spot name: index 0 |
-| 48 | `65 00 00 00 00 00 00 00` | node 0 id 101 |
-| 56 | `07 00 00 00 00 01 00 00` | node 1 id 1099511627783 (2⁴⁰ + 7) |
-| 64 | `E0 41 AB 1E` | node 0 latitude 514540000 |
-| 68 | `68 55 AB 1E` | node 1 latitude 514545000 |
-| 72 | `28 30 72 FE` | node 0 longitude −26071000 |
-| 76 | `B0 43 72 FE` | node 1 longitude −26066000 |
-| 80 | `00 00 00 00` | edge 0 from: index 0 |
-| 84 | `01 00 00 00` | edge 0 to: index 1 |
-| 88 | `8F 19 00 00` | edge 0 length 6543 cm |
-| 92 | `14`, then `00` × 359 | profile deltas for samples 0 – 359: code 20, then no change |
-| 452 | `05 69 97 FB` | samples 360 – 363: +5, +105, −105 (151), −5 (251) |
-| 456 | `00` × 1076 | samples 364 – 1439: no change |
-| 1532 | `0C 00` | Spot name 0 is 12 bytes long |
-| 1534 | `42 72 61 6E 64 6F 6E 20 48 69 6C 6C` | `Brandon Hill` |
+| 28 | `00 00` | sector first sample `F` = 0 |
+| 30 | `A0 05` | sector samples `P` = 1440 |
+| 32 | `C8 45 AB 1E` | Candidate latitude 514541000 = 51.4541000° |
+| 36 | `10 34 72 FE` | Candidate longitude −26070000 = −2.6070000° |
+| 40 | `01 00 00 00` | Candidate walk node: index 1 |
+| 44 | `DA 02 00 00` | Candidate offset 730 cm |
+| 48 | `00 00 00 00` | Candidate Spot name: index 0 |
+| 52 | `65 00 00 00 00 00 00 00` | node 0 id 101 |
+| 60 | `07 00 00 00 00 01 00 00` | node 1 id 1099511627783 (2⁴⁰ + 7) |
+| 68 | `E0 41 AB 1E` | node 0 latitude 514540000 |
+| 72 | `68 55 AB 1E` | node 1 latitude 514545000 |
+| 76 | `28 30 72 FE` | node 0 longitude −26071000 |
+| 80 | `B0 43 72 FE` | node 1 longitude −26066000 |
+| 84 | `00 00 00 00` | edge 0 from: index 0 |
+| 88 | `01 00 00 00` | edge 0 to: index 1 |
+| 92 | `8F 19 00 00` | edge 0 length 6543 cm |
+| 96 | `14`, then `00` × 359 | profile deltas for samples 0 – 359: code 20, then no change |
+| 456 | `05 69 97 FB` | samples 360 – 363: +5, +105, −105 (151), −5 (251) |
+| 460 | `00` × 1076 | samples 364 – 1439: no change |
+| 1536 | `0C 00` | Spot name 0 is 12 bytes long |
+| 1538 | `42 72 61 6E 64 6F 6E 20 48 69 6C 6C` | `Brandon Hill` |
 
-The published file is these 1,546 bytes, gzip-compressed.
+The published file is these 1,550 bytes, gzip-compressed.
 
 ## Not in the tile
 
-The build's `manifest.json` carries the format number, the build id, the list of tiles, attribution and licence. Anything that depends on the date (the sun's track, Sun minutes, ranking) is computed by the reader and is not stored.
+The build's `manifest.json` carries the format number, the build id, the two windows' sectors, the list of tiles, attribution and licence. Anything that depends on the date (the sun's track, Sun minutes, ranking) is computed by the reader and is not stored.

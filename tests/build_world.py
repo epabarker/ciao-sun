@@ -13,7 +13,9 @@ boundary between the 1 km squares ST5773 and ST5873 (easting 358000):
   ST5773 and 30 in ST5873. The street runs on beyond the coverage each way.
 - A 40 m wall stands 180 m due *true* east of the Candidate P = (358050, 173500).
 - A bare-crowned tree, 25 m in the first return and invisible in the last,
-  stands 50 m grid north of the Candidate T = (357950, 173510).
+  stands 50 m true north-east of the Candidate T = (357950, 173510): a 5 m
+  crown over x 357983..357988, y 173543..173548. (North-east, not north, so it
+  is in the morning tiles' sector: no tile holds due north, #62.)
 - A dozen 20 m posts stand in a row 60 m south of the street.
 - A pond lies flat between the street and the posts.
 - OS Terrain 50 is flat at 10 m over the 10 km squares ST47, ST57 and ST67,
@@ -235,7 +237,7 @@ def fetch_inputs(
         _cells(returns, *wall_block(), WALL_TOP)
         for post_x in range(357920, 358090, 15):
             _cells(returns, post_x, post_x + 2, 173438, 173440, POST_TOP)
-    _cells(first, 357948, 357953, 173558, 173563, TREE_TOP)
+    _cells(first, 357983, 357989, 173543, 173549, TREE_TOP)
     if tidal_river:
         _cells(first, 357800, 358200, 173530, 173560, GROUND + 5.0)
     if boat:

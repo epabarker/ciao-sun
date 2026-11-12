@@ -168,7 +168,8 @@ def build(
     \b
     Writes one build directory from the fetched inputs:
       <out>/f1/<build id>/manifest.json
-      <out>/f1/<build id>/tiles/<grid ref>.bin   one per 1 km square
+      <out>/f1/<build id>/tiles/morning/<grid ref>.bin   one per 1 km square,
+      <out>/f1/<build id>/tiles/evening/<grid ref>.bin   each its window's sector
       <out>/f1/<build id>/basemap/{z}/{x}/{y}.mvt   the map behind them
       <out>/f1/<build id>/fixtures/<id>.json     one per query of the query set
       <out>/f1/<build id>/fixtures/index.json

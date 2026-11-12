@@ -24,7 +24,7 @@ from ciao_sun.build_checks import BuildCheckError
 from ciao_sun.cli import app
 from ciao_sun.fetch import read_lockfile
 from ciao_sun.reference.fixtures import bristol_query_set
-from ciao_sun.tile_codec import Tile, read_tile, write_tile
+from ciao_sun.tile_codec import PROFILE_SAMPLES, Tile, codes_to_degrees, read_tile, write_tile
 from tests import basemap_world as protomaps
 from tests import build_world as world
 from tests.osm_extract import bng_of
@@ -38,9 +38,15 @@ class Built:
         self.inputs = inputs
         self.reported = reported
         self.manifest = json.loads((directory / "manifest.json").read_text())
-        self.tiles: dict[str, Tile] = {
-            path.stem: read_tile(path) for path in sorted((directory / "tiles").glob("*.bin"))
+        self.windows: dict[str, dict[str, Tile]] = {
+            window: {
+                path.stem: read_tile(path)
+                for path in sorted((directory / "tiles" / window).glob("*.bin"))
+            }
+            for window in ("morning", "evening")
         }
+        # Candidates, names and the walk graph are the same in both windows' tiles.
+        self.tiles = self.windows["morning"]
 
 
 @pytest.fixture(scope="module")
@@ -83,13 +89,20 @@ def _positions(tile: Tile) -> list[tuple[int, int]]:
 
 
 def _profile(built: Built, position: tuple[float, float]) -> np.ndarray:
-    """The decoded Horizon profile, in degrees, of the Candidate at a National Grid position."""
+    """The decoded Horizon profile, in degrees, of the Candidate at a National Grid position:
+    each sample from whichever window's tile holds it, NaN where neither does."""
     key = (round(position[0]), round(position[1]))
-    for tile in built.tiles.values():
-        positions = _positions(tile)
-        if key in positions:
-            return tile.horizon_profile_degrees(positions.index(key))
-    raise AssertionError(f"no Candidate at {position}")
+    profile = np.full(PROFILE_SAMPLES, np.nan)
+    for tiles in built.windows.values():
+        for tile in tiles.values():
+            positions = _positions(tile)
+            if key in positions:
+                held = tile.sector.indexes()
+                codes = tile.candidates.profile_codes[positions.index(key), held]
+                profile[held] = codes_to_degrees(codes)
+    if np.isnan(profile).all():
+        raise AssertionError(f"no Candidate at {position}")
+    return profile
 
 
 def test_candidates_come_only_from_inside_the_coverage_and_beside_the_street(built: Built):
@@ -136,17 +149,20 @@ def test_a_wall_on_a_true_bearing_shows_at_that_true_azimuth(built: Built):
 
 
 def test_a_bare_crowned_tree_blocks_the_sky_at_its_first_return_height(built: Built):
-    # 50 m north of T the first return is 25 m and the last return is the
-    # ground: atan((25 - 11.6) / 48) = 15.6 deg. Without the crown envelope the
-    # horizon there would be the far ridge, under 4 deg.
-    assert _profile(built, world.T)[0] == pytest.approx(15.6, abs=0.5)
+    # True north-east of T the first return is 25 m and the last return is the
+    # ground; the crown's near corner is 33 m east and 33 m north of T, 46.7 m
+    # along the ray: atan((25 - 11.6) / 46.7) = 16.0 deg. Without the crown
+    # envelope the horizon there would be the far ridge, under 3 deg.
+    assert _profile(built, world.T)[180] == pytest.approx(16.0, abs=0.7)
 
 
 def test_the_far_ridge_from_terrain_50_sets_the_horizon_where_nothing_nearer_does(built: Built):
-    # North of P the near field is flat ground. The ridge's first full-height
-    # Terrain 50 cell is 4,550 m away: atan((310 - 11.6 - 1.44) / 4550) = 3.73 deg,
-    # 1.44 m being the curvature drop 4550^2 / (2 * 1.13 * 6371000).
-    assert _profile(built, world.P)[0] == pytest.approx(3.73, abs=0.06)
+    # North-east of P the near field is flat ground. The ridge's first full-height
+    # Terrain 50 cells are 4,550 m north of P, so 4550 x sqrt(2) = 6,435 m along
+    # the ray: atan((310 - 11.6 - 2.88) / 6435) = 2.63 deg, 2.88 m being the
+    # curvature drop 6435^2 / (2 * 1.13 * 6371000). Due north is in no tile.
+    assert _profile(built, world.P)[180] == pytest.approx(2.63, abs=0.1)
+    assert np.isnan(_profile(built, world.P)[0])
 
 
 # --- The manifest -------------------------------------------------------------
@@ -223,12 +239,30 @@ def test_the_manifest_holds_the_coverage_polygon(built: Built):
 def test_the_manifest_indexes_exactly_the_tiles_written(built: Built):
     index = built.manifest["tiles"]
 
-    assert sorted(index) == sorted(built.tiles)
+    for window in ("morning", "evening"):
+        assert sorted(index) == sorted(built.windows[window])
     for grid_ref, line in index.items():
-        data = (built.directory / "tiles" / f"{grid_ref}.bin").read_bytes()
-        assert line["bytes"] == len(data)
-        assert line["sha256"] == hashlib.sha256(data).hexdigest()
         assert line["candidates"] == len(built.tiles[grid_ref].candidates.lat_e7)
+        for window in ("morning", "evening"):
+            data = (built.directory / "tiles" / window / f"{grid_ref}.bin").read_bytes()
+            assert line[window]["bytes"] == len(data)
+            assert line[window]["sha256"] == hashlib.sha256(data).hexdigest()
+
+
+def test_each_windows_tiles_hold_only_its_sector_as_the_manifest_records(built: Built):
+    sectors = built.manifest["sectors"]
+
+    for window in ("morning", "evening"):
+        for tile in built.windows[window].values():
+            assert (tile.sector.first, tile.sector.samples) == (
+                sectors[window]["firstSample"],
+                sectors[window]["samples"],
+            )
+    # Bristol: the morning from before the earliest sunrise to past solar noon,
+    # the evening from before solar noon to past the latest sunset.
+    morning, evening = (sectors[w]["firstSample"] * 0.25 for w in ("morning", "evening"))
+    assert morning == pytest.approx(35.0, abs=1.5)
+    assert evening == pytest.approx(169.0, abs=1.5)
 
 
 def test_the_manifest_records_the_tolerances_the_build_checks_passed_at(built: Built):
@@ -337,22 +371,29 @@ def test_the_same_inputs_give_byte_identical_tiles_whatever_the_build_id_or_work
     )
 
     assert again.name == "20261111b"  # the next letter: a build is never overwritten
-    for grid_ref in built.tiles:
-        first = (built.directory / "tiles" / f"{grid_ref}.bin").read_bytes()
-        assert (again / "tiles" / f"{grid_ref}.bin").read_bytes() == first
+    for window in ("morning", "evening"):
+        for grid_ref in built.tiles:
+            first = (built.directory / "tiles" / window / f"{grid_ref}.bin").read_bytes()
+            assert (again / "tiles" / window / f"{grid_ref}.bin").read_bytes() == first
     assert json.loads((again / "manifest.json").read_text())["tiles"] == built.manifest["tiles"]
 
 
 # --- The build checks ---------------------------------------------------------
 
 
-def _rewrite(build_dir: Path, grid_ref: str, change: Callable[[np.ndarray], None]) -> None:
-    """Change a written tile's profile codes in place, through the codec."""
-    tile = read_tile(build_dir / "tiles" / f"{grid_ref}.bin")
+def _rewrite(
+    build_dir: Path, grid_ref: str, change: Callable[[np.ndarray], None], window: str = "morning"
+) -> None:
+    """Change a written tile's profile codes in place, through the codec. `change` gets
+    the codes of the tile's sector only, one row per Candidate."""
+    tile = read_tile(build_dir / "tiles" / window / f"{grid_ref}.bin")
+    held = tile.sector.indexes()
     codes = tile.candidates.profile_codes.copy()
-    change(codes)
+    in_sector = codes[:, held]
+    change(in_sector)
+    codes[:, held] = in_sector
     changed = replace(tile, candidates=replace(tile.candidates, profile_codes=codes))
-    write_tile(changed, build_dir / "tiles")
+    write_tile(changed, build_dir / "tiles" / window)
 
 
 def test_the_direct_ray_check_passes_the_build_as_written(built: Built):
@@ -363,11 +404,11 @@ def test_a_corrupted_profile_fails_the_direct_ray_check(built: Built, tmp_path: 
     copy = Path(shutil.copytree(built.directory, tmp_path / built.directory.name))
 
     def raise_a_sector(codes: np.ndarray) -> None:
-        codes[0, 600:640] += 10  # one Candidate, 10 deg of azimuth, 1 deg too high
+        codes[0, 300:340] += 10  # one Candidate, 10 deg of azimuth, 1 deg too high
 
     _rewrite(copy, "ST5873", raise_a_sector)
 
-    with pytest.raises(BuildCheckError, match=r"ST5873 Candidate 0: 40 of 1440"):
+    with pytest.raises(BuildCheckError, match=r"morning: ST5873 Candidate 0: 40 of \d+"):
         check_profiles(copy, built.inputs)
 
 
@@ -512,7 +553,8 @@ def test_build_help_names_what_is_written_and_what_fails_a_build():
     text = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
     for phrase in [
         "--coverage", "GeoJSON", "--inputs", "fetch.lock.json", "--out", "manifest.json",
-        "tiles/<grid ref>.bin", "direct ray casting", "water", "SHA-256", "--workers",
+        "tiles/morning/<grid ref>.bin", "tiles/evening/<grid ref>.bin",
+        "direct ray casting", "water", "SHA-256", "--workers",
         "basemap/{z}/{x}/{y}.mvt", "Protomaps",
         "--queries", "fixtures/index.json", "golden fixture",
     ]:  # fmt: skip

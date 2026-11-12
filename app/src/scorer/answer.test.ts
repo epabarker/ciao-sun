@@ -23,6 +23,7 @@ function tile(gridRef: string, offsetsCm: number[]): Tile {
   const latE7 = Int32Array.from(offsetsCm, (_, k) => O.latE7 + (gridRef === "ST5773" ? -1 : 1) * (k + 1) * 27_000);
   return {
     gridRef,
+    sector: { firstSample: 0, samples: PROFILE_SAMPLES },
     names: offsetsCm.map((_, k) => `${gridRef} spot ${k}`),
     candidates: {
       latE7,

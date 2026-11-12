@@ -22,7 +22,7 @@ from typer.testing import CliRunner
 
 from ciao_sun.cli import app
 from ciao_sun.coverage import Coverage
-from ciao_sun.manifest import read_manifest
+from ciao_sun.manifest import read_manifest, tile_file
 from ciao_sun.reference import Query, answer
 from ciao_sun.reference.fixtures import (
     QuerySetError,
@@ -33,7 +33,7 @@ from ciao_sun.reference.fixtures import (
     write_fixtures,
 )
 from ciao_sun.solar import sun_track
-from ciao_sun.tile_codec import encode_tile, read_tile
+from ciao_sun.tile_codec import codes_to_degrees, encode_tile, read_tile
 from tests import synthetic_fixtures
 
 # Rich colours help output on GitHub Actions, splitting option names with escape codes.
@@ -136,9 +136,8 @@ def test_a_fixture_holds_the_answer_of_the_reference_over_the_tiles_it_names(
     coverage = Coverage.from_geojson(manifest["coverage"])
     for line in generated.index["fixtures"]:
         fixture = generated.fixture(line["id"])
-        tiles = [
-            read_tile(generated.build_dir / "tiles" / f"{ref}.bin") for ref in fixture["tiles"]
-        ]
+        window = fixture["query"]["window"]
+        tiles = [read_tile(tile_file(generated.build_dir, window, ref)) for ref in fixture["tiles"]]
 
         expected = answer(Query.from_json(fixture["query"]), tiles, coverage).to_json()
 
@@ -198,17 +197,25 @@ def test_a_fixture_carries_the_sun_track_of_the_query_day_at_its_origin(generate
 def _gaps(generated: Generated, fixture: dict[str, Any]) -> dict[str, np.ndarray]:
     """|apparent elevation - Horizon profile at the sun's azimuth| at every minute of the
     day, for every Candidate of the fixture's tiles: from the decoded profiles and the
-    reference sun track, interpolated by numpy rather than by the scorer."""
+    reference sun track, interpolated by numpy rather than by the scorer. Minutes the
+    window's tiles hold no profile for (the other half of the day, or the sun below
+    -2 deg, under every profile) are infinitely far from it."""
     query = fixture["query"]
     track = sun_track(query["origin"]["lat"], query["origin"]["lon"], query["date"])
+    noon = int(np.argmax(track.apparent_elevation))
+    minutes = np.arange(len(track.azimuth))
+    held = (minutes < noon) if query["window"] == "morning" else (minutes >= noon)
+    held &= track.apparent_elevation >= -2.0
     sample_azimuths = np.arange(0.0, 360.25, 0.25)
     gaps = {}
     for grid_ref in fixture["tiles"]:
-        tile = read_tile(generated.build_dir / "tiles" / f"{grid_ref}.bin")
+        tile = read_tile(tile_file(generated.build_dir, query["window"], grid_ref))
         for k in range(len(tile.candidates.lat_e7)):
-            profile = tile.horizon_profile_degrees(k)
+            codes = tile.candidates.profile_codes[k]
+            profile = np.where(codes < 228, codes_to_degrees(np.minimum(codes, 227)), np.nan)
             horizon = np.interp(track.azimuth, sample_azimuths, np.append(profile, profile[0]))
-            gaps[f"{grid_ref}/{k}"] = np.abs(track.apparent_elevation - horizon)
+            gap = np.abs(track.apparent_elevation - horizon)
+            gaps[f"{grid_ref}/{k}"] = np.where(held, gap, np.inf)
     return gaps
 
 
@@ -372,12 +379,12 @@ def test_the_committed_synthetic_set_is_self_contained():
     index = json.loads((COMMITTED / "fixtures" / "index.json").read_text())
 
     assert manifest["build"] == index["build"] == synthetic_fixtures.BUILD_ID
-    assert sorted(path.stem for path in (COMMITTED / "tiles").glob("*.bin")) == sorted(
-        manifest["tiles"]
-    )
-    for grid_ref, line in manifest["tiles"].items():
-        data = (COMMITTED / "tiles" / f"{grid_ref}.bin").read_bytes()
-        assert hashlib.sha256(data).hexdigest() == line["sha256"]
+    for window in ("morning", "evening"):
+        on_disk = sorted(path.stem for path in (COMMITTED / "tiles" / window).glob("*.bin"))
+        assert on_disk == sorted(manifest["tiles"])
+        for grid_ref, line in manifest["tiles"].items():
+            data = tile_file(COMMITTED, window, grid_ref).read_bytes()
+            assert hashlib.sha256(data).hexdigest() == line[window]["sha256"]
     for line in index["fixtures"]:
         assert (COMMITTED / "fixtures" / line["file"]).is_file()
         assert set(line["tiles"]) <= set(manifest["tiles"])
@@ -391,10 +398,11 @@ def test_the_committed_synthetic_set_is_what_the_one_command_regenerates(generat
 
     assert committed.index == generated.index, stale
     assert sorted(read_manifest(COMMITTED)["tiles"]) == ["ST5773", "ST5873"]
-    for grid_ref in ("ST5773", "ST5873"):
-        ours = read_tile(COMMITTED / "tiles" / f"{grid_ref}.bin")
-        theirs = read_tile(generated.build_dir / "tiles" / f"{grid_ref}.bin")
-        assert encode_tile(ours) == encode_tile(theirs), stale
+    for window in ("morning", "evening"):
+        for grid_ref in ("ST5773", "ST5873"):
+            ours = read_tile(tile_file(COMMITTED, window, grid_ref))
+            theirs = read_tile(tile_file(generated.build_dir, window, grid_ref))
+            assert encode_tile(ours) == encode_tile(theirs), stale
     for line in generated.index["fixtures"]:
         ours, theirs = committed.fixture(line["id"]), generated.fixture(line["id"])
         for part in ("query", "tiles", "answer", "nearBoundary"):

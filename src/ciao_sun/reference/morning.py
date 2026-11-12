@@ -12,7 +12,7 @@ from ciao_sun.reference.lamp import lamp_only
 from ciao_sun.reference.windows import WindowPlan, minute_of, now_minute, wake_minute
 from ciao_sun.solar import SunTrack
 
-MORNING_WINDOW_MIN = 180  # the window ends this long after Wake time
+MORNING_WINDOW_MIN = 180  # the window ends this long after Wake time, or at solar noon
 FULL_WEIGHT_MIN = 60  # weight 1 until this long after Wake time, then linear to 0 at the end
 
 
@@ -30,7 +30,8 @@ def morning_leave_by(
 def plan_morning(query: Query, track: SunTrack) -> WindowPlan | Answer:
     wake = wake_minute(query, track)
     now = now_minute(query, track)
-    end = min(wake + MORNING_WINDOW_MIN, len(track.times))
+    # Never past solar noon: morning tiles hold only the sun's path up to it (#62).
+    end = min(wake + MORNING_WINDOW_MIN, len(track.times), minute_of(track, track.solar_noon))
     earliest_leave = wake if now is None else max(wake, now)
     if track.nominal_sunrise is None:
         return _no_daylight(query, track)

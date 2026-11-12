@@ -146,7 +146,6 @@ export async function downloadBuild(pin: ReleaseConfig, fetch: FetchLike, dir: s
   }
   const entries = index.fixtures as IndexEntry[];
   const files: string[] = [];
-  const tiles = new Set<string>();
   for (const { file, tiles: names } of entries) {
     if (typeof file !== "string" || !FIXTURE_FILE.test(file) || file === "index.json") {
       throw new ReleaseRefused(`fixtures/index.json: ${JSON.stringify(file)} is not a fixture file name`);
@@ -156,11 +155,22 @@ export async function downloadBuild(pin: ReleaseConfig, fetch: FetchLike, dir: s
       if (typeof gridRef !== "string" || !GRID_REF.test(gridRef)) {
         throw new ReleaseRefused(`fixtures/index.json: ${JSON.stringify(gridRef)} is not a grid ref`);
       }
-      tiles.add(gridRef);
     }
   }
-  for (const file of files) await get(`fixtures/${file}`);
-  for (const gridRef of [...tiles].sort()) await get(`tiles/${gridRef}.bin`);
+  // A fixture's tiles are its Query's window's tiles: tiles/<window>/<grid ref>.bin (#62).
+  const tiles = new Set<string>();
+  for (const [k, file] of files.entries()) {
+    const fixture = JSON.parse(new TextDecoder().decode(await get(`fixtures/${file}`))) as {
+      query?: { window?: unknown };
+    };
+    const window = fixture.query?.window;
+    if (window !== "morning" && window !== "evening") {
+      throw new ReleaseRefused(`fixtures/${file} has no Query window`);
+    }
+    const names = entries[k]!.tiles;
+    for (const gridRef of (Array.isArray(names) ? names : [names]) as string[]) tiles.add(`${window}/${gridRef}`);
+  }
+  for (const tile of [...tiles].sort()) await get(`tiles/${tile}.bin`);
   return { buildDir, fixtures: files.length, tiles: tiles.size };
 }
 

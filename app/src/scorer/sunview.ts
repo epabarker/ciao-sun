@@ -18,6 +18,13 @@ const OPEN_SKY_OF_CODE = DEGREES_BY_CODE.map((h) => {
 });
 
 const wrap = (i: number, n: number) => ((i % n) + n) % n;
+/** The lowest Horizon profile angle: the storage code's floor. */
+const STORAGE_MIN_DEG = DEGREES_BY_CODE[0]!;
+
+/** A sample outside the tile's sector holds no angle: reading it is a scorer bug (#62). */
+function outsideSector(sample: number): never {
+  throw new RangeError(`Horizon profile sample ${sample} is outside the tile's sector`);
+}
 
 /**
  * Whether the sun is in view at one Candidate, per minute from `start` to
@@ -33,8 +40,8 @@ export function sunInView(codes: Uint8Array, track: SunTrack, start: number, end
     const position = wrap(track.azimuth[m]!, 360) * SAMPLES_PER_DEG;
     const below = Math.floor(position);
     const fraction = position - below;
-    const before = DEGREES_BY_CODE[codes[wrap(below, PROFILE_SAMPLES)]!]!;
-    const after = DEGREES_BY_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!]!;
+    const before = DEGREES_BY_CODE[codes[wrap(below, PROFILE_SAMPLES)]!] ?? outsideSector(below);
+    const after = DEGREES_BY_CODE[codes[wrap(below + 1, PROFILE_SAMPLES)]!] ?? outsideSector(below + 1);
     const horizon = before * (1 - fraction) + after * fraction;
     inView[m - start] = track.apparentElevation[m]! > horizon ? 1 : 0;
   }
@@ -42,23 +49,33 @@ export function sunInView(codes: Uint8Array, track: SunTrack, start: number, end
 }
 
 /**
- * One Candidate's Last sun: the last minute of the track's day with the sun in
- * view. It is looked for over the whole day, not only a window, so it can fall
- * after Nominal sunset where the Horizon profile is below 0 degrees. Null
- * when the sun is never in view. `forced` sets sun in view at some minutes,
- * as `SightOverrides` does.
+ * One Candidate's Last sun: the last minute after solar noon with the sun in
+ * view. It is looked for over the whole afternoon, not only a window, so it
+ * can fall after Nominal sunset where the Horizon profile is below 0 degrees,
+ * but only while the sun stands at -2 degrees or higher: no Horizon profile is
+ * lower, so the sun is never in view below it. That keeps the search in the
+ * evening tiles' sector (#62). Null when the sun is never in view. `forced`
+ * sets sun in view at some minutes, as `SightOverrides` does.
  */
 export function lastSun(
   codes: Uint8Array,
   track: SunTrack,
   forced: Readonly<Record<number, boolean>> = {},
 ): number | null {
-  const inView = sunInView(codes, track, 0, track.length);
+  // The day's highest sun, as the reference finds it: the first minute of the greatest elevation.
+  let start = 0;
+  for (let m = 1; m < track.length; m++) {
+    if (track.apparentElevation[m]! > track.apparentElevation[start]!) start = m;
+  }
+  let end = start;
+  while (end < track.length && track.apparentElevation[end]! >= STORAGE_MIN_DEG) end++;
+  const inView = sunInView(codes, track, start, end);
   for (const [minute, value] of Object.entries(forced)) {
-    if (Number(minute) < inView.length) inView[Number(minute)] = value ? 1 : 0;
+    const at = Number(minute) - start;
+    if (at >= 0 && at < inView.length) inView[at] = value ? 1 : 0;
   }
   const last = inView.lastIndexOf(1);
-  return last < 0 ? null : last;
+  return last < 0 ? null : start + last;
 }
 
 /** Whether the sun's apparent elevation is 0-30 degrees (both included), per minute (1 or 0). */
@@ -93,7 +110,7 @@ export function opennessSector(track: SunTrack, start: number, end: number): Int
 export function skyOpenness(codes: Uint8Array, sector: Int32Array): number {
   let sum = 0;
   for (const sample of sector) {
-    sum += OPEN_SKY_OF_CODE[codes[sample]!]!;
+    sum += OPEN_SKY_OF_CODE[codes[sample]!] ?? outsideSector(sample);
   }
   return sum / sector.length;
 }

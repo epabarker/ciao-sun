@@ -13,9 +13,10 @@ export const PROFILE_SAMPLES = 1440;
 export const PROFILE_STEP_DEG = 360 / PROFILE_SAMPLES;
 /** The storage code has 228 codes, 0 to 227. */
 export const CODE_COUNT = 228;
+/** What a decoded Horizon profile holds outside its tile's sector: never a storage code (#62). */
+export const OUTSIDE_SECTOR = 255;
 
 const FINE_TOP_CODE = 120;
-const HEADER_BYTES = 28;
 const NODE_ID_LIMIT = 2n ** 53n;
 
 /** The bytes are not a valid f1 tile. */
@@ -46,7 +47,10 @@ export interface Candidates {
   readonly offsetCm: Uint32Array;
   /** Index into the tile's Spot names. */
   readonly nameIndex: Uint32Array;
-  /** Storage codes, PROFILE_SAMPLES per Candidate in Candidate order, azimuth delta undone. */
+  /**
+   * Storage codes, PROFILE_SAMPLES per Candidate in Candidate order, azimuth delta
+   * undone; OUTSIDE_SECTOR at every sample outside the tile's sector.
+   */
   readonly profileCodes: Uint8Array;
 }
 
@@ -62,9 +66,16 @@ export interface WalkGraph {
   readonly edgeLengthCm: Uint32Array;
 }
 
-/** One 1 km tile, named by its OS grid reference (e.g. "ST5873"). */
+/** The run of Horizon profile samples a tile holds: `samples` of them from `firstSample`, mod 1440. */
+export interface Sector {
+  readonly firstSample: number;
+  readonly samples: number;
+}
+
+/** One 1 km tile, named by its OS grid reference (e.g. "ST5873"), for one window. */
 export interface Tile {
   readonly gridRef: string;
+  readonly sector: Sector;
   readonly names: readonly string[];
   readonly candidates: Candidates;
   readonly walkGraph: WalkGraph;
@@ -199,19 +210,22 @@ function nodeIds(raw: BigUint64Array): Float64Array {
   return ids;
 }
 
-/** Undo the azimuth delta: a running sum mod 256 along each Candidate's row. */
-function profileCodes(deltas: Uint8Array, candidates: number): Uint8Array {
-  const codes = new Uint8Array(deltas.length);
+/**
+ * Undo the azimuth delta (a running sum mod 256 along each Candidate's row of
+ * the sector) and lay each row out over the full circle, OUTSIDE_SECTOR elsewhere.
+ */
+function profileCodes(deltas: Uint8Array, candidates: number, sector: Sector): Uint8Array {
+  const codes = new Uint8Array(candidates * PROFILE_SAMPLES).fill(OUTSIDE_SECTOR);
   for (let row = 0; row < candidates; row++) {
     let code = 0; // each row starts afresh
-    for (let i = row * PROFILE_SAMPLES, end = i + PROFILE_SAMPLES; i < end; i++) {
-      code = (code + deltas[i]!) & 0xff;
+    for (let j = 0; j < sector.samples; j++) {
+      code = (code + deltas[row * sector.samples + j]!) & 0xff;
       if (code >= CODE_COUNT) {
         throw new TileFormatError(
           `Horizon profile code ${code} is not one of the ${CODE_COUNT} storage codes`,
         );
       }
-      codes[i] = code;
+      codes[row * PROFILE_SAMPLES + ((sector.firstSample + j) % PROFILE_SAMPLES)] = code;
     }
   }
   return codes;
@@ -242,6 +256,12 @@ export async function decodeTile(bytes: Uint8Array, expectedGridRef?: string): P
   const nodeCount = cursor.u32();
   const edgeCount = cursor.u32();
   const nameCount = cursor.u32();
+  const sector: Sector = { firstSample: cursor.u16(), samples: cursor.u16() };
+  if (!(sector.firstSample < PROFILE_SAMPLES && sector.samples > 0 && sector.samples <= PROFILE_SAMPLES)) {
+    throw new TileFormatError(
+      `profile sector ${sector.firstSample} + ${sector.samples} samples is not within the ${PROFILE_SAMPLES} samples of the circle`,
+    );
+  }
 
   const latE7 = cursor.i32Column(candidateCount);
   const lonE7 = cursor.i32Column(candidateCount);
@@ -254,7 +274,7 @@ export async function decodeTile(bytes: Uint8Array, expectedGridRef?: string): P
   const edgeFrom = cursor.u32Column(edgeCount);
   const edgeTo = cursor.u32Column(edgeCount);
   const edgeLengthCm = cursor.u32Column(edgeCount);
-  const deltas = cursor.bytes(candidateCount * PROFILE_SAMPLES);
+  const deltas = cursor.bytes(candidateCount * sector.samples);
 
   const utf8 = new TextDecoder("utf-8", { fatal: true });
   const names: string[] = [];
@@ -283,6 +303,7 @@ export async function decodeTile(bytes: Uint8Array, expectedGridRef?: string): P
 
   return {
     gridRef,
+    sector,
     names,
     candidates: {
       latE7,
@@ -290,7 +311,7 @@ export async function decodeTile(bytes: Uint8Array, expectedGridRef?: string): P
       nodeIndex,
       offsetCm,
       nameIndex,
-      profileCodes: profileCodes(deltas, candidateCount),
+      profileCodes: profileCodes(deltas, candidateCount, sector),
     },
     walkGraph: {
       nodeId: nodeIds(rawNodeId),

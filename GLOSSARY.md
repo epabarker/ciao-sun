@@ -21,7 +21,7 @@ The whole minute nearest the moment the sun's geometric centre falls through -0.
 _Avoid_: local sunset, actual sunset
 
 **Last sun**:
-The last minute on a given day that the sun is above a Candidate's Horizon profile, in the sense used for Sun minutes. It can be well before Nominal sunset behind obstructions.
+The last minute on a given day, after solar noon, that the sun is above a Candidate's Horizon profile, in the sense used for Sun minutes. It can be well before Nominal sunset behind obstructions.
 _Avoid_: local sunset, sundown
 
 **Candidate**:
@@ -41,7 +41,7 @@ When the person gets up on a given day; the anchor for their Morning window and 
 _Avoid_: alarm time, start time
 
 **Morning window**:
-The period in which Morning light counts: from the later of Wake time and Nominal sunrise until a few hours after waking, weighted most in the first hour after waking and tapering after.
+The period in which Morning light counts: from the later of Wake time and Nominal sunrise until a few hours after waking or solar noon, whichever is sooner, weighted most in the first hour after waking and tapering after.
 _Avoid_: sunrise hour, sunrise window
 
 **Evening window**:

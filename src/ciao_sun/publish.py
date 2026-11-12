@@ -53,6 +53,7 @@ from ciao_sun import basemap
 from ciao_sun.fetch import FetchError, read_lockfile, sha256_of
 from ciao_sun.manifest import MANIFEST_NAME, read_manifest
 from ciao_sun.report import silent
+from ciao_sun.sectors import WINDOWS
 
 CACHE_CONTROL = "public, max-age=31536000, immutable"
 ARCHIVED_INPUT_KINDS = ("osm", "terrain50")
@@ -218,19 +219,21 @@ def _check_against_manifest(
     build_dir: Path, files: dict[str, Path], manifest: dict[str, Any]
 ) -> None:
     index = manifest.get("tiles", {})
-    on_disk = {Path(name).stem for name in files if name.startswith("tiles/")}
-    if on_disk != set(index):
-        odd = sorted(on_disk ^ set(index))
+    expected = {f"tiles/{window}/{grid_ref}.bin" for grid_ref in index for window in WINDOWS}
+    on_disk = {name for name in files if name.startswith("tiles/")}
+    if on_disk != expected:
+        odd = sorted(on_disk ^ expected)
         raise PublishError(
             f"{build_dir}: the tiles on disk are not the manifest's tile index "
             f"(differing: {', '.join(odd[:5])}{'…' if len(odd) > 5 else ''})."
         )
     for grid_ref, entry in index.items():
-        if sha256_of(files[f"tiles/{grid_ref}.bin"]) != entry["sha256"]:
-            raise PublishError(
-                f"{build_dir}: tile {grid_ref} does not match the SHA-256 in the manifest. "
-                "The build directory has been changed since it was built."
-            )
+        for window in WINDOWS:
+            if sha256_of(files[f"tiles/{window}/{grid_ref}.bin"]) != entry[window]["sha256"]:
+                raise PublishError(
+                    f"{build_dir}: the {window} tile {grid_ref} does not match the SHA-256 "
+                    "in the manifest. The build directory has been changed since it was built."
+                )
     described = manifest.get("basemap")
     if described is not None:
         count = sum(1 for name in files if name.startswith(f"{basemap.DIRECTORY}/"))

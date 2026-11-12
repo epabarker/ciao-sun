@@ -118,13 +118,16 @@ describe("downloading the pinned build", () => {
         `${build}manifest.json`,
         `${build}fixtures/index.json`,
         ...fixtures,
-        `${build}tiles/ST5773.bin`,
-        `${build}tiles/ST5873.bin`,
+        // Morning fixtures name morning tiles, Evening ones evening tiles (#62).
+        `${build}tiles/morning/ST5773.bin`,
+        `${build}tiles/morning/ST5873.bin`,
+        `${build}tiles/evening/ST5773.bin`,
+        `${build}tiles/evening/ST5873.bin`,
       ].sort(),
     );
-    expect(got).toEqual({ buildDir: join(dir, "f1/20261111a"), fixtures: 15, tiles: 2 });
+    expect(got).toEqual({ buildDir: join(dir, "f1/20261111a"), fixtures: 15, tiles: 4 });
     const written = filesIn(dir);
-    expect(written).toHaveLength(15 + 4);
+    expect(written).toHaveLength(15 + 6);
     for (const file of written) {
       expect(readFileSync(join(dir, file)), file).toEqual(readFileSync(join(SYNTHETIC, file)));
     }

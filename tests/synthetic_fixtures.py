@@ -27,7 +27,8 @@ from typing import Any
 
 from ciao_sun.build import build
 from ciao_sun.reference.fixtures import read_query_set
-from ciao_sun.tile_codec import codes_to_degrees, read_tile
+from ciao_sun.sectors import WINDOWS
+from ciao_sun.tile_codec import Tile, codes_to_degrees, read_tile
 from tests import build_world
 
 SYNTHETIC = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic"
@@ -61,41 +62,49 @@ def regenerate(out: Path = SYNTHETIC) -> Path:
 
 
 def decoded_tiles(build_dir: Path) -> dict[str, Any]:
-    """Every tile of a build as the Python reader decodes it, keyed by grid ref.
+    """Every tile of a build as the Python reader decodes it, by window and grid ref.
 
     Columns are written whole. The Horizon profiles are too big to list, so
     they are two SHA-256 digests over all Candidates in order: of the storage
-    codes (one byte each) and of the angles (little-endian float64 degrees).
+    codes as decoded to the full circle (one byte each, 255 outside the sector)
+    and of the sector's angles (little-endian float64 degrees).
     """
     tiles: dict[str, Any] = {}
-    for path in sorted((build_dir / "tiles").glob("*.bin")):
-        tile = read_tile(path)
-        c, g = tile.candidates, tile.walk_graph
-        degrees = codes_to_degrees(c.profile_codes).astype("<f8")
-        tiles[tile.grid_ref] = {
-            "names": list(tile.names),
-            "candidates": {
-                "latE7": c.lat_e7.tolist(),
-                "lonE7": c.lon_e7.tolist(),
-                "nodeIndex": c.node_index.tolist(),
-                "offsetCm": c.offset_cm.tolist(),
-                "nameIndex": c.name_index.tolist(),
-                "spotNames": [tile.spot_name(k) for k in range(c.lat_e7.shape[0])],
-                "profileCodesSha256": hashlib.sha256(c.profile_codes.tobytes()).hexdigest(),
-                "profileDegreesSha256": hashlib.sha256(degrees.tobytes()).hexdigest(),
-                # Candidate 0's whole profile, so a wrong digest can be chased by eye.
-                "firstProfileCodes": c.profile_codes[0].tolist() if len(c.lat_e7) else [],
-            },
-            "walkGraph": {
-                "nodeId": g.node_id.tolist(),
-                "nodeLatE7": g.node_lat_e7.tolist(),
-                "nodeLonE7": g.node_lon_e7.tolist(),
-                "edgeFrom": g.edge_from.tolist(),
-                "edgeTo": g.edge_to.tolist(),
-                "edgeLengthCm": g.edge_length_cm.tolist(),
-            },
-        }
+    for window in WINDOWS:
+        tiles[window] = {}
+        for path in sorted((build_dir / "tiles" / window).glob("*.bin")):
+            tile = read_tile(path)
+            tiles[window][tile.grid_ref] = _decoded(tile)
     return tiles
+
+
+def _decoded(tile: Tile) -> dict[str, Any]:
+    c, g = tile.candidates, tile.walk_graph
+    degrees = codes_to_degrees(c.profile_codes[:, tile.sector.indexes()]).astype("<f8")
+    return {
+        "sector": {"firstSample": tile.sector.first, "samples": tile.sector.samples},
+        "names": list(tile.names),
+        "candidates": {
+            "latE7": c.lat_e7.tolist(),
+            "lonE7": c.lon_e7.tolist(),
+            "nodeIndex": c.node_index.tolist(),
+            "offsetCm": c.offset_cm.tolist(),
+            "nameIndex": c.name_index.tolist(),
+            "spotNames": [tile.spot_name(k) for k in range(c.lat_e7.shape[0])],
+            "profileCodesSha256": hashlib.sha256(c.profile_codes.tobytes()).hexdigest(),
+            "profileDegreesSha256": hashlib.sha256(degrees.tobytes()).hexdigest(),
+            # Candidate 0's whole profile, so a wrong digest can be chased by eye.
+            "firstProfileCodes": c.profile_codes[0].tolist() if len(c.lat_e7) else [],
+        },
+        "walkGraph": {
+            "nodeId": g.node_id.tolist(),
+            "nodeLatE7": g.node_lat_e7.tolist(),
+            "nodeLonE7": g.node_lon_e7.tolist(),
+            "edgeFrom": g.edge_from.tolist(),
+            "edgeTo": g.edge_to.tolist(),
+            "edgeLengthCm": g.edge_length_cm.tolist(),
+        },
+    }
 
 
 def write_decoded_tiles(build_dir: Path, path: Path = DECODED_TILES) -> Path:

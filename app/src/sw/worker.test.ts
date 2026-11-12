@@ -218,34 +218,34 @@ describe("serving the shell", () => {
 });
 
 describe("caching the pinned build as it is fetched", () => {
-  const tile = readFileSync(`${SYNTHETIC}/tiles/ST5873.bin`);
+  const tile = readFileSync(`${SYNTHETIC}/tiles/morning/ST5873.bin`);
   const basemapTile = readFileSync(`${SYNTHETIC}/basemap/10/504/340.mvt`);
   const manifest = readFileSync(`${SYNTHETIC}/manifest.json`);
 
   function dataWorker() {
     return worker({
       [`${DATA}manifest.json`]: manifest,
-      [`${DATA}tiles/ST5873.bin`]: () => new Response(tile, { headers: { Vary: "Origin" } }),
+      [`${DATA}tiles/morning/ST5873.bin`]: () => new Response(tile, { headers: { Vary: "Origin" } }),
       [`${DATA}basemap/10/504/340.mvt`]: basemapTile,
     });
   }
 
   it("stores a data tile's bytes exactly as the published gzip tile file", async () => {
     const sw = dataWorker();
-    const online = await sw.request(`${DATA}tiles/ST5873.bin`);
+    const online = await sw.request(`${DATA}tiles/morning/ST5873.bin`);
     expect(Buffer.from(await online!.arrayBuffer()).equals(tile)).toBe(true);
-    const cached = await sw.caches.stores.get(DATA_CACHE)?.match(`${DATA}tiles/ST5873.bin`);
+    const cached = await sw.caches.stores.get(DATA_CACHE)?.match(`${DATA}tiles/morning/ST5873.bin`);
     expect(Buffer.from(await cached!.arrayBuffer()).equals(tile)).toBe(true);
     expect(tile.subarray(0, 2)).toEqual(Buffer.from([0x1f, 0x8b])); // the published file is gzip
   });
 
   it("answers the manifest, data tiles and basemap tiles already fetched while offline", async () => {
     const sw = dataWorker();
-    for (const path of ["manifest.json", "tiles/ST5873.bin", "basemap/10/504/340.mvt"]) await sw.request(DATA + path);
+    for (const path of ["manifest.json", "tiles/morning/ST5873.bin", "basemap/10/504/340.mvt"]) await sw.request(DATA + path);
     sw.network.offline = true;
     const requestedOnline = sw.network.requested.length;
     expect(await (await sw.request(`${DATA}manifest.json`))?.text()).toBe(manifest.toString());
-    expect(Buffer.from(await (await sw.request(`${DATA}tiles/ST5873.bin`))!.arrayBuffer()).equals(tile)).toBe(true);
+    expect(Buffer.from(await (await sw.request(`${DATA}tiles/morning/ST5873.bin`))!.arrayBuffer()).equals(tile)).toBe(true);
     const basemap = await sw.request(`${DATA}basemap/10/504/340.mvt`);
     expect(Buffer.from(await basemap!.arrayBuffer()).equals(basemapTile)).toBe(true);
     expect(sw.network.requested.length).toBe(requestedOnline); // nothing went to the network
@@ -253,14 +253,14 @@ describe("caching the pinned build as it is fetched", () => {
 
   it("doesn't store a failed response, so the tile is asked for again", async () => {
     const sw = dataWorker();
-    const missing = await sw.request(`${DATA}tiles/ST9999.bin`);
+    const missing = await sw.request(`${DATA}tiles/morning/ST9999.bin`);
     expect(missing?.status).toBe(404);
-    expect(await sw.caches.stores.get(DATA_CACHE)?.match(`${DATA}tiles/ST9999.bin`)).toBeUndefined();
+    expect(await sw.caches.stores.get(DATA_CACHE)?.match(`${DATA}tiles/morning/ST9999.bin`)).toBeUndefined();
   });
 
   it("leaves another build's files to the browser", async () => {
     const sw = dataWorker();
-    expect(await sw.request("https://data.example/f1/20250101a/tiles/ST5873.bin")).toBeUndefined();
+    expect(await sw.request("https://data.example/f1/20250101a/tiles/morning/ST5873.bin")).toBeUndefined();
     expect(await sw.request("https://data.example/f2/20261111a/manifest.json")).toBeUndefined();
   });
 });

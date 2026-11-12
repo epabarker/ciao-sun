@@ -108,7 +108,7 @@ Every data object has `Cache-Control: public, max-age=31536000, immutable`.
 ```
 curl -sI -H 'Origin: https://edbarker.dev' <dataBase>/f1/<build>/manifest.json
 curl -sI -H 'Accept-Encoding: gzip' <dataBase>/f1/<build>/basemap/10/<x>/<y>.mvt
-curl -sI <dataBase>/f1/<build>/tiles/<grid ref>.bin
+curl -sI <dataBase>/f1/<build>/tiles/morning/<grid ref>.bin
 ```
 
 Expect `access-control-allow-origin: https://edbarker.dev` and the immutable

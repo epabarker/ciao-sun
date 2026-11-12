@@ -26,7 +26,10 @@ not read is a format bump.
       },
       "coverage": {GeoJSON Polygon or MultiPolygon, WGS84},
       "horizon": {"nearReachM", "farReachM"},
-      "tiles": {"ST5873": {"bytes", "sha256", "candidates"}},   the tile index
+      "sectors": {"morning": {"firstSample", "samples"}, "evening": {...}},
+                                          the Horizon profile samples each window's tiles hold
+      "tiles": {"ST5873": {"candidates", "morning": {"bytes", "sha256"},
+                           "evening": {"bytes", "sha256"}}},   the tile index
       "buildChecks": {
         "profile": {"candidatesPerTile", "toleranceDeg", "storageHalfStepDeg",
                     "fractionWithin", "candidatesChecked"},
@@ -34,8 +37,9 @@ not read is a format bump.
       }
     }
 
-A tile in the index is at `tiles/<grid ref>.bin`; a square not in the index has
-no tile. `buildChecks` are the tolerances the build passed (`build_checks.py`).
+A tile in the index is at `tiles/<window>/<grid ref>.bin` for each window
+(`tile_file`); a square not in the index has no tiles. `buildChecks` are the
+tolerances the build passed (`build_checks.py`).
 A basemap tile is at `basemap/{z}/{x}/{y}.mvt`, an uncompressed Mapbox Vector
 Tile, for every tile the `bounds` touch at `minZoom` to `maxZoom` (`basemap.py`).
 """
@@ -52,7 +56,7 @@ from ciao_sun.basemap import ATTRIBUTION as PROTOMAPS_ATTRIBUTION
 from ciao_sun.basemap import Basemap
 from ciao_sun.coverage import Coverage
 from ciao_sun.fetch import EA_PRODUCTS, LockedInput
-from ciao_sun.tile_codec import FORMAT
+from ciao_sun.tile_codec import FORMAT, Sector
 
 MANIFEST_NAME = "manifest.json"
 
@@ -119,6 +123,7 @@ def manifest_document(
     horizon: Mapping[str, float],
     tiles: Mapping[str, Mapping[str, Any]],
     build_checks: Mapping[str, Any],
+    sectors: Mapping[str, Sector],
     basemap: Basemap | None = None,
 ) -> dict[str, Any]:
     """The manifest for one build. `tiles` is the tile index, keyed by grid ref."""
@@ -146,6 +151,10 @@ def manifest_document(
         "inputs": listed,
         "coverage": coverage.geometry,
         "horizon": dict(horizon),
+        "sectors": {
+            window: {"firstSample": sector.first, "samples": sector.samples}
+            for window, sector in sectors.items()
+        },
         "tiles": {grid_ref: dict(tiles[grid_ref]) for grid_ref in sorted(tiles)},
         "buildChecks": dict(build_checks),
     }
@@ -168,6 +177,19 @@ def write_manifest(build_dir: Path, document: Mapping[str, Any]) -> Path:
     path = build_dir / MANIFEST_NAME
     path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
+
+
+def tile_file(build_dir: Path, window: str, grid_ref: str) -> Path:
+    """Where a square's tile for a window lives in a build directory."""
+    return build_dir / "tiles" / window / f"{grid_ref}.bin"
+
+
+def manifest_sectors(manifest: Mapping[str, Any]) -> dict[str, Sector]:
+    """The sector of Horizon profile samples each window's tiles hold."""
+    return {
+        window: Sector(int(entry["firstSample"]), int(entry["samples"]))
+        for window, entry in manifest["sectors"].items()
+    }
 
 
 def read_manifest(build_dir: Path) -> dict[str, Any]:

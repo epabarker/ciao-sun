@@ -4,6 +4,7 @@ import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import {
+  OUTSIDE_SECTOR,
   PROFILE_SAMPLES,
   TileFormatError,
   UnsupportedFormatError,
@@ -19,7 +20,7 @@ function hex(text: string): number[] {
   return text.split(/\s+/).map((byte) => Number.parseInt(byte, 16));
 }
 
-/** The 1,546-byte payload of the worked example in docs/tile-format-f1.md, row by row. */
+/** The 1,550-byte payload of the worked example in docs/tile-format-f1.md, row by row. */
 function workedExamplePayload(): Uint8Array {
   return Uint8Array.from([
     ...hex("43 53 55 4E"), // magic
@@ -29,6 +30,8 @@ function workedExamplePayload(): Uint8Array {
     ...hex("02 00 00 00"), // N = 2
     ...hex("01 00 00 00"), // E = 1
     ...hex("01 00 00 00"), // S = 1
+    ...hex("00 00"), // sector first sample F = 0
+    ...hex("A0 05"), // sector samples P = 1440
     ...hex("C8 45 AB 1E"), // Candidate latitude
     ...hex("10 34 72 FE"), // Candidate longitude
     ...hex("01 00 00 00"), // Candidate walk node
@@ -57,7 +60,9 @@ function gzip(payload: Uint8Array): Uint8Array {
 }
 
 /** The worked example with `change` applied to its payload before it is compressed. */
-function tileWith(change: (payload: Uint8Array, view: DataView) => Uint8Array | void): Uint8Array {
+function tileWith(
+  change: (payload: Uint8Array, view: DataView) => Uint8Array | void,
+): Uint8Array {
   const payload = workedExamplePayload();
   const changed = change(payload, new DataView(payload.buffer));
   return gzip(changed ?? payload);
@@ -70,8 +75,8 @@ function sha256(bytes: ArrayBufferView): string {
 }
 
 describe("the worked example of docs/tile-format-f1.md", () => {
-  it("is 1,546 bytes of payload", () => {
-    expect(workedExamplePayload()).toHaveLength(1546);
+  it("is 1,550 bytes of payload", () => {
+    expect(workedExamplePayload()).toHaveLength(1550);
   });
 
   it("decodes to its Candidate, Spot name and walk graph", async () => {
@@ -86,8 +91,12 @@ describe("the worked example of docs/tile-format-f1.md", () => {
     expect(Array.from(tile.candidates.nameIndex)).toEqual([0]);
     expect(spotName(tile, 0)).toBe("Brandon Hill");
     expect(Array.from(tile.walkGraph.nodeId)).toEqual([101, 2 ** 40 + 7]);
-    expect(Array.from(tile.walkGraph.nodeLatE7)).toEqual([514540000, 514545000]);
-    expect(Array.from(tile.walkGraph.nodeLonE7)).toEqual([-26071000, -26066000]);
+    expect(Array.from(tile.walkGraph.nodeLatE7)).toEqual([
+      514540000, 514545000,
+    ]);
+    expect(Array.from(tile.walkGraph.nodeLonE7)).toEqual([
+      -26071000, -26066000,
+    ]);
     expect(Array.from(tile.walkGraph.edgeFrom)).toEqual([0]);
     expect(Array.from(tile.walkGraph.edgeTo)).toEqual([1]);
     expect(Array.from(tile.walkGraph.edgeLengthCm)).toEqual([6543]);
@@ -98,7 +107,9 @@ describe("the worked example of docs/tile-format-f1.md", () => {
 
     const codes = tile.candidates.profileCodes;
     expect(codes).toHaveLength(PROFILE_SAMPLES);
-    expect(Array.from(codes.subarray(358, 365))).toEqual([20, 20, 25, 130, 25, 20, 20]);
+    expect(Array.from(codes.subarray(358, 365))).toEqual([
+      20, 20, 25, 130, 25, 20, 20,
+    ]);
     expect(new Set(codes)).toEqual(new Set([20, 25, 130]));
 
     const degrees = horizonProfileDegrees(tile, 0);
@@ -130,9 +141,10 @@ describe("the storage code", () => {
 describe("the committed synthetic tiles decode to what the Python reader gives", () => {
   const expected = JSON.parse(
     readFileSync(new URL("decoded-tiles.json", SYNTHETIC), "utf8"),
-  ) as Record<string, PythonTile>;
+  ) as Record<string, Record<string, PythonTile>>;
 
   interface PythonTile {
+    sector: { firstSample: number; samples: number };
     names: string[];
     candidates: {
       latE7: number[];
@@ -146,22 +158,41 @@ describe("the committed synthetic tiles decode to what the Python reader gives",
       firstProfileCodes: number[];
     };
     walkGraph: Record<
-      "nodeId" | "nodeLatE7" | "nodeLonE7" | "edgeFrom" | "edgeTo" | "edgeLengthCm",
+      | "nodeId"
+      | "nodeLatE7"
+      | "nodeLonE7"
+      | "edgeFrom"
+      | "edgeTo"
+      | "edgeLengthCm",
       number[]
     >;
   }
 
-  it("covers both tiles of the build", () => {
-    expect(Object.keys(expected).sort()).toEqual(["ST5773", "ST5873"]);
+  it("covers both tiles of the build in both windows", () => {
+    expect(Object.keys(expected).sort()).toEqual(["evening", "morning"]);
+    for (const window of ["morning", "evening"]) {
+      expect(Object.keys(expected[window]!).sort()).toEqual([
+        "ST5773",
+        "ST5873",
+      ]);
+    }
   });
 
-  it.each(["ST5773", "ST5873"])("%s", async (gridRef) => {
-    const python = expected[gridRef]!;
-    const bytes = readFileSync(new URL(`f1/20261111a/tiles/${gridRef}.bin`, SYNTHETIC));
+  it.each([
+    ["morning", "ST5773"],
+    ["morning", "ST5873"],
+    ["evening", "ST5773"],
+    ["evening", "ST5873"],
+  ])("%s %s", async (window, gridRef) => {
+    const python = expected[window]![gridRef]!;
+    const bytes = readFileSync(
+      new URL(`f1/20261111a/tiles/${window}/${gridRef}.bin`, SYNTHETIC),
+    );
 
     const tile = await decodeTile(new Uint8Array(bytes), gridRef);
 
     expect(tile.gridRef).toBe(gridRef);
+    expect(tile.sector).toEqual(python.sector);
     expect(tile.names).toEqual(python.names);
     const c = tile.candidates;
     expect(Array.from(c.latE7)).toEqual(python.candidates.latE7);
@@ -169,18 +200,26 @@ describe("the committed synthetic tiles decode to what the Python reader gives",
     expect(Array.from(c.nodeIndex)).toEqual(python.candidates.nodeIndex);
     expect(Array.from(c.offsetCm)).toEqual(python.candidates.offsetCm);
     expect(Array.from(c.nameIndex)).toEqual(python.candidates.nameIndex);
-    expect(python.candidates.spotNames.map((_, k) => spotName(tile, k))).toEqual(
-      python.candidates.spotNames,
-    );
+    expect(
+      python.candidates.spotNames.map((_, k) => spotName(tile, k)),
+    ).toEqual(python.candidates.spotNames);
     expect(c.latE7.length).toBeGreaterThan(40);
 
     expect(Array.from(c.profileCodes.subarray(0, PROFILE_SAMPLES))).toEqual(
       python.candidates.firstProfileCodes,
     );
     expect(sha256(c.profileCodes)).toBe(python.candidates.profileCodesSha256);
-    const degrees = new Float64Array(c.profileCodes.length);
+    // The sector's angles, Candidate by Candidate, in sector order.
+    const { firstSample, samples } = tile.sector;
+    const degrees = new Float64Array(c.latE7.length * samples);
     for (let k = 0; k < c.latE7.length; k++) {
-      degrees.set(horizonProfileDegrees(tile, k), k * PROFILE_SAMPLES);
+      for (let j = 0; j < samples; j++) {
+        degrees[k * samples + j] = codeToDegrees(
+          c.profileCodes[
+            k * PROFILE_SAMPLES + ((firstSample + j) % PROFILE_SAMPLES)
+          ]!,
+        );
+      }
     }
     expect(sha256(degrees)).toBe(python.candidates.profileDegreesSha256);
 
@@ -194,14 +233,90 @@ describe("the committed synthetic tiles decode to what the Python reader gives",
   });
 });
 
+describe("a tile holds only its window's sector of each Horizon profile", () => {
+  /** The worked example cut to `samples` samples from `first`: the ridge is at 360-362. */
+  function inSector(first: number, samples: number): Uint8Array {
+    const whole = workedExamplePayload();
+    const profileAt = 96;
+    const codes = new Array<number>(PROFILE_SAMPLES).fill(20);
+    codes[360] = 25;
+    codes[361] = 130;
+    codes[362] = 25;
+    const kept = Array.from(
+      { length: samples },
+      (_, j) => codes[(first + j) % PROFILE_SAMPLES]!,
+    );
+    const deltas = kept.map((code, j) =>
+      j === 0 ? code : (code - kept[j - 1]! + 256) & 0xff,
+    );
+    const payload = Uint8Array.from([
+      ...whole.subarray(0, 28),
+      first & 0xff,
+      first >> 8,
+      samples & 0xff,
+      samples >> 8,
+      ...whole.subarray(32, profileAt),
+      ...deltas,
+      ...whole.subarray(profileAt + PROFILE_SAMPLES),
+    ]);
+    return gzip(payload);
+  }
+
+  it("decodes the sector's samples in place and marks the rest of the circle outside it", async () => {
+    const tile = await decodeTile(inSector(140, 625)); // 35 to 191 degrees, a Bristol morning
+    const codes = tile.candidates.profileCodes;
+
+    expect(tile.sector).toEqual({ firstSample: 140, samples: 625 });
+    expect(Array.from(codes.subarray(359, 364))).toEqual([20, 25, 130, 25, 20]);
+    expect(codes[139]).toBe(OUTSIDE_SECTOR);
+    expect(codes[765]).toBe(OUTSIDE_SECTOR);
+    expect(codes[764]).toBe(20);
+  });
+
+  it("reads a sector that runs on past north", async () => {
+    const codes = (await decodeTile(inSector(1400, 100))).candidates
+      .profileCodes;
+
+    expect(codes[1400]).toBe(20);
+    expect(codes[59]).toBe(20);
+    expect(codes[60]).toBe(OUTSIDE_SECTOR);
+    expect(codes[1399]).toBe(OUTSIDE_SECTOR);
+  });
+
+  it("refuses to give an angle for a sample outside the sector", async () => {
+    const tile = await decodeTile(inSector(140, 625));
+
+    expect(() => horizonProfileDegrees(tile, 0)).toThrow(TileFormatError);
+  });
+
+  it.each([
+    [1440, 10],
+    [0, 0],
+    [0, 1441],
+  ])(
+    "refuses a sector of %i + %i samples, which is not within the circle",
+    async (first, samples) => {
+      const bytes = tileWith((_, view) => {
+        view.setUint16(28, first, true);
+        view.setUint16(30, samples, true);
+      });
+      await expect(decodeTile(bytes)).rejects.toThrow(/sector/);
+    },
+  );
+});
+
 describe("a reader refuses the file rather than return a partial tile", () => {
   it("when it is not gzip", async () => {
-    await expect(decodeTile(workedExamplePayload())).rejects.toThrow(TileFormatError);
+    await expect(decodeTile(workedExamplePayload())).rejects.toThrow(
+      TileFormatError,
+    );
   });
 
   it("when the gzip stream is cut short", async () => {
     const whole = gzip(workedExamplePayload());
-    await expect(decodeTile(whole.subarray(0, whole.length - 12))).rejects.toThrow(TileFormatError);
+    await expect(
+      decodeTile(whole.subarray(0, whole.length - 12)),
+    ).rejects.toThrow(TileFormatError);
   });
 
   it("when the magic is wrong", async () => {
@@ -222,7 +337,9 @@ describe("a reader refuses the file rather than return a partial tile", () => {
     // An f2 file may be laid out quite differently: nothing after the format number is trusted.
     const header = workedExamplePayload().slice(0, 6);
     new DataView(header.buffer).setUint16(4, 2, true);
-    await expect(decodeTile(gzip(header))).rejects.toThrow(UnsupportedFormatError);
+    await expect(decodeTile(gzip(header))).rejects.toThrow(
+      UnsupportedFormatError,
+    );
   });
 
   it("when the payload ends before its last field", async () => {
@@ -241,45 +358,47 @@ describe("a reader refuses the file rather than return a partial tile", () => {
   });
 
   it("when the grid reference differs from the file name", async () => {
-    await expect(decodeTile(gzip(workedExamplePayload()), "ST5773")).rejects.toThrow(/ST5773/);
+    await expect(
+      decodeTile(gzip(workedExamplePayload()), "ST5773"),
+    ).rejects.toThrow(/ST5773/);
   });
 
   it("when a Candidate's walk node index is out of range", async () => {
-    const bytes = tileWith((_, view) => view.setUint32(36, 2, true));
+    const bytes = tileWith((_, view) => view.setUint32(40, 2, true));
     await expect(decodeTile(bytes)).rejects.toThrow(/walk node index/);
   });
 
   it("when a Candidate's Spot name index is out of range", async () => {
-    const bytes = tileWith((_, view) => view.setUint32(44, 1, true));
+    const bytes = tileWith((_, view) => view.setUint32(48, 1, true));
     await expect(decodeTile(bytes)).rejects.toThrow(/Spot name index/);
   });
 
   it("when an edge's node index is out of range", async () => {
-    const bytes = tileWith((_, view) => view.setUint32(84, 2, true));
+    const bytes = tileWith((_, view) => view.setUint32(88, 2, true));
     await expect(decodeTile(bytes)).rejects.toThrow(/edge/);
   });
 
   it("when a node id is 2^53 or more", async () => {
-    const bytes = tileWith((_, view) => view.setBigUint64(48, 2n ** 53n, true));
+    const bytes = tileWith((_, view) => view.setBigUint64(52, 2n ** 53n, true));
     await expect(decodeTile(bytes)).rejects.toThrow(/2\^53/);
   });
 
   it("when two nodes share an id", async () => {
-    const bytes = tileWith((_, view) => view.setBigUint64(56, 101n, true));
+    const bytes = tileWith((_, view) => view.setBigUint64(60, 101n, true));
     await expect(decodeTile(bytes)).rejects.toThrow(/unique/);
   });
 
   it("when a decoded storage code is above 227", async () => {
     // Sample 0 becomes code 228; the next delta brings the row back down.
     const bytes = tileWith((payload) => {
-      payload[92] = 228;
-      payload[93] = 256 - 208;
+      payload[96] = 228;
+      payload[97] = 256 - 208;
     });
     await expect(decodeTile(bytes)).rejects.toThrow(/storage code/);
   });
 
   it("when a Spot name is not valid UTF-8", async () => {
-    const bytes = tileWith((payload) => void (payload[1534] = 0xff));
+    const bytes = tileWith((payload) => void (payload[1538] = 0xff));
     await expect(decodeTile(bytes)).rejects.toThrow(/UTF-8/);
   });
 });

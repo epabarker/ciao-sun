@@ -1,5 +1,5 @@
 {
-  "dataBase": "synthetic-data/",
+  "dataBase": "https://ciao-sun-data.edbarker.dev/",
   "format": 1,
-  "build": "20261111a"
+  "build": "20261111b"
 }

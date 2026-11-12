@@ -1,6 +1,6 @@
 {
   "name": "ciao-sun-app",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Ciao Sun client: a self-contained static bundle served under /ciao-sun/",
   "type": "module",

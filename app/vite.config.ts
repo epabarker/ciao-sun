@@ -10,8 +10,9 @@ const BASE = "/ciao-sun/";
 
 /**
  * Serves the committed synthetic build at /ciao-sun/synthetic-data/ in
- * `npm run dev` and `vite preview`, as a data host would: the pin in
- * release.json names it until the first Bristol build is published (#55).
+ * `npm run dev` and `vite preview`, as a data host would, for a pin with
+ * `"dataBase": "synthetic-data/"`. The committed pin names the published
+ * Bristol build on R2 (#55), which allows CORS from localhost:5173 and :4173.
  * The bundle itself carries no data.
  */
 function syntheticData(): Plugin {

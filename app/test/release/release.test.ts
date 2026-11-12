@@ -324,8 +324,8 @@ describe("a release", () => {
     expect(calls.build).toBe(0);
   });
 
-  it("is refused with the committed pin, before anything is fetched", async () => {
-    const { options: o, outDir, calls } = options({ pinJson: pin });
+  it("is refused with a relative dataBase, before anything is fetched", async () => {
+    const { options: o, outDir, calls } = options({ pinJson: { ...pin, dataBase: "synthetic-data/" } });
 
     await expect(release(o)).rejects.toThrow(/dataBase "synthetic-data\/" is not an absolute https URL/);
 

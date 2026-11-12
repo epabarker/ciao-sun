@@ -148,7 +148,7 @@ export function startApp(root: HTMLElement, deps: AppDeps): App {
     draw();
     let next: Result;
     try {
-      const area = await build.area(query.origin);
+      const area = await build.area(query.origin, query.window);
       // An origin outside the coverage needs no tiles: the scorer answers not-covered.
       next = { kind: "answer", answer: score(query, area.covered ? area.tiles : [], build), query };
     } catch (error) {

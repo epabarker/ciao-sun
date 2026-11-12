@@ -23,6 +23,12 @@ describe("the Morning window's date", () => {
     expect(nextMorningDate(at("2026-12-31T23:30:00+00:00"), "07:00")).toBe("2027-01-01");
   });
 
+  it("is tomorrow from solar noon when Wake time + 3 h is later: the Morning window ends there (#62)", () => {
+    // Solar noon at PLANNING_POINT on 2026-12-21 is 12:08 GMT.
+    expect(nextMorningDate(at("2026-12-21T12:07:00Z"), "10:30")).toBe("2026-12-21");
+    expect(nextMorningDate(at("2026-12-21T12:09:00Z"), "10:30")).toBe("2026-12-22");
+  });
+
   it("reads the clock in Europe/London, whatever the device's zone", () => {
     // 00:30 in London on 1 July is still 30 June in UTC.
     expect(nextMorningDate(at("2026-07-01T00:30:00+01:00"), "07:00")).toBe("2026-07-01");
@@ -68,11 +74,13 @@ describe("the tab the app opens on", () => {
     });
   });
 
-  it("stays on today's Morning while a late Wake time's window runs past Nominal sunset", () => {
+  it("leaves a Wake time after solar noon no Morning today: after Nominal sunset it is tomorrow's", () => {
+    // Wake time 15:00: the Morning window would end at 18:00, but ends at solar noon (#62).
     expect(chooseWindow(at("2026-12-20T16:30:00Z"), "15:00", PLANNING_POINT)).toEqual({
       window: "morning",
-      date: "2026-12-20",
+      date: "2026-12-21",
     });
+    expect(chooseWindow(at("2026-12-20T14:00:00Z"), "15:00", PLANNING_POINT).window).toBe("evening");
   });
 });
 
@@ -87,6 +95,16 @@ describe("whether a Query's Morning window is over", () => {
     expect(morningWindowOver(q("2026-12-21T09:59:00Z"))).toBe(false);
     expect(morningWindowOver(q("2026-12-21T10:00:00Z"))).toBe(true);
     expect(morningWindowOver(q("2026-12-21T17:30:00Z"))).toBe(true);
+  });
+
+  it("is from solar noon when Wake time + 3 h is later (#62)", () => {
+    const late = (now: string) =>
+      buildQuery(
+        { wakeTime: "10:30", date: "2026-12-21", sky: "clear", maxWalkMin: 15, origin: PLANNING_POINT },
+        at(now),
+      );
+    expect(morningWindowOver(late("2026-12-21T12:07:00Z"))).toBe(false);
+    expect(morningWindowOver(late("2026-12-21T12:09:00Z"))).toBe(true);
   });
 
   it("is never for a query with no now, which plans another day", () => {

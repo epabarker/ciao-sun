@@ -149,12 +149,12 @@ describe("the committed synthetic set", () => {
     expect(() => new FixtureSet({ ...SYNTHETIC_PIN, build: "20261111b" })).toThrow();
   });
 
-  it("has fifteen fixtures, ten of them with no near-boundary freedom", async () => {
+  it("has fifteen fixtures, eleven of them with no near-boundary freedom", async () => {
     // docs/fixtures.md, "Near-boundary minutes".
     const fixtures = await Promise.all(set.entries.map((entry) => set.load(entry)));
 
     expect(fixtures).toHaveLength(15);
-    expect(fixtures.filter((fixture) => !nearBoundaryFreedom(fixture).any)).toHaveLength(10);
+    expect(fixtures.filter((fixture) => !nearBoundaryFreedom(fixture).any)).toHaveLength(11);
   });
 
   it("has every status of the Answer contract, so fixture parity covers each one", () => {
@@ -170,8 +170,8 @@ describe("the committed synthetic set", () => {
     const fixtures = await Promise.all(set.entries.map((entry) => set.load(entry)));
     const free = fixtures.filter((f) => effectiveFreedom(f).any);
 
+    // evening-march-equinox-now had one, at sunrise: an Evening Answer can't read it (#62).
     expect(free.map((f) => f.id).sort()).toEqual([
-      "evening-march-equinox-now",
       "evening-summer-solstice",
       "morning-no-sun-in-reach",
     ]);
@@ -250,6 +250,7 @@ describe("a near-boundary flip", () => {
     const count = candidates.length;
     return {
       gridRef: "ST5873",
+      sector: { firstSample: 0, samples: PROFILE_SAMPLES },
       names: candidates.map((_, k) => `Spot ${k}`),
       candidates: {
         latE7: Int32Array.from(candidates, ({ northM }) => O.latE7 + Math.round(northM * 90)),

@@ -16,3 +16,5 @@ horizon_profile.png
 map.html
 map_heatmap.png
 results*/
+.claude/worktrees/
+.DS_Store

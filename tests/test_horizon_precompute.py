@@ -16,7 +16,12 @@ from pyproj import Geod, Transformer
 from rasterio.transform import rowcol
 
 from ciao_sun.horizon import horizon_angle, meridian_convergence, ray_samples
-from ciao_sun.horizon_precompute import TileWorld, horizon_profile_codes, precompute_tiles
+from ciao_sun.horizon_precompute import (
+    TileWorld,
+    cast_tile,
+    horizon_profile_codes,
+    precompute_tiles,
+)
 from ciao_sun.raster import RasterGrid
 from ciao_sun.tile_codec import (
     PROFILE_SAMPLES,
@@ -214,15 +219,51 @@ def _write_rooftop_tile(directory: Path, grid_ref: str) -> Path:
 
 
 def test_tiles_computed_in_parallel_are_byte_identical_to_a_serial_run(tmp_path):
+    serial_done: list[tuple[str, Path]] = []
+    parallel_done: list[tuple[str, Path]] = []
     serial = precompute_tiles(
-        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "serial"), workers=1
-    )
+        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "serial"), workers=1,
+        on_done=lambda ref, path: serial_done.append((ref, path)),
+    )  # fmt: skip
     parallel = precompute_tiles(
-        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "parallel"), workers=3
-    )
+        list(_PARALLEL_TILES), partial(_write_rooftop_tile, tmp_path / "parallel"), workers=3,
+        on_done=lambda ref, path: parallel_done.append((ref, path)),
+    )  # fmt: skip
 
     assert list(serial) == list(parallel) == list(_PARALLEL_TILES)
+    # Each tile is announced once as it finishes; in parallel, in whatever order they finish.
+    assert serial_done == list(serial.items())
+    assert sorted(parallel_done) == sorted(parallel.items())
     for grid_ref in _PARALLEL_TILES:
         assert parallel[grid_ref].read_bytes() == serial[grid_ref].read_bytes()
     profiles = [read_tile(path).candidates.profile_codes for path in parallel.values()]
     assert not np.array_equal(profiles[0], profiles[1]), "each tile holds its own world"
+
+
+def _wall_world(**flags: bool) -> TileWorld:
+    """One Candidate on flat ground with a 20 m wall 30 m east; `flags` mark the wall's cells."""
+    x, y = _bristol_candidate()
+    surface = make_flat_grid(0.0, xmin=x - 100.0, ymax=y + 100.0, width=201, height=201)
+    dtm = RasterGrid(surface.data.copy(), surface.transform, surface.crs)
+    surface.data[90:111, 128:133] = 20.0  # x + 28 .. x + 32
+    marked = np.zeros(surface.data.shape, dtype="float32")
+    marked[90:111, 128:133] = 1.0
+    terrain50 = make_flat_grid(
+        -50.0, xmin=x - 5000.0, ymax=y + 5000.0, width=201, height=201, pixel_size=50.0
+    )
+    rasters = {
+        name: RasterGrid(marked, surface.transform, surface.crs) for name, on in flags.items() if on
+    }
+    return TileWorld(surface, dtm, terrain50, np.array([x]), np.array([y]), **rasters)
+
+
+def test_a_cell_marked_for_review_that_sets_a_horizon_is_reported_apart_from_the_guard():
+    horizons = cast_tile(_wall_world(review=True))
+    assert horizons.set_by_review.tolist() == [True]
+    assert horizons.set_by_water.tolist() == [False]
+
+
+def test_a_guarded_water_cell_that_sets_a_horizon_is_not_a_review(tmp_path):
+    horizons = cast_tile(_wall_world(water=True))
+    assert horizons.set_by_water.tolist() == [True]
+    assert horizons.set_by_review.tolist() == [False]

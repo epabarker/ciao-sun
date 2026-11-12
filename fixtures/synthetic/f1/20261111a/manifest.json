@@ -105,8 +105,8 @@
       "tile": "ST5570",
       "version": "2022",
       "url": "https://environment.data.gov.uk/tiles/collections/survey/lidar_composite_first_return_dsm/2022/1/ST5570",
-      "sha256": "c29e42bd594f6e0ed86c21f3e549725b36493768de2dd30c7336deb7ec5401da",
-      "bytes": 1917,
+      "sha256": "97c1c654ee20def3c7e40cc64a210b657817454b5b13be68c042219e6b27aa3a",
+      "bytes": 1916,
       "absent": false
     },
     {
@@ -262,16 +262,38 @@
     "nearReachM": 3000.0,
     "farReachM": 50000.0
   },
+  "sectors": {
+    "morning": {
+      "firstSample": 140,
+      "samples": 625
+    },
+    "evening": {
+      "firstSample": 676,
+      "samples": 625
+    }
+  },
   "tiles": {
     "ST5773": {
-      "bytes": 2584,
-      "sha256": "4999ccb485c1c76de063cd7d5e023d17d32195f65e62a31a5369a245ec783ea2",
-      "candidates": 46
+      "candidates": 46,
+      "morning": {
+        "bytes": 1981,
+        "sha256": "c2e31ffaf001ea7a062b943df108094c34ca9ce6a09d74155403890614826e59"
+      },
+      "evening": {
+        "bytes": 976,
+        "sha256": "9a77ce594c3d0b50a741c0ff6ef367cca58ca7d2f61e4bad6b389cb19e16666a"
+      }
     },
     "ST5873": {
-      "bytes": 2787,
-      "sha256": "6975714f0d111ab3924a326f18f137ab1bb8c3974de2f183bb6991e5763b5e95",
-      "candidates": 49
+      "candidates": 49,
+      "morning": {
+        "bytes": 1330,
+        "sha256": "5ce1677fe6b825a72e4bd4fbf8c16c59ff63788d382f1ce7b70cdf90a923738c"
+      },
+      "evening": {
+        "bytes": 1889,
+        "sha256": "69f9c3f65f3564c6918756137c756bb576397ca33c63b708d9808ec472545fdb"
+      }
     }
   },
   "buildChecks": {
@@ -287,7 +309,8 @@
     },
     "waterGuard": {
       "candidatesAllowed": 0,
-      "candidatesFound": 0
+      "candidatesFound": 0,
+      "riverCandidatesToReview": 0
     }
   },
   "basemap": {

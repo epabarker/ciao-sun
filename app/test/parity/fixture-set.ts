@@ -114,13 +114,14 @@ export class FixtureSet {
     return JSON.parse(readFileSync(resolve(this.buildDir, path), "utf8")) as T;
   }
 
-  /** One tile of the build, decoded once however many fixtures name it. */
-  tile(gridRef: string): Promise<Tile> {
-    let tile = this.tiles.get(gridRef);
+  /** One window's tile of a square, decoded once however many fixtures name it. */
+  tile(window: string, gridRef: string): Promise<Tile> {
+    const path = `${window}/${gridRef}`;
+    let tile = this.tiles.get(path);
     if (!tile) {
-      const bytes = readFileSync(resolve(this.buildDir, "tiles", `${gridRef}.bin`));
+      const bytes = readFileSync(resolve(this.buildDir, "tiles", window, `${gridRef}.bin`));
       tile = decodeTile(new Uint8Array(bytes), gridRef);
-      this.tiles.set(gridRef, tile);
+      this.tiles.set(path, tile);
     }
     return tile;
   }
@@ -130,7 +131,9 @@ export class FixtureSet {
     return {
       ...document,
       id: entry.id,
-      decodedTiles: await Promise.all(document.tiles.map((gridRef) => this.tile(gridRef))),
+      decodedTiles: await Promise.all(
+        document.tiles.map((gridRef) => this.tile(document.query.window, gridRef)),
+      ),
       coverage: this.coverage,
     };
   }

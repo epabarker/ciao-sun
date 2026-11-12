@@ -17,8 +17,11 @@ import numpy as np
 import pytest
 
 from ciao_sun.tile_codec import (
+    FULL_CIRCLE,
+    OUTSIDE_SECTOR,
     PROFILE_SAMPLES,
     Candidates,
+    Sector,
     Tile,
     TileFormatError,
     UnsupportedFormatError,
@@ -184,6 +187,7 @@ def worked_example_payload() -> bytes:
             struct.pack("<H", 1),
             b"ST5873",
             struct.pack("<IIII", 1, 2, 1, 1),  # Candidates, nodes, edges, names
+            struct.pack("<HH", 0, 1440),  # sector: first sample, samples (the full circle)
             struct.pack("<i", 514541000),  # Candidate latitude
             struct.pack("<i", -26070000),  # Candidate longitude
             struct.pack("<I", 1),  # snapped walk node (index)
@@ -237,6 +241,65 @@ def test_writer_produces_the_format_documents_worked_example():
     assert gzip.decompress(encode_tile(tile)) == worked_example_payload()
 
 
+# --- Sectors: a tile holds only the azimuths its window can need ----------
+
+
+def _in_sector(first: int, samples: int) -> Tile:
+    return dataclasses.replace(synthetic_tile(), sector=Sector(first, samples))
+
+
+def test_a_tile_holding_a_sector_reads_back_with_the_rest_of_the_circle_marked_outside():
+    tile = _in_sector(144, 616)  # 36 deg to 190 deg, as a Bristol morning
+
+    back = decode_tile(encode_tile(tile))
+
+    assert back.sector == Sector(144, 616)
+    codes = back.candidates.profile_codes
+    assert codes.shape == (3, PROFILE_SAMPLES)
+    sector = slice(144, 760)
+    assert codes[:, sector].tobytes() == tile.candidates.profile_codes[:, sector].tobytes()
+    assert (codes[:, :144] == OUTSIDE_SECTOR).all()
+    assert (codes[:, 760:] == OUTSIDE_SECTOR).all()
+
+
+def test_a_sector_may_run_on_past_north():
+    tile = _in_sector(1400, 100)  # 350 deg round to 15 deg
+
+    codes = decode_tile(encode_tile(tile)).candidates.profile_codes
+
+    kept = np.r_[1400:1440, 0:60]
+    assert codes[:, kept].tobytes() == tile.candidates.profile_codes[:, kept].tobytes()
+    assert (codes[:, 60:1400] == OUTSIDE_SECTOR).all()
+
+
+def test_the_writer_stores_only_the_sectors_samples():
+    whole = gzip.decompress(encode_tile(synthetic_tile()))
+    morning = gzip.decompress(encode_tile(_in_sector(144, 616)))
+
+    assert len(whole) - len(morning) == 3 * (PROFILE_SAMPLES - 616)
+
+
+def test_a_tile_holds_the_full_circle_unless_given_a_sector():
+    assert synthetic_tile().sector == FULL_CIRCLE == Sector(0, PROFILE_SAMPLES)
+
+
+def test_reading_a_horizon_profile_outside_its_sector_is_refused():
+    tile = decode_tile(encode_tile(_in_sector(144, 616)))
+
+    with pytest.raises(ValueError, match="228"):
+        tile.horizon_profile_degrees(0)
+
+
+@pytest.mark.parametrize(("first", "samples"), [(1440, 10), (0, 0), (0, 1441)])
+def test_a_sector_outside_the_circle_is_refused(first, samples):
+    with pytest.raises(TileFormatError, match="sector"):
+        encode_tile(_in_sector(first, samples))
+    payload = bytearray(worked_example_payload())
+    payload[28:32] = struct.pack("<HH", first, samples)
+    with pytest.raises(TileFormatError, match="sector"):
+        decode_tile(gzip.compress(bytes(payload)))
+
+
 # --- What the codec refuses ----------------------------------------------
 
 
@@ -273,7 +336,7 @@ def test_horizon_profile_holding_a_code_above_227_is_refused_by_writer_and_reade
         encode_tile(tile)
 
     payload = bytearray(worked_example_payload())
-    profile_start = 28 + 5 * 4 + 2 * 16 + 3 * 4
+    profile_start = 32 + 5 * 4 + 2 * 16 + 3 * 4
     payload[profile_start] = 240  # first delta is the first code itself
     with pytest.raises(TileFormatError, match="storage codes"):
         decode_tile(gzip.compress(bytes(payload)))
@@ -360,4 +423,4 @@ def test_format_document_prints_the_worked_example_byte_for_byte():
             expected = bytes.fromhex(hex_bytes) * int(repeat or 1)
             assert payload[described : described + len(expected)] == expected, f"at {offset}"
             described += len(expected)
-    assert described == len(payload) == 1546
+    assert described == len(payload) == 1550

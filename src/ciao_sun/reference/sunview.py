@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from ciao_sun.solar import SunTrack
-from ciao_sun.tile_codec import CODE_COUNT, PROFILE_SAMPLES, codes_to_degrees
+from ciao_sun.tile_codec import CODE_COUNT, PROFILE_SAMPLES, STORAGE_MIN_DEG, codes_to_degrees
 
 LOW_SUN_MIN_DEG = 0.0
 LOW_SUN_MAX_DEG = 30.0
@@ -51,14 +51,20 @@ def sun_in_view(
 
 
 def last_sun(profile_codes: npt.NDArray[np.uint8], track: SunTrack) -> int | None:
-    """One Candidate's Last sun: the last minute of the track's day with the sun in view.
+    """One Candidate's Last sun: the last minute after solar noon with the sun in view.
 
-    It is looked for over the whole day, not only a window, so it can fall
-    after Nominal sunset where the Horizon profile is below 0 degrees. None
-    when the sun is never in view.
+    It is looked for over the whole afternoon, not only a window, so it can
+    fall after Nominal sunset where the Horizon profile is below 0 degrees,
+    but only while the sun stands at -2 degrees or higher: no Horizon profile
+    is lower, so the sun is never in view below it. That keeps the search in
+    the evening tiles' sector (#62). None when the sun is never in view.
     """
-    minutes = np.flatnonzero(sun_in_view(profile_codes[np.newaxis, :], track, 0, len(track.times)))
-    return int(minutes[-1]) if minutes.size else None
+    start = int(np.argmax(track.apparent_elevation))
+    still_up = track.apparent_elevation[start:] >= STORAGE_MIN_DEG
+    end = start + (int(np.argmin(still_up)) if not still_up.all() else still_up.size)
+    in_view = sun_in_view(profile_codes[np.newaxis, :], track, start, end)
+    minutes = np.flatnonzero(in_view)
+    return start + int(minutes[-1]) if minutes.size else None
 
 
 def low_sun(track: SunTrack, start: int, end: int) -> npt.NDArray[np.bool_]:

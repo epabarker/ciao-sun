@@ -25,6 +25,13 @@ No upstream publishes a SHA-256, so verification is trust-on-first-use: the
 first fetch records each hash, and from then on any cached or re-downloaded
 file that differs from its lockfile hash is refused.
 
+A download counts as finished only when it is whole. The EA streams its zips
+with no Content-Length, so a connection that ends early but cleanly looks like
+the end of the file. Every zip is therefore opened before it is accepted:
+one with no intact central directory was cut short and is fetched again. The
+same goes for a cached zip, whose locked hash is then dropped, because a hash
+of a truncated file pins nothing worth keeping.
+
 The EA tile URLs are the portal's own undocumented backend (see the
 `research/lidar-access` branch); they are built in `_ea_url` and nowhere else.
 
@@ -46,6 +53,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -452,6 +460,14 @@ def _obtain(
     dest = root / item.path
     expected = previous.sha256 if previous is not None else None
 
+    if dest.exists() and not _is_whole(item, dest):
+        session.report(
+            f"cached {item.path} was cut short (not a whole zip); "
+            "discarding it and its locked hash, fetching it again"
+        )
+        dest.unlink()
+        expected = None
+
     if not dest.exists():
         if previous is not None and previous.absent and previous.url == item.url:
             return previous
@@ -496,6 +512,7 @@ def _entry(
 def _download(item: _Wanted, part: Path, session: _Session) -> bool:
     """Download to `part`, resuming whatever is already there. False means 404."""
     drops = 0
+    cut_short = 0
     while True:
         offset = part.stat().st_size if part.exists() else 0
         headers = {"Range": f"bytes={offset}-"} if offset else {}
@@ -519,7 +536,20 @@ def _download(item: _Wanted, part: Path, session: _Session) -> bool:
             with open(part, mode) as out:
                 for chunk in response.chunks:
                     out.write(chunk)
-            return True
+            if _is_whole(item, part):
+                return True
+            # The body ended cleanly but early. The next request resumes from
+            # here, or starts again if the server ignores Range.
+            cut_short += 1
+            if cut_short >= MAX_DROPS_WITHOUT_PROGRESS:
+                raise FetchError(
+                    f"{item.url}: the body ended before the end of the zip {cut_short} times "
+                    f"in a row, at {part.stat().st_size} bytes. Run fetch again."
+                )
+            session.report(
+                f"{item.path} ended at {part.stat().st_size} bytes, before the end of its "
+                "zip; fetching the rest"
+            )
         except TransportError as exc:
             received = part.stat().st_size if part.exists() else 0
             drops = 1 if received > offset else drops + 1
@@ -529,6 +559,21 @@ def _download(item: _Wanted, part: Path, session: _Session) -> bool:
                     f"({exc}). Run fetch again; it resumes from {received} bytes."
                 ) from exc
             session.report(f"connection dropped at {received} bytes, resuming {item.path}")
+
+
+def _is_whole(item: _Wanted, file: Path) -> bool:
+    """False for a zip whose central directory is missing or broken: it was cut short.
+
+    Only zips can be checked this way; any other input counts as whole.
+    """
+    if not item.path.endswith(".zip"):
+        return True
+    try:
+        with zipfile.ZipFile(file) as archive:
+            archive.infolist()
+    except (zipfile.BadZipFile, OSError, EOFError):
+        return False
+    return True
 
 
 def _check_hash(item: _Wanted, file: Path, expected: str | None, what: str) -> None:

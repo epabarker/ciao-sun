@@ -80,7 +80,7 @@ describe("Morning screen over a local build", () => {
   it("renders the spots the JS scorer returns, with leave-by and target-met matching the Answer", async () => {
     const { root } = await mount(deps());
     const tiles = await Promise.all(
-      WINTER.tiles.map(async (ref) => decodeTile(new Uint8Array(readFileSync(`${BUILD}tiles/${ref}.bin`)), ref)),
+      WINTER.tiles.map(async (ref) => decodeTile(new Uint8Array(readFileSync(`${BUILD}tiles/morning/${ref}.bin`)), ref)),
     );
     const expected = answer(WINTER.query, tiles);
     expect(expected.spots.length).toBeGreaterThan(0);

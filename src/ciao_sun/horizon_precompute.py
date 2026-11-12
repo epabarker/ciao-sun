@@ -10,16 +10,18 @@ crown-envelope surface out to 3 km, with Earth curvature and standard
 refraction and the variable-density sampling of `horizon.ray_samples`.
 
 Far field: OS Terrain 50 from 3 km out to 50 km (never beyond 100 km). It is
-not cast per Candidate. Each Candidate takes the nearest point of a 100 m
+not cast per Candidate. Each Candidate takes the nearest point of a 50 m
 lattice on the National Grid, the far horizon is cast once per lattice point,
 and each Candidate's own eye height is then corrected for at the distance of
 the ridge that sets it:
 
     far = lattice_far - degrees((eye - lattice_eye) / ridge_distance)
 
-Measured on Bristol (prototype/horizon-cost), this is within 0.035 deg (p99) of
-a per-Candidate far ray. Where Terrain 50 has no data along a whole ray (open
-sea beyond the grid) there is no far obstruction.
+Measured over the first Bristol build (#61), this is within 0.040 deg (p99) of
+a per-Candidate far ray where the far field sets the horizon below 10 deg; a
+100 m lattice was within 0.074 deg and failed the build's direct-ray check.
+Where Terrain 50 has no data along a whole ray (open sea beyond the grid) there
+is no far obstruction.
 
 The two are merged as `max(near, far)`, so a tile holds one profile per
 Candidate.
@@ -32,7 +34,7 @@ from __future__ import annotations
 
 import multiprocessing
 from collections.abc import Callable, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -53,7 +55,7 @@ EYE_HEIGHT_M = 1.6
 NEAR_REACH_M = 3000.0
 FAR_REACH_M = 50_000.0
 FAR_REACH_CAP_M = 100_000.0
-FAR_LATTICE_M = 100.0
+FAR_LATTICE_M = 50.0
 # True azimuth of each profile sample, degrees clockwise from true north.
 PROFILE_AZIMUTHS_DEG = np.arange(PROFILE_SAMPLES) * (360.0 / PROFILE_SAMPLES)
 
@@ -70,8 +72,9 @@ class TileWorld:
     `dtm` the bare earth the Candidates stand on; both must reach 3 km beyond
     the Candidates. `terrain50` is OS Terrain 50 in metres. `x`, `y` are the
     Candidates' eastings and northings. `water`, if given, is above 0.5 on
-    every water cell; it is only read by `cast_tile`, for the build's water
-    guard.
+    every water cell that must not obstruct (the build's water guard); `review`,
+    if given, on every cell whose horizons the build reports for review. Both
+    are only read by `cast_tile`.
     """
 
     surface: RasterGrid
@@ -80,6 +83,7 @@ class TileWorld:
     x: npt.NDArray[np.float64]
     y: npt.NDArray[np.float64]
     water: RasterGrid | None = None
+    review: RasterGrid | None = None
 
 
 def _eye_elevations(world: TileWorld) -> npt.NDArray[np.float64]:
@@ -91,11 +95,12 @@ def _eye_elevations(world: TileWorld) -> npt.NDArray[np.float64]:
 
 def _near_field(
     world: TileWorld, eye: npt.NDArray[np.float64], convergence: float
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """The near horizon per Candidate and sample, and whether a water cell sets it."""
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """The near horizon per Candidate and sample, and whether a water or review cell sets it."""
     ray_d = ray_samples(NEAR_REACH_M)
     out = np.empty((len(world.x), PROFILE_SAMPLES), dtype=np.float64)
     on_water = np.zeros(out.shape, dtype=bool)
+    on_review = np.zeros(out.shape, dtype=bool)
     for start in range(0, len(world.x), _CHUNK):
         rows = slice(start, start + _CHUNK)
         for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG):
@@ -110,12 +115,14 @@ def _near_field(
             )
             if world.water is not None:
                 on_water[rows, i] = sample(world.water, ridge_x, ridge_y) > 0.5
+            if world.review is not None:
+                on_review[rows, i] = sample(world.review, ridge_x, ridge_y) > 0.5
     if np.isnan(out).any():
         raise ValueError(
             "a near-field ray found no surface data at all; the obstruction surface "
             "must cover every Candidate"
         )
-    return out, on_water
+    return out, on_water, on_review
 
 
 def _far_distances(reach: float) -> npt.NDArray[np.float64]:
@@ -174,21 +181,27 @@ def _far_field(
 
 def _cast(
     world: TileWorld, far_reach_m: float
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """Merged profiles in degrees, and which Candidates have a water cell on their horizon."""
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """Merged profiles in degrees, and which Candidates a water or a review cell sets."""
     if not NEAR_REACH_M < far_reach_m <= FAR_REACH_CAP_M:
         raise ValueError(
             f"far_reach_m must be above {NEAR_REACH_M:.0f} m and at most "
             f"{FAR_REACH_CAP_M:.0f} m, got {far_reach_m}"
         )
     if len(world.x) == 0:
-        return np.empty((0, PROFILE_SAMPLES), dtype=np.float64), np.empty(0, dtype=bool)
+        none = np.empty(0, dtype=bool)
+        return np.empty((0, PROFILE_SAMPLES), dtype=np.float64), none, none
     eye = _eye_elevations(world)
     # One convergence per tile: it varies by ~0.01 deg across a 1 km square.
     convergence = meridian_convergence(float(world.x.mean()), float(world.y.mean()))
-    near, on_water = _near_field(world, eye, convergence)
+    near, on_water, on_review = _near_field(world, eye, convergence)
     far = _far_field(world, eye, convergence, far_reach_m)
-    return np.maximum(near, far), (on_water & (near >= far)).any(axis=1)
+    near_sets = near >= far
+    return (
+        np.maximum(near, far),
+        (on_water & near_sets).any(axis=1),
+        (on_review & near_sets).any(axis=1),
+    )
 
 
 def horizon_profile_degrees(
@@ -215,21 +228,29 @@ class TileHorizons:
     """A tile's Horizon profiles as storage codes, with the water guard's finding.
 
     `set_by_water[k]` is True when, at some azimuth, the cell that sets
-    Candidate k's merged horizon is a water cell of `TileWorld.water`.
+    Candidate k's merged horizon is a water cell of `TileWorld.water`;
+    `set_by_review[k]` likewise for a cell of `TileWorld.review`.
     """
 
     codes: npt.NDArray[np.uint8]
     set_by_water: npt.NDArray[np.bool_]
+    set_by_review: npt.NDArray[np.bool_]
 
 
 def cast_tile(world: TileWorld, *, far_reach_m: float = FAR_REACH_M) -> TileHorizons:
-    """`horizon_profile_codes`, plus which Candidates' horizons a water cell sets."""
-    degrees, set_by_water = _cast(world, far_reach_m)
-    return TileHorizons(codes=degrees_to_codes(degrees), set_by_water=set_by_water)
+    """`horizon_profile_codes`, plus which Candidates' horizons a water or review cell sets."""
+    degrees, set_by_water, set_by_review = _cast(world, far_reach_m)
+    return TileHorizons(
+        codes=degrees_to_codes(degrees), set_by_water=set_by_water, set_by_review=set_by_review
+    )
 
 
 def precompute_tiles(
-    grid_refs: Sequence[str], compute_tile: Callable[[str], T], *, workers: int
+    grid_refs: Sequence[str],
+    compute_tile: Callable[[str], T],
+    *,
+    workers: int,
+    on_done: Callable[[str, T], None] | None = None,
 ) -> dict[str, T]:
     """Run `compute_tile` once per tile, on `workers` processes, and collect the results.
 
@@ -240,14 +261,33 @@ def precompute_tiles(
     rasters, cast, and write the tile itself, returning something small such
     as the tile's path; profile arrays are best not sent back to the parent.
     `workers=1` runs in this process.
+
+    `on_done(grid_ref, result)` runs in this process as each tile finishes, in
+    the order they finish, for progress. The first tile to raise stops the run:
+    tiles not yet started are cancelled and the exception propagates.
     """
     if workers < 1:
         raise ValueError("workers must be at least 1")
     if len(set(grid_refs)) != len(grid_refs):
         raise ValueError("each tile must be listed once")
+    finished: dict[str, T] = {}
     if workers == 1:
-        return {grid_ref: compute_tile(grid_ref) for grid_ref in grid_refs}
+        for grid_ref in grid_refs:
+            finished[grid_ref] = compute_tile(grid_ref)
+            if on_done is not None:
+                on_done(grid_ref, finished[grid_ref])
+        return finished
     # spawn, not fork: GDAL and PROJ handles do not survive a fork.
     context = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=workers, mp_context=context) as pool:
-        return dict(zip(grid_refs, pool.map(compute_tile, grid_refs), strict=True))
+        futures = {pool.submit(compute_tile, grid_ref): grid_ref for grid_ref in grid_refs}
+        try:
+            for future in as_completed(futures):
+                grid_ref = futures[future]
+                finished[grid_ref] = future.result()
+                if on_done is not None:
+                    on_done(grid_ref, finished[grid_ref])
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+    return {grid_ref: finished[grid_ref] for grid_ref in grid_refs}

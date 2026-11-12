@@ -14,7 +14,8 @@ Every build directory carries the fixtures generated from its own tiles:
 
 ```
 <dataBase>/f1/<build>/manifest.json
-<dataBase>/f1/<build>/tiles/<grid ref>.bin
+<dataBase>/f1/<build>/tiles/morning/<grid ref>.bin
+<dataBase>/f1/<build>/tiles/evening/<grid ref>.bin
 <dataBase>/f1/<build>/fixtures/index.json
 <dataBase>/f1/<build>/fixtures/<id>.json
 ```
@@ -40,8 +41,10 @@ data loader pointed at it as `dataBase`, with the pin `{format: 1, build:
 fixtures/synthetic/queries.json
 fixtures/synthetic/decoded-tiles.json
 fixtures/synthetic/f1/20261111a/manifest.json
-fixtures/synthetic/f1/20261111a/tiles/ST5773.bin
-fixtures/synthetic/f1/20261111a/tiles/ST5873.bin
+fixtures/synthetic/f1/20261111a/tiles/morning/ST5773.bin
+fixtures/synthetic/f1/20261111a/tiles/morning/ST5873.bin
+fixtures/synthetic/f1/20261111a/tiles/evening/ST5773.bin
+fixtures/synthetic/f1/20261111a/tiles/evening/ST5873.bin
 fixtures/synthetic/f1/20261111a/fixtures/index.json
 fixtures/synthetic/f1/20261111a/fixtures/<id>.json      15 fixtures, about 26 kB each
 fixtures/synthetic/f1/20261111a/basemap/{z}/{x}/{y}.mvt  7 placeholder files
@@ -151,7 +154,7 @@ that a harness can fetch what it needs from the index alone.
 | Member | Meaning |
 |---|---|
 | `query` | The Query, as `Query.to_json` writes it. `now` is present only when the query has one. |
-| `tiles` | Grid refs, sorted: the tiles the Answer was computed over. The scorer under test must be given exactly these tiles. Empty when the Answer has no window. |
+| `tiles` | Grid refs, sorted: the tiles the Answer was computed over, from the Query's window's tiles (`tiles/<window>/`). The scorer under test must be given exactly these tiles. Empty when the Answer has no window. |
 | `answer` | The Answer, as `Answer.to_json` writes it: unset fields are omitted, `spots` is always present. Every time is an ISO 8601 string with the Europe/London offset, on a whole minute. |
 | `sunTrack` | The query date's sun track at the origin (`docs/solar-model.md`). |
 | `nearBoundary` | The minutes at which a 0.01° difference in the sun's position could change the Answer. |
@@ -188,8 +191,11 @@ places. Every fixture has a sun track, whatever its status.
 | `candidates` | Per `candidateId`, the minutes at which \|apparent elevation − Horizon profile at the sun's azimuth\| < 0.01°. The profile is interpolated as the scorer does. |
 | `lowSunBand` | The minutes at which the apparent elevation is within 0.01° of 0° or of 30°, the ends of the low-sun band |
 
-Minutes are indexes into the sun track, so they cover the whole local day, not
-only the window: an Evening spot's Last sun is looked for over the whole day.
+Minutes are indexes into the sun track. They cover the minutes the window's
+tiles hold the Horizon profile for (#62): for a Morning query those before
+solar noon, for an Evening query those from it on, in both cases only while
+the sun stands at −2° or higher (no profile is lower). That is more than the
+window: an Evening spot's Last sun is looked for over the whole afternoon.
 Intersect them with the Answer's window when judging Sun minutes.
 
 `candidates` covers every Candidate within the 20 min walk cap of the origin,
@@ -259,8 +265,8 @@ done the same. Any other difference still fails: a member no flip can move,
 or a minute that is not listed.
 
 A fixture whose `candidates` is empty and whose `lowSunBand` holds no minute
-of its window has no such freedom: its Answer must match exactly. Ten of the
-fifteen synthetic fixtures are like that. `morning-no-sun-in-reach` has a
+of its window has no such freedom: its Answer must match exactly. Eleven of
+the fifteen synthetic fixtures are like that. `morning-no-sun-in-reach` has a
 listed minute inside its window, at Candidates beyond its 0.1 min max walk:
 there a flip could change `nearestSunBeyondLimit` but not the status, since
 its one reachable Candidate has no listed minute.

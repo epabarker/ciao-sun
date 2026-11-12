@@ -27,7 +27,7 @@ import numpy as np
 
 from ciao_sun.coverage import Coverage
 from ciao_sun.crs import WGS84_TO_BNG
-from ciao_sun.manifest import read_manifest
+from ciao_sun.manifest import read_manifest, tile_file
 from ciao_sun.reference.contract import MAX_WALK_CAP_MIN, Query, Status
 from ciao_sun.reference.scorer import answer
 from ciao_sun.reference.sunview import LOW_SUN_MAX_DEG, LOW_SUN_MIN_DEG, horizon_at_sun
@@ -35,7 +35,7 @@ from ciao_sun.reference.windows import TIME_ZONE
 from ciao_sun.reference.world import WALK_SPEED_M_PER_MIN, join_tiles, walk_metres
 from ciao_sun.report import silent
 from ciao_sun.solar import SunTrack, sun_track
-from ciao_sun.tile_codec import Tile, read_tile
+from ciao_sun.tile_codec import STORAGE_MIN_DEG, Tile, read_tile
 from ciao_sun.tiles import KM, grid_ref_origin
 
 FIXTURES_DIR = "fixtures"
@@ -130,7 +130,7 @@ def fixture(query: Query, build_dir: Path) -> dict[str, Any]:
     coverage = Coverage.from_geojson(manifest["coverage"])
     covered = coverage.contains(query.origin_lat, query.origin_lon)
     grid_refs = tiles_touched(query, list(manifest["tiles"])) if covered else []
-    tiles = [read_tile(build_dir / "tiles" / f"{grid_ref}.bin") for grid_ref in grid_refs]
+    tiles = [read_tile(tile_file(build_dir, query.window, grid_ref)) for grid_ref in grid_refs]
 
     result = answer(query, tiles, coverage)
     track = sun_track(query.origin_lat, query.origin_lon, query.date, tz=TIME_ZONE)
@@ -155,19 +155,34 @@ def fixture(query: Query, build_dir: Path) -> dict[str, Any]:
 
 
 def _near_horizon(query: Query, tiles: Sequence[Tile], track: SunTrack) -> dict[str, list[int]]:
-    """Per Candidate within the walk cap, the minutes of the day the sun is within
-    the tolerance of its Horizon profile. Candidates with no such minute are left out."""
+    """Per Candidate within the walk cap, the minutes the sun is within the tolerance
+    of its Horizon profile. Candidates with no such minute are left out.
+
+    Only the minutes the window's tiles hold the profile for are looked at: the
+    morning or the afternoon, while the sun stands at -2 degrees or higher (no
+    profile is lower). They are every minute either scorer reads the profile.
+    """
     world = join_tiles(tiles)
     walks = walk_metres(world, query.origin_lat, query.origin_lon, TILE_REACH_M)
     within_cap = np.flatnonzero(walks >= 0)
-    minutes = len(track.times)
+    noon = int(np.argmax(track.apparent_elevation))
+    half = slice(0, noon) if query.window == "morning" else slice(noon, len(track.times))
+    looked_at = np.zeros(len(track.times), dtype=bool)
+    looked_at[half] = track.apparent_elevation[half] >= STORAGE_MIN_DEG
     near: dict[str, list[int]] = {}
+    if not looked_at.any():
+        return near
+    first_minute = int(np.argmax(looked_at))
+    last_minute = len(looked_at) - int(np.argmax(looked_at[::-1]))
     for first in range(0, within_cap.size, _CHUNK):
         chunk = within_cap[first : first + _CHUNK]
-        horizon = horizon_at_sun(world.profile_codes[chunk], track, 0, minutes)
-        close = np.abs(track.apparent_elevation - horizon) < NEAR_BOUNDARY_DEG
+        horizon = horizon_at_sun(world.profile_codes[chunk], track, first_minute, last_minute)
+        elevation = track.apparent_elevation[first_minute:last_minute]
+        close = np.abs(elevation - horizon) < NEAR_BOUNDARY_DEG
         for row in np.flatnonzero(close.any(axis=1)):
-            near[world.candidate_id(int(chunk[row]))] = np.flatnonzero(close[row]).tolist()
+            near[world.candidate_id(int(chunk[row]))] = (
+                first_minute + np.flatnonzero(close[row])
+            ).tolist()
     return near
 
 

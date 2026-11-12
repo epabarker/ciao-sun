@@ -154,6 +154,17 @@ def test_footprints_can_be_limited_to_the_area_a_build_needs(osm_extract: Path) 
     assert footprints.geometries[0].area == pytest.approx(4.5 * 5.0, abs=0.5)
 
 
+def test_a_footprint_is_kept_when_the_bounds_fall_inside_it_away_from_its_corners(
+    osm_extract: Path,
+) -> None:
+    # A 2 m box in the solid west side of the courtyard block: no corner of the
+    # block is inside it, but the block covers it.
+    inside_the_wall = (358101.0, 175109.0, 358103.0, 175111.0)
+    footprints = read_building_footprints(osm_extract, BNG, bounds=inside_the_wall)
+    assert len(footprints) == 1
+    assert footprints.geometries[0].area == pytest.approx(300.0, abs=1.0)
+
+
 def test_a_missing_osm_extract_is_reported(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="nowhere.osm.pbf"):
         read_building_footprints(tmp_path / "nowhere.osm.pbf", BNG)

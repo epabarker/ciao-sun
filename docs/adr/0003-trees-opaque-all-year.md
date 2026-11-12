@@ -24,3 +24,12 @@ The reason is that the last-return DSM the tool used before is mostly leaf-off n
 - **Clutter under 2 m beside a Candidate is ignored** (hedges, walls, cars). The copy tells people to stand clear of it.
 - **Going seasonal later is a format bump,** because a second profile set changes the tile format.
 - **For Stage 2, this doesn't depend on survey season**, but it does need a first-return product wherever coverage extends.
+
+## Amendment: moored boats are lowered (#60)
+
+The first Bristol build showed what stands over OSM water polygons: trees overhanging the rivers and the New Cut's tidal banks, bridges, buildings over water (the Lakeshore lake), and boats moored in the Floating Harbour. All but the boats are lasting obstructions. Boats move, so they are not.
+
+So there is now a narrow water mask. In **mooring water** (`waterway=dock`, `water=harbour|marina|lock|basin|dock`, `leisure=marina`) every cell is lowered to the DTM unless it lies in a building footprint, within 20 m of an OSM bridge, or is tree-like (first and last returns more than 1 m apart). Over **rivers and ponds** nothing is lowered, because LIDAR cannot tell a dense tree from a boat there. Some of those raised cells may instead be tidal water standing proud in the first return (the artefact the leaf-on prototype saw), so the build reports every Candidate whose horizon a raised river or pond cell sets, for review.
+
+- **The water guard** now fails only if a cell the mask lowered still sets a horizon: a check that the mask works. Over the first build it found 19,371 Candidates under the old rule, of which the rule above changes 3,094.
+- **Considered:** lowering every hull-like cell over all water (10,398 Candidates changed) would also flatten dense riverside trees confirmed by eye; keeping the old guard cannot pass in Bristol.

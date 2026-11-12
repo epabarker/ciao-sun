@@ -65,10 +65,13 @@ FORMAT = 1
 # One Horizon profile sample per 0.25 deg of true azimuth, clockwise from true
 # north: sample i is at i * 0.25 deg.
 PROFILE_SAMPLES = 1440
+# What a decoded Horizon profile holds outside its tile's sector: never a
+# storage code, so reading it fails (#62).
+OUTSIDE_SECTOR = 255
 
 _MAGIC = b"CSUN"
 _GRID_REF = re.compile(r"[A-HJ-Z]{2}[0-9]{4}")
-_HEADER = struct.Struct("<4sH6sIIII")
+_HEADER = struct.Struct("<4sH6sIIIIHH")
 # Node ids stay below 2^53 so a reader can hold them exactly in an IEEE double.
 _NODE_ID_LIMIT = 2**53
 _NAME_MAX_BYTES = 0xFFFF
@@ -86,6 +89,29 @@ class UnsupportedFormatError(TileFormatError):
     """The tile is in a format this reader does not know."""
 
 
+@dataclass(frozen=True)
+class Sector:
+    """The run of Horizon profile samples a tile holds: `samples` of them from `first`,
+    running on past sample 1439 to sample 0 (#62)."""
+
+    first: int
+    samples: int
+
+    def indexes(self) -> npt.NDArray[np.int64]:
+        """The sample indexes in the sector, in stored order."""
+        return (self.first + np.arange(self.samples)) % PROFILE_SAMPLES
+
+    def check(self) -> None:
+        if not (0 <= self.first < PROFILE_SAMPLES and 0 < self.samples <= PROFILE_SAMPLES):
+            raise TileFormatError(
+                f"profile sector {self.first} + {self.samples} samples is not within the "
+                f"{PROFILE_SAMPLES} samples of the circle"
+            )
+
+
+FULL_CIRCLE = Sector(0, PROFILE_SAMPLES)
+
+
 @dataclass(frozen=True, eq=False)
 class Candidates:
     """A tile's Candidates, one array element (or profile row) per Candidate.
@@ -100,7 +126,8 @@ class Candidates:
     node_index: npt.NDArray[np.uint32]
     offset_cm: npt.NDArray[np.uint32]
     name_index: npt.NDArray[np.uint32]
-    profile_codes: npt.NDArray[np.uint8]  # shape (Candidates, PROFILE_SAMPLES)
+    # shape (Candidates, PROFILE_SAMPLES); OUTSIDE_SECTOR outside the tile's sector
+    profile_codes: npt.NDArray[np.uint8]
 
 
 @dataclass(frozen=True, eq=False)
@@ -123,6 +150,7 @@ class Tile:
     names: tuple[str, ...]
     candidates: Candidates
     walk_graph: WalkGraph
+    sector: Sector = FULL_CIRCLE
 
     def spot_name(self, candidate: int) -> str:
         return self.names[int(self.candidates.name_index[candidate])]
@@ -156,10 +184,11 @@ def _check_references(tile: Tile) -> None:
     _check_indexes(c.name_index, len(tile.names), "Candidate Spot name index")
     _check_indexes(g.edge_from, nodes, "edge 'from' node index")
     _check_indexes(g.edge_to, nodes, "edge 'to' node index")
-    if c.profile_codes.size and int(c.profile_codes.max()) >= CODE_COUNT:
+    tile.sector.check()
+    held = c.profile_codes[:, tile.sector.indexes()]
+    if held.size and int(held.max()) >= CODE_COUNT:
         raise TileFormatError(
-            f"Horizon profile code {int(c.profile_codes.max())} is not one of the "
-            f"{CODE_COUNT} storage codes"
+            f"Horizon profile code {int(held.max())} is not one of the {CODE_COUNT} storage codes"
         )
     if g.node_id.size and int(g.node_id.max()) >= _NODE_ID_LIMIT:
         raise TileFormatError("walk node ids must be below 2^53")
@@ -193,13 +222,16 @@ def encode_tile(tile: Tile) -> bytes:
         )
     _check_references(tile)
 
-    # Delta along azimuth, mod 256: uint8 subtraction wraps, which is the rule.
-    deltas = c.profile_codes.copy()
-    deltas[:, 1:] -= c.profile_codes[:, :-1]
+    # Only the sector's samples, in sector order; delta along azimuth, mod 256:
+    # uint8 subtraction wraps, which is the rule.
+    held = c.profile_codes[:, tile.sector.indexes()]
+    deltas = held.copy()
+    deltas[:, 1:] -= held[:, :-1]
 
     parts = [
         _HEADER.pack(
-            _MAGIC, FORMAT, tile.grid_ref.encode("ascii"), n_cand, n_node, n_edge, len(tile.names)
+            _MAGIC, FORMAT, tile.grid_ref.encode("ascii"), n_cand, n_node, n_edge, len(tile.names),
+            tile.sector.first, tile.sector.samples,
         ),
         *(column.tobytes() for column in columns),
         deltas.tobytes(),
@@ -241,7 +273,8 @@ def decode_tile(data: bytes) -> Tile:
     except (OSError, EOFError, zlib.error) as exc:
         raise TileFormatError(f"tile is not valid gzip: {exc}") from exc
 
-    magic, fmt, grid_ref, n_cand, n_node, n_edge, n_name = _HEADER.unpack(cursor.take(_HEADER.size))
+    header = _HEADER.unpack(cursor.take(_HEADER.size))
+    magic, fmt, grid_ref, n_cand, n_node, n_edge, n_name, first, samples = header
     if magic != _MAGIC:
         raise TileFormatError("not a Ciao Sun tile (bad magic)")
     if fmt != FORMAT:
@@ -254,9 +287,14 @@ def decode_tile(data: bytes) -> Tile:
     node_id = cursor.column(_U64, n_node)
     node_lat_e7, node_lon_e7 = cursor.column(_I32, n_node), cursor.column(_I32, n_node)
     edge_from, edge_to, edge_length_cm = (cursor.column(_U32, n_edge) for _ in range(3))
-    deltas = cursor.column(np.dtype(np.uint8), n_cand * PROFILE_SAMPLES)
-    # Undo the azimuth delta: a running sum mod 256.
-    profile_codes = np.cumsum(deltas.reshape(n_cand, PROFILE_SAMPLES), axis=1, dtype=np.uint8)
+    sector = Sector(first, samples)
+    sector.check()
+    deltas = cursor.column(np.dtype(np.uint8), n_cand * samples)
+    # Undo the azimuth delta: a running sum mod 256; outside the sector, OUTSIDE_SECTOR.
+    profile_codes = np.full((n_cand, PROFILE_SAMPLES), OUTSIDE_SECTOR, dtype=np.uint8)
+    profile_codes[:, sector.indexes()] = np.cumsum(
+        deltas.reshape(n_cand, samples), axis=1, dtype=np.uint8
+    )
     try:
         names = tuple(
             cursor.take(struct.unpack("<H", cursor.take(2))[0]).decode("utf-8")
@@ -272,6 +310,7 @@ def decode_tile(data: bytes) -> Tile:
         names=names,
         candidates=Candidates(lat_e7, lon_e7, node_index, offset_cm, name_index, profile_codes),
         walk_graph=WalkGraph(node_id, node_lat_e7, node_lon_e7, edge_from, edge_to, edge_length_cm),
+        sector=sector,
     )
     if not _GRID_REF.fullmatch(tile.grid_ref):
         raise TileFormatError(f"{tile.grid_ref!r} is not a 1 km OS grid ref")

@@ -3,16 +3,17 @@
 **Direct-ray profile check.** For a sample of each tile's Candidates, the
 Horizon profile decoded from the written tile is compared with rays cast
 directly from that Candidate: near-field rays over the obstruction surface, and
-far-field rays over Terrain 50 from the Candidate itself, not from the 100 m
+far-field rays over Terrain 50 from the Candidate itself, not from the 50 m
 lattice the precompute uses. A Candidate fails when fewer than 99% of its 1,440
 samples agree within the storage code's half step plus 0.05 deg.
 
 - The half step is 0.05 deg up to 10 deg and 0.25 deg above (the storage code
   is within 0.2 min of a linear 0.1 deg code on first sun, #6).
-- 0.05 deg covers the far-field lattice (p99 0.035 deg at 100 m, #6) and the
-  far field's sparser sampling beyond 10 km (p99 0.014 deg).
+- 0.05 deg covers the far-field lattice (p99 0.040 deg at 50 m over the first
+  Bristol build, #61; at 100 m the p99 was 0.074 deg and about 1 Candidate in
+  1,100 failed) and the far field's sparser sampling beyond 10 km (p99 0.014 deg).
 - 99%, because those are p99 figures: where the Horizon profile steps at a
-  far ridge, a Candidate up to 71 m from its lattice point legitimately sees
+  far ridge, a Candidate up to 35 m from its lattice point legitimately sees
   the step a sample or two to one side.
 
 The direct rays use the tile's one meridian convergence, as the precompute
@@ -20,10 +21,16 @@ does, so the near field agrees exactly. A profile cast along grid north instead
 of true north is turned by about 0.5 deg in Bristol (two samples), and fails
 wherever the Horizon profile has more than a handful of edges.
 
-**Water guard.** There is no water mask (ADR 0003). Instead the build counts
-the Candidates whose merged horizon is set, at any azimuth, by a cell inside an
-OSM water area, and fails above zero. The count comes from the precompute
+**Water guard.** Boats moored in docks and harbours are lowered to the ground
+(ADR 0003, amended by #60; `surface.lower_moored_boats`). The build counts the
+Candidates whose merged horizon is set, at any azimuth, by a cell the mask
+lowered that still stands more than 1 m above the DTM, and fails above zero: it
+catches a mask that has stopped working. The count comes from the precompute
 itself (`horizon_precompute.cast_tile`), so it covers every Candidate.
+
+Raised cells over rivers and ponds are kept, and the Candidates whose horizon
+one sets are reported for review (`riverCandidatesToReview` in the manifest);
+they do not fail the build.
 """
 
 from __future__ import annotations
@@ -47,7 +54,6 @@ from ciao_sun.horizon_precompute import EYE_HEIGHT_M, NEAR_REACH_M, PROFILE_AZIM
 from ciao_sun.raster import RasterGrid, sample, sample_bilinear
 from ciao_sun.tile_codec import (
     FINE_TOP_DEG,
-    PROFILE_SAMPLES,
     STORAGE_MAX_DEG,
     STORAGE_MIN_DEG,
     Tile,
@@ -73,7 +79,7 @@ class Tolerances:
     profile_fraction_within: float = 0.99
     fine_half_step_deg: float = 0.05
     coarse_half_step_deg: float = 0.25
-    # Water guard: Candidates whose horizon a water cell may set.
+    # Water guard: Candidates whose horizon a lowered mooring cell may still set.
     water_candidates_allowed: int = 0
 
     def as_manifest(self) -> dict[str, dict[str, Any]]:
@@ -145,6 +151,7 @@ def check_tile_profiles(
     all_x, all_y = candidate_positions(tile)
     # The tile's one convergence, worked out here and not taken from the precompute.
     convergence = meridian_convergence(float(all_x.mean()), float(all_y.mean()))
+    samples = tile.sector.indexes()  # only the tile's sector can be read (#62)
     chosen = np.unique(
         np.linspace(0, count - 1, min(count, tolerances.candidates_per_tile)).round().astype(int)
     )
@@ -152,15 +159,15 @@ def check_tile_profiles(
     eye = sample(dtm, x, y).astype(np.float64) + EYE_HEIGHT_M
 
     ray_d = ray_samples(NEAR_REACH_M)
-    direct = np.empty((len(chosen), PROFILE_SAMPLES), dtype=np.float64)
-    for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG):
+    direct = np.empty((len(chosen), samples.size), dtype=np.float64)
+    for i, azimuth in enumerate(PROFILE_AZIMUTHS_DEG[samples]):
         near = horizon_angle(surface, x, y, eye, float(azimuth), ray_d, convergence_deg=convergence)
         far = _direct_far(terrain50, x, y, eye, float(azimuth), convergence, far_reach_m)
         direct[:, i] = np.fmax(near, far)
     # NaN: no ground under the Candidate, or no surface along a whole ray.
     direct = np.clip(direct, STORAGE_MIN_DEG, STORAGE_MAX_DEG)
 
-    stored = codes_to_degrees(tile.candidates.profile_codes[chosen])
+    stored = codes_to_degrees(tile.candidates.profile_codes[np.ix_(chosen, samples)])
     half_step = np.where(
         np.fmax(stored, direct) > FINE_TOP_DEG,
         tolerances.coarse_half_step_deg,
@@ -180,8 +187,8 @@ def check_tile_profiles(
         worst = int(off.argmax())
         failures.append(
             f"{tile.grid_ref} Candidate {candidate}: {int((~within[row]).sum())} of "
-            f"{PROFILE_SAMPLES} profile samples disagree with direct ray casting "
-            f"(worst at true azimuth {PROFILE_AZIMUTHS_DEG[worst]:g} deg: tile "
+            f"{samples.size} profile samples disagree with direct ray casting "
+            f"(worst at true azimuth {PROFILE_AZIMUTHS_DEG[samples[worst]]:g} deg: tile "
             f"{stored[row, worst]:.2f} deg, direct ray {direct[row, worst]:.2f} deg)"
         )
     return ProfileCheck(len(chosen), tuple(failures))

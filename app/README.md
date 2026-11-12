@@ -127,13 +127,14 @@ re-rendered on every change. The UI shows Answer fields only, never scores.
 | `ui/format.ts`, `ui/dom.ts`, `ui/style.css` | clock and walk labels; the element builder; styles on colour tokens | |
 
 The app opens on whichever window comes next (`chooseWindow` in
-`query/query.ts`): today's Morning until Wake time + 3 h, then today's Evening
+`query/query.ts`): today's Morning until it ends (Wake time + 3 h, or solar noon
+if sooner), then today's Evening
 until Nominal sunset, then tomorrow's Morning. Nominal sunset for that choice
 and for the Evening tab's date is read at `PLANNING_POINT` (central Bristol),
 so it is made before GPS answers and a late fix never flips the tab. A tab tap
 plans that tab's next window. A `lamp-only` Answer whose Query shows the
 Morning window already over (`morningWindowOver`: `now` on the query date at
-or after Wake time + 3 h) shows "Morning window has ended" with no lamp advice;
+or after the window's end, `morningEndMs`) shows "Morning window has ended" with no lamp advice;
 otherwise it is a morning with no daylight, and gets the lamp message.
 
 `AppDeps` (in `app.ts`) is every outside dependency: the pin, `fetch`, the

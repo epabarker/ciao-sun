@@ -7,7 +7,9 @@ the lockfile points at. Time is a fake clock that only `sleep` advances.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import zipfile
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,6 +60,14 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _zip(text: str) -> bytes:
+    """A real, stored (uncompressed) zip holding `text`, so a cut-off copy is detectable."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr(zipfile.ZipInfo("member.txt", date_time=(2026, 11, 11, 0, 0, 0)), text)
+    return buffer.getvalue()
+
+
 Handler = Callable[[Mapping[str, str]], Response]
 
 
@@ -69,11 +79,11 @@ class FakeWeb:
         self.sleeps: list[float] = []
         self.requests: list[tuple[float, str, dict[str, str]]] = []
         self.bodies: dict[str, bytes] = {
-            DSM_URL: b"dsm-zip-bytes " * 40,
-            DTM_URL: b"dtm-zip-bytes " * 40,
-            FIRST_URL: b"first-return-zip-bytes " * 40,
+            DSM_URL: _zip("dsm-zip-bytes " * 40),
+            DTM_URL: _zip("dtm-zip-bytes " * 40),
+            FIRST_URL: _zip("first-return-zip-bytes " * 40),
             T50_META_URL: json.dumps({"id": "Terrain50", "version": "2026-07"}).encode(),
-            T50_URL: b"terrain-50-gb-zip " * 40,
+            T50_URL: _zip("terrain-50-gb-zip " * 40),
             OSM_URL: b"osm-pbf-bytes " * 40,
             protomaps.BUILDS_URL: protomaps.builds_json(),
             protomaps.ARCHIVE_URL: PROTOMAPS_BUILD,
@@ -209,7 +219,7 @@ def test_lockfile_carries_the_coverage_and_margin_the_inputs_were_fetched_for(we
 def test_default_margin_fetches_ea_tiles_within_3_km_of_the_coverage(web, tmp_path):
     for tile in ["ST5070", "ST5565", "ST5575", "ST6070"]:
         for product in ["last_return_dsm", "dtm", "first_return_dsm"]:
-            web.bodies[f"{EA}/lidar_composite_{product}/2022/1/{tile}"] = tile.encode()
+            web.bodies[f"{EA}/lidar_composite_{product}/2022/1/{tile}"] = _zip(tile)
 
     fetch(_coverage_in_st5570(), tmp_path, osm_date="261110", client=web,
           clock=web.clock, sleep=web.sleep)
@@ -336,6 +346,58 @@ def test_a_server_that_ignores_range_restarts_the_file_instead_of_corrupting_it(
     assert (tmp_path / entry.path).read_bytes() == web.bodies[DSM_URL]
 
 
+def _cut_short(web: FakeWeb, url: str, n_bytes: int) -> None:
+    """The next request for `url` ends cleanly after `n_bytes`, as an EA stream with no
+    Content-Length does when its connection closes early: no error, just less body."""
+    web.scripted.setdefault(url, []).append(
+        lambda headers: Response(200, iter([web.bodies[url][:n_bytes]]))
+    )
+
+
+def test_a_zip_whose_body_ends_early_without_an_error_is_fetched_again(web, tmp_path):
+    web.honour_range = False  # as the EA: it ignores Range, so the retry starts over
+    _cut_short(web, DTM_URL, len(web.bodies[DTM_URL]) * 3 // 4)
+
+    _run(web, tmp_path)
+
+    assert [url for url in web.urls() if url == DTM_URL] == [DTM_URL, DTM_URL]
+    (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "dtm"]
+    assert (tmp_path / entry.path).read_bytes() == web.bodies[DTM_URL]
+    assert entry.sha256 == _sha(web.bodies[DTM_URL])
+
+
+def test_a_zip_that_always_ends_early_gives_up_with_an_error(web, tmp_path):
+    for _ in range(50):
+        _cut_short(web, DTM_URL, 40)
+    web.honour_range = False
+
+    with pytest.raises(FetchError, match="before the end of the zip"):
+        _run(web, tmp_path)
+
+    assert not (tmp_path / "ea/lidar_composite_dtm/2022/ST5570.zip").exists()
+
+
+def test_a_cached_zip_that_was_cut_short_is_fetched_again_and_relocked(web, tmp_path):
+    """The state an earlier fetch left on #55: a truncated zip, locked by its own hash."""
+    _run(web, tmp_path)
+    (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "dtm"]
+    truncated = web.bodies[DTM_URL][: len(web.bodies[DTM_URL]) // 2]
+    (tmp_path / entry.path).write_bytes(truncated)
+    lock = json.loads((tmp_path / "fetch.lock.json").read_text())
+    for locked in lock["inputs"]:
+        if locked["kind"] == "dtm":
+            locked["sha256"], locked["bytes"] = _sha(truncated), len(truncated)
+    (tmp_path / "fetch.lock.json").write_text(json.dumps(lock))
+    web.requests.clear()
+
+    _run(web, tmp_path)
+
+    assert [url for url in web.urls() if "protomaps" not in url] == [DTM_URL]
+    (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "dtm"]
+    assert (tmp_path / entry.path).read_bytes() == web.bodies[DTM_URL]
+    assert entry.sha256 == _sha(web.bodies[DTM_URL])
+
+
 # --- idempotence and hash verification -----------------------------------------------
 
 
@@ -366,7 +428,7 @@ def test_a_download_that_differs_from_the_lockfile_hash_fails_loudly(web, tmp_pa
     _run(web, tmp_path)
     (entry,) = [e for e in read_lockfile(tmp_path).inputs if e.kind == "dtm"]
     (tmp_path / entry.path).unlink()
-    web.bodies[DTM_URL] = b"upstream quietly republished this tile"
+    web.bodies[DTM_URL] = _zip("upstream quietly republished this tile")
 
     with pytest.raises(HashMismatchError) as excinfo:
         _run(web, tmp_path)

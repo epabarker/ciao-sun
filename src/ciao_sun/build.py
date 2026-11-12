@@ -1,7 +1,8 @@
 """`ciao-sun build`: fetched inputs -> one build directory of f1 tiles and a manifest.
 
     <out>/f1/<build>/manifest.json
-    <out>/f1/<build>/tiles/<grid ref>.bin
+    <out>/f1/<build>/tiles/morning/<grid ref>.bin   the morning sector of each profile
+    <out>/f1/<build>/tiles/evening/<grid ref>.bin   the evening sector (`sectors.py`)
     <out>/f1/<build>/basemap/{z}/{x}/{y}.mvt
     <out>/f1/<build>/fixtures/              golden fixtures, when given a query set
 
@@ -13,9 +14,11 @@ Candidate or a walk edge. Tile by tile, on `workers` processes:
    their zips, over the square plus the 3 km near reach;
 2. Candidates and walk graph (`candidates.build_tile`), Candidates only from
    inside the coverage;
-3. the crown-envelope surface (`surface.crown_envelope_surface`);
+3. the crown-envelope surface (`surface.crown_envelope_surface`), with boats
+   moored in docks and harbours lowered to the ground (`surface.lower_moored_boats`);
 4. Horizon profiles (`horizon_precompute.cast_tile`), which also counts the
-   Candidates the water guard is looking for;
+   Candidates the water guard is looking for, and those whose horizon a raised
+   river or pond cell sets, for the report;
 5. write the tile, read it back through the codec and run the direct-ray
    profile check on it (`build_checks.check_tile_profiles`).
 
@@ -33,11 +36,17 @@ The basemap is exploded into `<build>.partial/basemap/` from the fetched cut of
 the Protomaps build (`basemap.explode`) once the build checks have passed, so it
 takes its place with the tiles in the one rename.
 
+The workers never read the national OSM extract itself: reading an `.osm.pbf`
+with node locations stores every node in the file, over 7 GB for England. The
+build first cuts the part it needs into a temporary file (`osm_clip.clip_osm`)
+and the workers read that.
+
 `check_profiles` reruns the direct-ray check on a finished build directory.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import math
@@ -46,6 +55,7 @@ import shutil
 import sqlite3
 import string
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -69,18 +79,31 @@ from ciao_sun.horizon_precompute import (
     cast_tile,
     precompute_tiles,
 )
-from ciao_sun.manifest import manifest_document, read_manifest, write_manifest
+from ciao_sun.manifest import (
+    manifest_document,
+    manifest_sectors,
+    read_manifest,
+    tile_file,
+    write_manifest,
+)
+from ciao_sun.osm_clip import clip_osm
 from ciao_sun.raster import RasterGrid, load_mosaic
 from ciao_sun.reference.fixtures import SetQuery, write_fixtures
 from ciao_sun.report import silent
+from ciao_sun.sectors import window_sectors
 from ciao_sun.surface import (
+    RAISED_ON_WATER_M,
     BuildingFootprints,
+    OpenWater,
     crown_envelope_surface,
+    lower_moored_boats,
+    read_bridges,
     read_building_footprints,
+    read_mooring_water,
     read_water_areas,
 )
 from ciao_sun.terrain50 import load_terrain50
-from ciao_sun.tile_codec import FORMAT, read_tile, write_tile
+from ciao_sun.tile_codec import FORMAT, Sector, read_tile, write_tile
 from ciao_sun.tiles import KM, grid_ref_of, grid_ref_origin
 
 _BNG = CRS.from_epsg(27700)
@@ -88,6 +111,10 @@ _SURVEY_LAYER = "lidar_used_in_merging_process"
 _SURVEY_COLUMN = "SD_FLOWN"
 
 Bounds = tuple[float, float, float, float]
+
+# The OSM clip reaches this far past the bounds the workers read OSM within, so
+# a way or area crossing into them with no node inside the clip is still kept.
+OSM_CLIP_MARGIN_M = 2000.0
 
 
 class BuildError(Exception):
@@ -103,7 +130,9 @@ class _Job:
 
     inputs_root: Path
     coverage_json: str
-    tiles_dir: Path
+    osm_pbf: Path  # the clip of the fetched OSM extract (`_clip_osm`)
+    tiles_dir: Path  # each window's tiles in tiles_dir/<window>/
+    sectors: tuple[tuple[str, Sector], ...]  # (window, sector) per window
     far_reach_m: float
     tolerances: Tolerances
 
@@ -116,10 +145,7 @@ class _Inputs:
         self.lock = read_lockfile(job.inputs_root)
         self.polygon = Coverage.from_geojson(json.loads(job.coverage_json)).polygon_bng()
         minx, miny, maxx, maxy = self.polygon.bounds
-        self._near_bounds = (
-            minx - NEAR_REACH_M - KM, miny - NEAR_REACH_M - KM,
-            maxx + NEAR_REACH_M + KM, maxy + NEAR_REACH_M + KM,
-        )  # fmt: skip
+        self._near_bounds = _near_bounds(self.polygon.bounds)
         self._far_bounds = (
             minx - job.far_reach_m - KM, miny - job.far_reach_m - KM,
             maxx + job.far_reach_m + KM, maxy + job.far_reach_m + KM,
@@ -131,15 +157,23 @@ class _Inputs:
 
     @functools.cached_property
     def network(self) -> WalkNetwork:
-        return load_walk_network(self._only("osm"))
+        return load_walk_network(self.job.osm_pbf, within=self._near_bounds)
 
     @functools.cached_property
     def footprints(self) -> BuildingFootprints:
-        return read_building_footprints(self._only("osm"), _BNG, self._near_bounds)
+        return read_building_footprints(self.job.osm_pbf, _BNG, self._near_bounds)
 
     @functools.cached_property
     def water(self) -> BuildingFootprints:
-        return read_water_areas(self._only("osm"), _BNG, self._near_bounds)
+        return read_water_areas(self.job.osm_pbf, _BNG, self._near_bounds)
+
+    @functools.cached_property
+    def moorings(self) -> BuildingFootprints:
+        return read_mooring_water(self.job.osm_pbf, _BNG, self._near_bounds)
+
+    @functools.cached_property
+    def bridges(self) -> BuildingFootprints:
+        return read_bridges(self.job.osm_pbf, _BNG, self._near_bounds)
 
     @functools.cached_property
     def terrain50(self) -> RasterGrid:
@@ -167,6 +201,31 @@ class _Inputs:
 
     def contains(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return np.asarray(shapely.contains_xy(self.polygon, x, y), dtype=bool)
+
+
+def _near_bounds(coverage_bounds: Bounds) -> Bounds:
+    """Where a tile can need OSM from: the coverage plus the near reach and a square."""
+    minx, miny, maxx, maxy = coverage_bounds
+    pad = NEAR_REACH_M + KM
+    return (minx - pad, miny - pad, maxx + pad, maxy + pad)
+
+
+def _clip_osm(
+    lock: Lockfile, coverage: Coverage, scratch: Path, report: Callable[[str], None],
+    clock: Callable[[], float],
+) -> Path:  # fmt: skip
+    """Cut the fetched OSM extract down to what the workers can read, into `scratch`."""
+    (entry,) = [entry for entry in lock.inputs if entry.kind == "osm"]
+    minx, miny, maxx, maxy = _near_bounds(coverage.polygon_bng().bounds)
+    box = (
+        minx - OSM_CLIP_MARGIN_M, miny - OSM_CLIP_MARGIN_M,
+        maxx + OSM_CLIP_MARGIN_M, maxy + OSM_CLIP_MARGIN_M,
+    )  # fmt: skip
+    started = clock()
+    report(f"cutting {lock.path_of(entry).name} to the coverage")
+    clip = clip_osm(lock.path_of(entry), box, scratch / "clip.osm.pbf")
+    report(f"cut to {clip.stat().st_size / 1e6:.0f} MB in {_duration(clock() - started)}")
+    return clip
 
 
 @functools.lru_cache(maxsize=1)
@@ -219,10 +278,19 @@ def _tile_rasters(inputs: _Inputs, grid_ref: str) -> _TileRasters:
     return _TileRasters(mosaic("dsm"), mosaic("first_return_dsm"), mosaic("dtm"))
 
 
-def _surface(inputs: _Inputs, rasters: _TileRasters) -> RasterGrid:
-    return crown_envelope_surface(
+def _surface(inputs: _Inputs, rasters: _TileRasters) -> OpenWater:
+    crown = crown_envelope_surface(
         rasters.last_return, rasters.first_return, rasters.dtm, inputs.footprints
     )
+    return lower_moored_boats(
+        crown, rasters.first_return, rasters.last_return, rasters.dtm,
+        moorings=inputs.moorings, water=inputs.water, buildings=inputs.footprints,
+        bridges=inputs.bridges,
+    )  # fmt: skip
+
+
+def _flags(mask: np.ndarray, like: RasterGrid) -> RasterGrid:
+    return RasterGrid(data=mask.astype("float32"), transform=like.transform, crs=like.crs)
 
 
 @dataclass(frozen=True)
@@ -231,6 +299,7 @@ class _TileReport:
 
     candidates: int | None = None
     water_candidates: int = 0
+    review_candidates: int = 0
     candidates_checked: int = 0
     profile_failures: tuple[str, ...] = ()
 
@@ -243,38 +312,51 @@ def _build_one(job: _Job, grid_ref: str) -> _TileReport:
     )
     if outline is None:
         return _TileReport()
-    surface = _surface(inputs, rasters)
-    water = RasterGrid(
-        data=inputs.water.buffered_mask(surface, 0.0).astype("float32"),
-        transform=surface.transform,
-        crs=surface.crs,
-    )
+    open_water = _surface(inputs, rasters)
+    surface = open_water.surface
+    with np.errstate(invalid="ignore"):
+        # The guard: a cell the mask lowered that still stands proud of the ground.
+        left_standing = open_water.flattened & (surface.data - rasters.dtm.data > RAISED_ON_WATER_M)
     world = TileWorld(
         surface=surface, dtm=rasters.dtm, terrain50=inputs.terrain50,
-        x=outline.easting, y=outline.northing, water=water,
+        x=outline.easting, y=outline.northing, water=_flags(left_standing, surface),
+        review=_flags(open_water.raised_river, surface),
     )  # fmt: skip
     horizons = cast_tile(world, far_reach_m=job.far_reach_m)
-    path = write_tile(outline.with_profiles(horizons.codes), job.tiles_dir)
-    check = check_tile_profiles(
-        read_tile(path), surface, rasters.dtm, inputs.terrain50,
-        far_reach_m=job.far_reach_m, tolerances=job.tolerances,
-    )  # fmt: skip
+    whole = outline.with_profiles(horizons.codes)
+    for window, sector in job.sectors:
+        write_tile(dataclasses.replace(whole, sector=sector), job.tiles_dir / window)
+    checked, failures = _check_windows(job, grid_ref, surface, rasters.dtm, inputs.terrain50)
     return _TileReport(
         candidates=len(outline.easting),
         water_candidates=int(horizons.set_by_water.sum()),
-        candidates_checked=check.candidates_checked,
-        profile_failures=check.failures,
+        review_candidates=int(horizons.set_by_review.sum()),
+        candidates_checked=checked,
+        profile_failures=failures,
     )
+
+
+def _check_windows(
+    job: _Job, grid_ref: str, surface: RasterGrid, dtm: RasterGrid, terrain50: RasterGrid
+) -> tuple[int, tuple[str, ...]]:
+    """The direct-ray check on each window's written tile, over that tile's sector."""
+    checked, failures = 0, []
+    for window, _ in job.sectors:
+        check = check_tile_profiles(
+            read_tile(job.tiles_dir / window / f"{grid_ref}.bin"), surface, dtm, terrain50,
+            far_reach_m=job.far_reach_m, tolerances=job.tolerances,
+        )  # fmt: skip
+        checked = max(checked, check.candidates_checked)  # the same Candidates in each
+        failures += [f"{window}: {line}" for line in check.failures]
+    return checked, tuple(failures)
 
 
 def _check_one(job: _Job, grid_ref: str) -> _TileReport:
     inputs = _inputs(job)
     rasters = _tile_rasters(inputs, grid_ref)
-    check = check_tile_profiles(
-        read_tile(job.tiles_dir / f"{grid_ref}.bin"), _surface(inputs, rasters), rasters.dtm,
-        inputs.terrain50, far_reach_m=job.far_reach_m, tolerances=job.tolerances,
-    )  # fmt: skip
-    return _TileReport(candidates_checked=check.candidates_checked, profile_failures=check.failures)
+    surface = _surface(inputs, rasters).surface
+    checked, failures = _check_windows(job, grid_ref, surface, rasters.dtm, inputs.terrain50)
+    return _TileReport(candidates_checked=checked, profile_failures=failures)
 
 
 # --- The build ----------------------------------------------------------------
@@ -347,14 +429,57 @@ def _survey_years(geopackage: bytes) -> set[int]:
     return {int(year) for text in flown for year in re.findall(r"(?<!\d)(?:19|20)\d\d(?!\d)", text)}
 
 
+def _progress(
+    total: int, report: Callable[[str], None], clock: Callable[[], float]
+) -> Callable[[str, _TileReport], None]:
+    """A progress line per finished square: how many are done, and roughly how long is left.
+
+    The estimate is the mean time per square so far, times the squares left.
+    """
+    start = clock()
+    done = 0
+
+    def on_done(grid_ref: str, tile: _TileReport) -> None:
+        nonlocal done
+        done += 1
+        elapsed = clock() - start
+        left = elapsed / done * (total - done)
+        what = "no tile" if tile.candidates is None else f"{tile.candidates} Candidates"
+        report(
+            f"square {done}/{total} {grid_ref}: {what}; "
+            f"{_duration(elapsed)} elapsed, about {_duration(left)} left"
+        )
+
+    return on_done
+
+
+def _duration(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes // 60} h {minutes % 60:02d} min"
+
+
+def _report_review(reports: dict[str, _TileReport], report: Callable[[str], None]) -> None:
+    review = {ref: r.review_candidates for ref, r in reports.items() if r.review_candidates}
+    if review:
+        where = ", ".join(f"{ref} ({count})" for ref, count in sorted(review.items()))
+        report(
+            f"River and pond review: {sum(review.values())} Candidates have a horizon set by "
+            "a raised river or pond cell that is neither building nor bridge: trees, or tidal "
+            f"water standing proud. They are kept. Tiles: {where}."
+        )
+
+
 def _raise_on_failures(reports: dict[str, _TileReport], tolerances: Tolerances) -> None:
     problems: list[str] = []
     water = {ref: r.water_candidates for ref, r in reports.items() if r.water_candidates}
     if sum(water.values()) > tolerances.water_candidates_allowed:
         where = ", ".join(f"{ref} ({count})" for ref, count in sorted(water.items()))
         problems.append(
-            f"Water guard: {sum(water.values())} Candidates have a horizon set by a water "
-            f"cell; {tolerances.water_candidates_allowed} allowed. Tiles: {where}."
+            f"Water guard: {sum(water.values())} Candidates have a horizon set by a cell of "
+            "mooring water that should have been lowered to the ground; "
+            f"{tolerances.water_candidates_allowed} allowed. Tiles: {where}."
         )
     failures = [line for ref in sorted(reports) for line in reports[ref].profile_failures]
     if failures:
@@ -379,6 +504,7 @@ def build(
     tolerances: Tolerances | None = None,
     queries: Sequence[SetQuery] | None = None,
     report: Callable[[str], None] = silent,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Path:
     """Build `coverage` from the fetched `inputs` into a new build directory under `out`.
 
@@ -386,6 +512,7 @@ def build(
     directory, if the direct-ray profile check or the water guard fails.
     `today` is the UTC date the build id is cut from. `queries` is the query
     set whose golden fixtures go in the build's `fixtures/`; None writes none.
+    `report` gets one line per square as it finishes, timed by `clock`.
     """
     tolerances = tolerances or Tolerances()
     lock = read_lockfile(inputs)
@@ -412,17 +539,28 @@ def build(
     tiles_dir = partial / "tiles"
     tiles_dir.mkdir(parents=True)
 
-    job = _Job(
-        inputs_root=inputs.resolve(),
-        coverage_json=json.dumps(coverage.geometry, sort_keys=True),
-        tiles_dir=tiles_dir.resolve(),
-        far_reach_m=far_reach_m,
-        tolerances=tolerances,
-    )
     grid_refs = grid_refs_touching(coverage)
+    west, south, east, north = coverage.bounds_wgs84()
+    sectors = window_sectors(south, north, (west + east) / 2)
     report(f"build {build_id}: {len(grid_refs)} squares on {workers} workers")
-    reports = precompute_tiles(grid_refs, functools.partial(_build_one, job), workers=workers)
+    with tempfile.TemporaryDirectory(prefix="ciao-sun-osm-") as scratch:
+        job = _Job(
+            inputs_root=inputs.resolve(),
+            coverage_json=json.dumps(coverage.geometry, sort_keys=True),
+            osm_pbf=_clip_osm(lock, coverage, Path(scratch), report, clock),
+            tiles_dir=tiles_dir.resolve(),
+            sectors=tuple(sectors.items()),
+            far_reach_m=far_reach_m,
+            tolerances=tolerances,
+        )
+        reports = precompute_tiles(
+            grid_refs,
+            functools.partial(_build_one, job),
+            workers=workers,
+            on_done=_progress(len(grid_refs), report, clock),
+        )
     _raise_on_failures(reports, tolerances)
+    _report_review(reports, report)
     try:
         exploded = basemap.explode(
             lock.path_of(protomaps[0]), coverage, partial / basemap.DIRECTORY
@@ -432,9 +570,14 @@ def build(
 
     tiles = {
         grid_ref: {
-            "bytes": (tiles_dir / f"{grid_ref}.bin").stat().st_size,
-            "sha256": sha256_of(tiles_dir / f"{grid_ref}.bin"),
             "candidates": tile_report.candidates,
+            **{
+                window: {
+                    "bytes": tile_file(partial, window, grid_ref).stat().st_size,
+                    "sha256": sha256_of(tile_file(partial, window, grid_ref)),
+                }
+                for window in sectors
+            },
         }
         for grid_ref, tile_report in reports.items()
         if tile_report.candidates is not None
@@ -442,6 +585,9 @@ def build(
     checks = tolerances.as_manifest()
     checks["profile"]["candidatesChecked"] = sum(r.candidates_checked for r in reports.values())
     checks["waterGuard"]["candidatesFound"] = sum(r.water_candidates for r in reports.values())
+    checks["waterGuard"]["riverCandidatesToReview"] = sum(
+        r.review_candidates for r in reports.values()
+    )
     (osm,) = [entry for entry in lock.inputs if entry.kind == "osm"]
     write_manifest(
         partial,
@@ -454,6 +600,7 @@ def build(
             horizon={"nearReachM": NEAR_REACH_M, "farReachM": far_reach_m},
             tiles=tiles,
             build_checks=checks,
+            sectors=sectors,
             basemap=exploded,
         ),
     )
@@ -478,14 +625,20 @@ def check_profiles(
     """
     tolerances = tolerances or Tolerances()
     manifest = read_manifest(build_dir)
-    job = _Job(
-        inputs_root=inputs.resolve(),
-        coverage_json=json.dumps(manifest["coverage"], sort_keys=True),
-        tiles_dir=(build_dir / "tiles").resolve(),
-        far_reach_m=float(manifest["horizon"]["farReachM"]),
-        tolerances=tolerances,
-    )
+    coverage = Coverage.from_geojson(manifest["coverage"])
     grid_refs: Sequence[str] = sorted(manifest["tiles"])
-    reports = precompute_tiles(grid_refs, functools.partial(_check_one, job), workers=workers)
+    with tempfile.TemporaryDirectory(prefix="ciao-sun-osm-") as scratch:
+        job = _Job(
+            inputs_root=inputs.resolve(),
+            coverage_json=json.dumps(manifest["coverage"], sort_keys=True),
+            osm_pbf=_clip_osm(
+                read_lockfile(inputs), coverage, Path(scratch), silent, time.monotonic
+            ),
+            tiles_dir=(build_dir / "tiles").resolve(),
+            sectors=tuple(manifest_sectors(manifest).items()),
+            far_reach_m=float(manifest["horizon"]["farReachM"]),
+            tolerances=tolerances,
+        )
+        reports = precompute_tiles(grid_refs, functools.partial(_check_one, job), workers=workers)
     _raise_on_failures(reports, tolerances)
     return sum(r.candidates_checked for r in reports.values())
